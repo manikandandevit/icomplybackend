@@ -13,10 +13,10 @@ for (const key of required) {
 export const config = Object.freeze({
   env: process.env.NODE_ENV ?? "development",
   port: Number(process.env.PORT) || 4000,
-  clientOrigins: (process.env.CLIENT_ORIGIN ?? "http://localhost:5173")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean),
+  clientOrigins: [
+    "http://localhost:5173",
+    "https://icomplyfront-end.vercel.app",
+  ],
   jwt: {
     secret: process.env.JWT_SECRET,
     expiresIn: process.env.JWT_EXPIRES_IN ?? "8h",
