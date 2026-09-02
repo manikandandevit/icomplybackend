@@ -15,14 +15,42 @@ const requireText = (errors, key, value, label) => {
   return text;
 };
 
+const usersFromSource = (source, countryId) => {
+  const id = String(countryId);
+
+  if (Array.isArray(source)) {
+    const match = source.find((item) => String(item?.countryId) === id);
+    return match?.users;
+  }
+
+  if (!source || typeof source !== "object") {
+    return undefined;
+  }
+
+  if (source[countryId] != null) {
+    return source[countryId];
+  }
+
+  if (source[id] != null) {
+    return source[id];
+  }
+
+  for (const [key, value] of Object.entries(source)) {
+    if (String(key) === id) {
+      return value;
+    }
+  }
+
+  return undefined;
+};
+
 const countryUsersFrom = (body, countries) => {
   const source = body.countryUsers && typeof body.countryUsers === "object" ? body.countryUsers : {};
   const next = {};
 
   for (const id of countries) {
-    const raw = Array.isArray(source) ? source.find((item) => String(item?.countryId) === id)?.users : source[id];
-    const users = Number.parseInt(String(raw ?? ""), 10);
-    next[id] = Number.isInteger(users) && users > 0 ? users : 0;
+    const users = Number.parseInt(String(usersFromSource(source, id) ?? ""), 10);
+    next[String(id)] = Number.isInteger(users) && users > 0 ? users : 0;
   }
 
   return next;

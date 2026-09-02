@@ -17,6 +17,10 @@ export const pricingIndexSql = `
 CREATE UNIQUE INDEX IF NOT EXISTS pricing_country_unique ON public.pricing (country_id);
 `;
 
+export const pricingAlterSql = `
+ALTER TABLE public.pricing ADD COLUMN IF NOT EXISTS country_prices JSONB NOT NULL DEFAULT '{}'::jsonb;
+`;
+
 export const CURRENCIES = [
   { code: "INR", symbol: "₹", name: "Indian Rupee" },
   { code: "USD", symbol: "$", name: "US Dollar" },
@@ -62,12 +66,34 @@ export const CURRENCIES = [
 
 export const currencyByCode = (code) => CURRENCIES.find((item) => item.code === code) ?? null;
 
-export const mapPricing = (row) => ({
-  id: String(row.id),
-  countryId: String(row.country_id),
-  countryName: row.country_name,
-  currencyCode: row.currency_code,
-  currencySymbol: row.currency_symbol,
-  perUserPrice: Number(row.per_user_price),
-  createdAt: row.created_at,
-});
+const countryPricesFrom = (row) => {
+  const source =
+    row.country_prices && typeof row.country_prices === "object" && !Array.isArray(row.country_prices)
+      ? Object.fromEntries(
+          Object.entries(row.country_prices).map(([id, price]) => [String(id), Number(price) || 0])
+        )
+      : {};
+
+  if (Object.keys(source).length === 0 && row.country_id != null && row.per_user_price != null) {
+    source[String(row.country_id)] = Number(row.per_user_price) || 0;
+  }
+
+  return source;
+};
+
+export const mapPricing = (row) => {
+  const countryPrices = countryPricesFrom(row);
+  const rootId = String(row.country_id);
+  const perUserPrice = countryPrices[rootId] > 0 ? countryPrices[rootId] : Number(row.per_user_price) || 0;
+
+  return {
+    id: String(row.id),
+    countryId: rootId,
+    countryName: row.country_name,
+    currencyCode: row.currency_code,
+    currencySymbol: row.currency_symbol,
+    perUserPrice,
+    countryPrices,
+    createdAt: row.created_at,
+  };
+};

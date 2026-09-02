@@ -20,10 +20,13 @@ const withBilling = async (payload) => {
 
   return {
     ...payload,
-    billingCountryId: payload.billingCountryId,
+    billingCountryId: String(payload.billingCountryId),
     billingCurrencyCode: pricing.currencyCode,
     billingCurrencySymbol: pricing.currencySymbol,
     billingPerUserPrice: pricing.perUserPrice,
+    billingCountryPrices: Object.fromEntries(
+      Object.entries(pricing.countryPrices ?? {}).map(([id, price]) => [String(id), Number(price)])
+    ),
   };
 };
 
@@ -39,6 +42,45 @@ const withOperationCountries = async (payload) => {
   return { ...payload, countries };
 };
 
+const sheetRateOf = (prices, countryId) => {
+  const id = String(countryId);
+
+  for (const [key, value] of Object.entries(prices ?? {})) {
+    if (String(key) === id) {
+      const rate = Number(value);
+      if (Number.isFinite(rate) && rate > 0) {
+        return rate;
+      }
+    }
+  }
+
+  return 0;
+};
+
+const usersOf = (countryUsers, countryId) => {
+  const id = String(countryId);
+
+  if (!countryUsers || typeof countryUsers !== "object") {
+    return undefined;
+  }
+
+  if (countryUsers[countryId] != null) {
+    return countryUsers[countryId];
+  }
+
+  if (countryUsers[id] != null) {
+    return countryUsers[id];
+  }
+
+  for (const [key, value] of Object.entries(countryUsers)) {
+    if (String(key) === id) {
+      return value;
+    }
+  }
+
+  return undefined;
+};
+
 const withSubscription = async (payload) => {
   if (payload.plan !== "Standard") {
     return {
@@ -49,29 +91,32 @@ const withSubscription = async (payload) => {
     };
   }
 
-  const rate = Number(payload.billingPerUserPrice);
+  const prices = payload.billingCountryPrices ?? {};
   const saved = {};
   let users = 0;
-
-  if (!Number.isFinite(rate) || rate <= 0) {
-    throw new AppError("Add pricing for this country first", 422, "PRICING_REQUIRED");
-  }
+  let monthly = 0;
 
   for (const countryId of payload.countries) {
-    const count = Number.parseInt(String(payload.countryUsers?.[countryId] ?? ""), 10);
+    const count = Number.parseInt(String(usersOf(payload.countryUsers, countryId) ?? ""), 10);
+    const rate = sheetRateOf(prices, countryId);
 
     if (!Number.isInteger(count) || count < 1) {
       throw new AppError("Enter licensed users for each country of operation", 422, "USERS_REQUIRED");
     }
 
+    if (!Number.isFinite(rate) || rate <= 0) {
+      throw new AppError("Add pricing for each country of operation in the billing country", 422, "PRICING_REQUIRED");
+    }
+
     users += count;
-    saved[countryId] = count;
+    monthly += rate * count;
+    saved[String(countryId)] = count;
   }
 
   return {
     ...payload,
     users,
-    monthlyValue: Number((rate * users).toFixed(2)),
+    monthlyValue: Number(monthly.toFixed(2)),
     trialDaysLeft: null,
     countryUsers: saved,
   };

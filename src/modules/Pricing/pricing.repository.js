@@ -3,6 +3,7 @@ import {
   countryIndexSql,
   countryTableSql,
   mapPricing,
+  pricingAlterSql,
   pricingIndexSql,
   pricingTableSql,
 } from "./pricing.constants.js";
@@ -11,11 +12,18 @@ let ready = null;
 
 const ensureTable = () => {
   if (!ready) {
-    ready = db
-      .query(countryTableSql)
-      .then(() => db.query(countryIndexSql))
-      .then(() => db.query(pricingTableSql))
-      .then(() => db.query(pricingIndexSql));
+    ready = (async () => {
+      await db.query(countryTableSql);
+      await db.query(countryIndexSql);
+      await db.query(pricingTableSql);
+      await db.query(pricingIndexSql);
+      for (const statement of pricingAlterSql
+        .split(";")
+        .map((sql) => sql.trim())
+        .filter(Boolean)) {
+        await db.query(statement);
+      }
+    })();
   }
 
   return ready;
@@ -24,7 +32,7 @@ const ensureTable = () => {
 const selectSql = `
   SELECT
     p.id, p.country_id, c.name AS country_name,
-    p.currency_code, p.currency_symbol, p.per_user_price, p.created_at
+    p.currency_code, p.currency_symbol, p.per_user_price, p.country_prices, p.created_at
   FROM public.pricing p
   JOIN public.country c ON c.id = p.country_id
 `;
@@ -57,11 +65,17 @@ export const pricingRepository = {
     await ensureTable();
     const { rows } = await db.query(
       `
-      INSERT INTO public.pricing (country_id, currency_code, currency_symbol, per_user_price)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO public.pricing (country_id, currency_code, currency_symbol, per_user_price, country_prices)
+      VALUES ($1, $2, $3, $4, $5::jsonb)
       RETURNING id
       `,
-      [payload.countryId, payload.currencyCode, payload.currencySymbol, payload.perUserPrice]
+      [
+        payload.countryId,
+        payload.currencyCode,
+        payload.currencySymbol,
+        payload.perUserPrice,
+        JSON.stringify(payload.countryPrices ?? {}),
+      ]
     );
 
     return this.findById(rows[0].id);
@@ -75,11 +89,19 @@ export const pricingRepository = {
         country_id = $2,
         currency_code = $3,
         currency_symbol = $4,
-        per_user_price = $5
+        per_user_price = $5,
+        country_prices = $6::jsonb
       WHERE id = $1
       RETURNING id
       `,
-      [id, payload.countryId, payload.currencyCode, payload.currencySymbol, payload.perUserPrice]
+      [
+        id,
+        payload.countryId,
+        payload.currencyCode,
+        payload.currencySymbol,
+        payload.perUserPrice,
+        JSON.stringify(payload.countryPrices ?? {}),
+      ]
     );
 
     return rows[0] ? this.findById(rows[0].id) : null;

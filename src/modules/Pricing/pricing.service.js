@@ -5,7 +5,7 @@ import { pricingRepository } from "./pricing.repository.js";
 
 const uniqueError = (error) => {
   if (error?.code === "23505") {
-    throw new AppError("Pricing for this country already exists", 409, "PRICING_EXISTS");
+    throw new AppError("Pricing for this root country already exists", 409, "PRICING_EXISTS");
   }
 
   throw error;
@@ -19,17 +19,28 @@ export const pricingService = {
     const country = await countryRepository.findById(payload.countryId);
 
     if (!country) {
-      throw new AppError("Country not found", 404, "COUNTRY_NOT_FOUND");
+      throw new AppError("Root country not found", 404, "COUNTRY_NOT_FOUND");
+    }
+
+    const listed = await countryRepository.list();
+    const missing = listed.filter((item) => !(Number(payload.countryPrices?.[String(item.id)]) > 0));
+
+    if (listed.length === 0 || missing.length > 0) {
+      throw new AppError("Enter per user price for each country", 422, "COUNTRY_PRICES_REQUIRED");
     }
 
     const existing = await pricingRepository.findByCountryId(payload.countryId);
 
     if (existing) {
-      throw new AppError("Pricing for this country already exists", 409, "PRICING_EXISTS");
+      throw new AppError("Pricing for this root country already exists", 409, "PRICING_EXISTS");
     }
 
     try {
-      return await pricingRepository.create(payload);
+      return await pricingRepository.create({
+        ...payload,
+        countryPrices: Object.fromEntries(listed.map((item) => [String(item.id), Number(payload.countryPrices[String(item.id)])])),
+        perUserPrice: Number(payload.countryPrices[String(country.id)]),
+      });
     } catch (error) {
       uniqueError(error);
     }
@@ -45,17 +56,28 @@ export const pricingService = {
     const country = await countryRepository.findById(payload.countryId);
 
     if (!country) {
-      throw new AppError("Country not found", 404, "COUNTRY_NOT_FOUND");
+      throw new AppError("Root country not found", 404, "COUNTRY_NOT_FOUND");
+    }
+
+    const listed = await countryRepository.list();
+    const missing = listed.filter((item) => !(Number(payload.countryPrices?.[String(item.id)]) > 0));
+
+    if (listed.length === 0 || missing.length > 0) {
+      throw new AppError("Enter per user price for each country", 422, "COUNTRY_PRICES_REQUIRED");
     }
 
     const existing = await pricingRepository.findByCountryId(payload.countryId, id);
 
     if (existing) {
-      throw new AppError("Pricing for this country already exists", 409, "PRICING_EXISTS");
+      throw new AppError("Pricing for this root country already exists", 409, "PRICING_EXISTS");
     }
 
     try {
-      const updated = await pricingRepository.update(id, payload);
+      const updated = await pricingRepository.update(id, {
+        ...payload,
+        countryPrices: Object.fromEntries(listed.map((item) => [String(item.id), Number(payload.countryPrices[String(item.id)])])),
+        perUserPrice: Number(payload.countryPrices[String(country.id)]),
+      });
 
       if (!updated) {
         throw new AppError("Pricing not found", 404, "PRICING_NOT_FOUND");
