@@ -29,7 +29,7 @@ export const companiesRepository = {
         street, city, state, pin, contact_name, email, mobile, logo_url,
         initials, accent, status, plan, users, establishments,
         monthly_value, trial_days_left, created_at,
-        billing_country_id, billing_currency_code, billing_currency_symbol, country_users
+        billing_country_id, billing_currency_code, billing_currency_symbol, country_users, onboard_amount
       FROM public.companies
       ORDER BY id DESC
       `
@@ -69,7 +69,7 @@ export const companiesRepository = {
         street, city, state, pin, contact_name, email, mobile, logo_url,
         initials, accent, status, plan, users, establishments,
         monthly_value, trial_days_left, created_at,
-        billing_country_id, billing_currency_code, billing_currency_symbol, country_users
+        billing_country_id, billing_currency_code, billing_currency_symbol, country_users, onboard_amount
       FROM public.companies
       WHERE id = $1
       LIMIT 1
@@ -104,13 +104,13 @@ export const companiesRepository = {
         legal_name, trade_name, pan, gstin, countries, uen, ssm, dbd,
         street, city, state, pin, contact_name, email, mobile, initials,
         plan, users, monthly_value, trial_days_left, password_hash, logo_url,
-        billing_country_id, billing_currency_code, billing_currency_symbol, country_users
+        billing_country_id, billing_currency_code, billing_currency_symbol, country_users, onboard_amount
       )
       VALUES (
         $1, $2, $3, $4, $5::jsonb, $6, $7, $8,
         $9, $10, $11, $12, $13, $14, $15, $16,
         $17, $18, $19, $20, $21, $22,
-        $23, $24, $25, $26::jsonb
+        $23, $24, $25, $26::jsonb, $27
       )
       RETURNING *
       `,
@@ -141,6 +141,7 @@ export const companiesRepository = {
         payload.billingCurrencyCode,
         payload.billingCurrencySymbol,
         JSON.stringify(payload.countryUsers ?? {}),
+        payload.onboardAmount ?? null,
       ]
     );
 
@@ -178,7 +179,8 @@ export const companiesRepository = {
         billing_country_id = $24,
         billing_currency_code = $25,
         billing_currency_symbol = $26,
-        country_users = $27::jsonb
+        country_users = $27::jsonb,
+        onboard_amount = $28
       WHERE id = $1
       RETURNING *
       `,
@@ -210,6 +212,7 @@ export const companiesRepository = {
         payload.billingCurrencyCode,
         payload.billingCurrencySymbol,
         JSON.stringify(payload.countryUsers ?? {}),
+        payload.onboardAmount ?? null,
       ]
     );
 
@@ -226,6 +229,35 @@ export const companiesRepository = {
       RETURNING *
       `,
       [id, status]
+    );
+
+    return rows[0] ? mapCompany(rows[0]) : null;
+  },
+
+  async updateUsers(id, payload) {
+    await ensureTable();
+    const { rows } = await db.query(
+      `
+      UPDATE public.companies
+      SET
+        users = $2,
+        monthly_value = $3,
+        country_users = $4::jsonb,
+        onboard_amount = $5,
+        billing_currency_code = COALESCE($6, billing_currency_code),
+        billing_currency_symbol = COALESCE($7, billing_currency_symbol)
+      WHERE id = $1
+      RETURNING *
+      `,
+      [
+        id,
+        payload.users,
+        payload.monthlyValue,
+        JSON.stringify(payload.countryUsers ?? {}),
+        payload.onboardAmount ?? null,
+        payload.billingCurrencyCode ?? null,
+        payload.billingCurrencySymbol ?? null,
+      ]
     );
 
     return rows[0] ? mapCompany(rows[0]) : null;

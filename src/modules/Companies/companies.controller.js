@@ -148,4 +148,27 @@ export const companiesController = {
       throw error;
     }
   }),
+
+  addUsers: asyncHandler(async (req, res) => {
+    try {
+      const company = await companiesService.addUsers(req.params.id, req.body?.countryUsers);
+      const message = "Users updated successfully";
+
+      return success(res, {
+        message,
+        data: { company },
+        toast: createToast({ type: "success", message }),
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return fail(res, {
+          status: error.statusCode,
+          message: error.message,
+          code: error.code,
+        });
+      }
+
+      throw error;
+    }
+  }),
 };

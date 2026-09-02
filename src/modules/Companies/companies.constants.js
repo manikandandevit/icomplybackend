@@ -7,6 +7,7 @@ ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS billing_country_id INTEGER
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS billing_currency_code TEXT;
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS billing_currency_symbol TEXT;
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS country_users JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS onboard_amount NUMERIC(14, 2);
 ALTER TABLE public.companies ALTER COLUMN monthly_value TYPE NUMERIC(14, 2);
 `;
 
@@ -90,6 +91,7 @@ export const mapCompany = (row) => ({
   billingCountryId: row.billing_country_id ? String(row.billing_country_id) : "",
   billingCurrencyCode: row.billing_currency_code || "",
   billingCurrencySymbol: row.billing_currency_symbol || "",
+  onboardAmount: row.onboard_amount == null ? null : Number(row.onboard_amount),
   uen: row.uen || "",
   ssm: row.ssm || "",
   dbd: row.dbd || "",

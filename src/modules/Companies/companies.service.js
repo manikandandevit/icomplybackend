@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { AppError } from "../../core/errors/AppError.js";
 import { countryRepository } from "../Country/country.repository.js";
 import { pricingRepository } from "../Pricing/pricing.repository.js";
+import { onboardRepository } from "../Onboard/onboard.repository.js";
 import { companiesRepository } from "./companies.repository.js";
 import { companiesStorage } from "./companies.storage.js";
 
@@ -87,11 +88,17 @@ const withSubscription = async (payload) => {
       ...payload,
       users: 0,
       monthlyValue: null,
+      onboardAmount: null,
       countryUsers: {},
     };
   }
 
   const prices = payload.billingCountryPrices ?? {};
+  const onboard = await onboardRepository.findByCountryId(payload.billingCountryId);
+
+  if (!onboard || !(Number(onboard.amount) > 0)) {
+    throw new AppError("Add onboard amount for this country first", 422, "ONBOARD_REQUIRED");
+  }
   const saved = {};
   let users = 0;
   let monthly = 0;
@@ -117,6 +124,7 @@ const withSubscription = async (payload) => {
     ...payload,
     users,
     monthlyValue: Number(monthly.toFixed(2)),
+    onboardAmount: Number(Number(onboard.amount).toFixed(2)),
     trialDaysLeft: null,
     countryUsers: saved,
   };
@@ -186,6 +194,72 @@ export const companiesService = {
 
     const next = status === "Active" ? "Active" : "Inactive";
     const updated = await companiesRepository.updateStatus(id, next);
+
+    if (!updated) {
+      throw new AppError("Company not found", 404, "COMPANY_NOT_FOUND");
+    }
+
+    return updated;
+  },
+
+  async addUsers(id, countryUsersInput) {
+    const company = await companiesRepository.findById(id);
+
+    if (!company) {
+      throw new AppError("Company not found", 404, "COMPANY_NOT_FOUND");
+    }
+
+    if (company.plan !== "Standard") {
+      throw new AppError("Add users is available for Standard plans only", 422, "PLAN_REQUIRED");
+    }
+
+    if (!company.billingCountryId) {
+      throw new AppError("Billing country is required", 422, "COUNTRY_REQUIRED");
+    }
+
+    const countries = Array.isArray(company.countries) ? company.countries.map(String) : [];
+
+    if (countries.length === 0) {
+      throw new AppError("Select at least one country of operation", 422, "COUNTRIES_INVALID");
+    }
+
+    const source =
+      countryUsersInput && typeof countryUsersInput === "object" && !Array.isArray(countryUsersInput)
+        ? countryUsersInput
+        : {};
+
+    const nextCountryUsers = {};
+
+    for (const countryId of countries) {
+      const idKey = String(countryId);
+      const count = Number.parseInt(String(usersOf(source, idKey) ?? ""), 10);
+
+      if (!Number.isInteger(count) || count < 1) {
+        throw new AppError("Enter licensed users for each country of operation", 422, "USERS_REQUIRED");
+      }
+
+      nextCountryUsers[idKey] = count;
+    }
+
+    const billed = await withSubscription(
+      await withBilling(
+        await withOperationCountries({
+          plan: "Standard",
+          billingCountryId: company.billingCountryId,
+          countries,
+          countryUsers: nextCountryUsers,
+        })
+      )
+    );
+
+    const updated = await companiesRepository.updateUsers(id, {
+      users: billed.users,
+      monthlyValue: billed.monthlyValue,
+      countryUsers: billed.countryUsers,
+      onboardAmount: billed.onboardAmount,
+      billingCurrencyCode: billed.billingCurrencyCode,
+      billingCurrencySymbol: billed.billingCurrencySymbol,
+    });
 
     if (!updated) {
       throw new AppError("Company not found", 404, "COMPANY_NOT_FOUND");

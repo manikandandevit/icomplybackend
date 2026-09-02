@@ -66,6 +66,37 @@ export const CURRENCIES = [
 
 export const currencyByCode = (code) => CURRENCIES.find((item) => item.code === code) ?? null;
 
+const COUNTRY_CURRENCY_CODES = {
+  india: "INR",
+  singapore: "SGD",
+  malaysia: "MYR",
+  thailand: "THB",
+  vietnam: "VND",
+  indonesia: "IDR",
+  philippines: "PHP",
+  "united states": "USD",
+  "united kingdom": "GBP",
+  australia: "AUD",
+  canada: "CAD",
+  "new zealand": "NZD",
+  germany: "EUR",
+  france: "EUR",
+  italy: "EUR",
+  spain: "EUR",
+  netherlands: "EUR",
+  japan: "JPY",
+  china: "CNY",
+  "south korea": "KRW",
+  "united arab emirates": "AED",
+  "saudi arabia": "SAR",
+  "hong kong": "HKD",
+};
+
+export const currencyForCountryName = (name) => {
+  const code = COUNTRY_CURRENCY_CODES[String(name ?? "").trim().toLowerCase()];
+  return code ? currencyByCode(code) : null;
+};
+
 const countryPricesFrom = (row) => {
   const source =
     row.country_prices && typeof row.country_prices === "object" && !Array.isArray(row.country_prices)

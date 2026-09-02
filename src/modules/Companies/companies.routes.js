@@ -19,5 +19,6 @@ companiesRouter.post("/logo", authenticateToken, upload.single("logo"), companie
 companiesRouter.get("/:id/logo", companiesController.logo);
 companiesRouter.get("/:id", authenticateToken, companiesController.get);
 companiesRouter.patch("/:id/status", authenticateToken, companiesController.updateStatus);
+companiesRouter.patch("/:id/users", authenticateToken, companiesController.addUsers);
 companiesRouter.put("/:id", authenticateToken, companiesController.update);
 companiesRouter.post("/", authenticateToken, companiesController.create);
