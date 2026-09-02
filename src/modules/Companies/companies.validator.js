@@ -1,4 +1,4 @@
-import { FREE_TRIAL_DAYS, STANDARD_PRICE_PER_USER } from "./companies.constants.js";
+import { FREE_TRIAL_DAYS } from "./companies.constants.js";
 import { LOGO_KEY_PATTERN } from "./companies.storage.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -15,32 +15,49 @@ const requireText = (errors, key, value, label) => {
   return text;
 };
 
-const subscriptionFrom = (body) => {
+const countryUsersFrom = (body, countries) => {
+  const source = body.countryUsers && typeof body.countryUsers === "object" ? body.countryUsers : {};
+  const next = {};
+
+  for (const id of countries) {
+    const raw = Array.isArray(source) ? source.find((item) => String(item?.countryId) === id)?.users : source[id];
+    const users = Number.parseInt(String(raw ?? ""), 10);
+    next[id] = Number.isInteger(users) && users > 0 ? users : 0;
+  }
+
+  return next;
+};
+
+const subscriptionFrom = (body, countries) => {
   const plan = planFrom(body);
 
   if (plan === "Standard") {
-    const users = Number.parseInt(String(body.users ?? ""), 10);
+    const countryUsers = countryUsersFrom(body, countries);
+    const missing = countries.filter((id) => countryUsers[id] < 1);
 
-    if (!Number.isInteger(users) || users < 1) {
+    if (missing.length > 0) {
       return {
         plan,
+        countryUsers,
         users: null,
         monthlyValue: null,
         trialDaysLeft: null,
-        usersError: "Enter number of users",
+        usersError: "Enter licensed users for each country of operation",
       };
     }
 
     return {
       plan,
-      users,
-      monthlyValue: users * STANDARD_PRICE_PER_USER,
+      countryUsers,
+      users: Object.values(countryUsers).reduce((sum, count) => sum + count, 0),
+      monthlyValue: null,
       trialDaysLeft: null,
     };
   }
 
   return {
     plan,
+    countryUsers: {},
     users: 0,
     monthlyValue: null,
     trialDaysLeft: FREE_TRIAL_DAYS,
@@ -62,27 +79,17 @@ export const validateCompanyBody = (body = {}, { passwordRequired = true } = {})
   const password = String(body.password ?? "");
   const mobile = requireText(errors, "mobile", body.mobile, "Mobile number");
   const countries = Array.isArray(body.countries)
-    ? body.countries.map((code) => String(code).toUpperCase()).filter(Boolean)
+    ? [...new Set(body.countries.map((id) => String(id).trim()).filter(Boolean))]
     : [];
-  const subscription = subscriptionFrom(body);
-  const uen = String(body.uen ?? "").trim();
-  const ssm = String(body.ssm ?? "").trim();
-  const dbd = String(body.dbd ?? "").trim();
+  const subscription = subscriptionFrom(body, countries);
+  const billingCountryId = String(body.billingCountryId ?? "").trim();
+
+  if (!billingCountryId) {
+    errors.billingCountryId = "Country is required";
+  }
 
   if (countries.length === 0) {
     errors.countries = "Select at least one country";
-  }
-
-  if (countries.includes("SG") && !uen) {
-    errors.uen = "UEN is required";
-  }
-
-  if (countries.includes("MY") && !ssm) {
-    errors.ssm = "SSM company no. is required";
-  }
-
-  if (countries.includes("TH") && !dbd) {
-    errors.dbd = "DBD registration no. is required";
   }
 
   if (!email) {
@@ -110,9 +117,7 @@ export const validateCompanyBody = (body = {}, { passwordRequired = true } = {})
       pan,
       gstin,
       countries,
-      uen: countries.includes("SG") ? uen : null,
-      ssm: countries.includes("MY") ? ssm : null,
-      dbd: countries.includes("TH") ? dbd : null,
+      billingCountryId,
       street,
       city,
       state,
@@ -126,6 +131,7 @@ export const validateCompanyBody = (body = {}, { passwordRequired = true } = {})
         ? String(body.logoKey).trim()
         : null,
       plan: subscription.plan,
+      countryUsers: subscription.countryUsers,
       users: subscription.users,
       monthlyValue: subscription.monthlyValue,
       trialDaysLeft: subscription.trialDaysLeft,

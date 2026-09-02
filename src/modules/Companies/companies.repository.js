@@ -20,7 +20,8 @@ export const companiesRepository = {
         id, legal_name, trade_name, pan, gstin, countries, uen, ssm, dbd,
         street, city, state, pin, contact_name, email, mobile, logo_url,
         initials, accent, status, plan, users, establishments,
-        monthly_value, trial_days_left, created_at
+        monthly_value, trial_days_left, created_at,
+        billing_country_id, billing_currency_code, billing_currency_symbol, country_users
       FROM public.companies
       ORDER BY id DESC
       `
@@ -59,7 +60,8 @@ export const companiesRepository = {
         id, legal_name, trade_name, pan, gstin, countries, uen, ssm, dbd,
         street, city, state, pin, contact_name, email, mobile, logo_url,
         initials, accent, status, plan, users, establishments,
-        monthly_value, trial_days_left, created_at
+        monthly_value, trial_days_left, created_at,
+        billing_country_id, billing_currency_code, billing_currency_symbol, country_users
       FROM public.companies
       WHERE id = $1
       LIMIT 1
@@ -93,12 +95,14 @@ export const companiesRepository = {
       INSERT INTO public.companies (
         legal_name, trade_name, pan, gstin, countries, uen, ssm, dbd,
         street, city, state, pin, contact_name, email, mobile, initials,
-        plan, users, monthly_value, trial_days_left, password_hash, logo_url
+        plan, users, monthly_value, trial_days_left, password_hash, logo_url,
+        billing_country_id, billing_currency_code, billing_currency_symbol, country_users
       )
       VALUES (
         $1, $2, $3, $4, $5::jsonb, $6, $7, $8,
         $9, $10, $11, $12, $13, $14, $15, $16,
-        $17, $18, $19, $20, $21, $22
+        $17, $18, $19, $20, $21, $22,
+        $23, $24, $25, $26::jsonb
       )
       RETURNING *
       `,
@@ -125,6 +129,10 @@ export const companiesRepository = {
         payload.trialDaysLeft,
         payload.passwordHash,
         payload.logoUrl,
+        payload.billingCountryId,
+        payload.billingCurrencyCode,
+        payload.billingCurrencySymbol,
+        JSON.stringify(payload.countryUsers ?? {}),
       ]
     );
 
@@ -158,7 +166,11 @@ export const companiesRepository = {
         monthly_value = $20,
         trial_days_left = $21,
         password_hash = COALESCE($22, password_hash),
-        logo_url = COALESCE($23, logo_url)
+        logo_url = COALESCE($23, logo_url),
+        billing_country_id = $24,
+        billing_currency_code = $25,
+        billing_currency_symbol = $26,
+        country_users = $27::jsonb
       WHERE id = $1
       RETURNING *
       `,
@@ -186,6 +198,10 @@ export const companiesRepository = {
         payload.trialDaysLeft,
         payload.passwordHash ?? null,
         payload.logoUrl ?? null,
+        payload.billingCountryId,
+        payload.billingCurrencyCode,
+        payload.billingCurrencySymbol,
+        JSON.stringify(payload.countryUsers ?? {}),
       ]
     );
 
