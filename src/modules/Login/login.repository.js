@@ -28,4 +28,34 @@ export const loginRepository = {
 
     return rows[0] ?? null;
   },
+
+  async findCompanyByEmail(email) {
+    const { rows } = await db.query(
+      `
+      SELECT
+        id, legal_name, trade_name, email, password_hash, status, logo_url
+      FROM public.companies
+      WHERE lower(email) = lower($1)
+      LIMIT 1
+      `,
+      [email]
+    );
+
+    return rows[0] ?? null;
+  },
+
+  async findCompanyById(id) {
+    const { rows } = await db.query(
+      `
+      SELECT
+        id, legal_name, trade_name, email, status, logo_url
+      FROM public.companies
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [id]
+    );
+
+    return rows[0] ?? null;
+  },
 };
