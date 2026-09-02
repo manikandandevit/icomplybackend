@@ -5,7 +5,15 @@ let ready = null;
 
 const ensureTable = () => {
   if (!ready) {
-    ready = db.query(companiesTableSql).then(() => db.query(companiesAlterSql));
+    ready = (async () => {
+      await db.query(companiesTableSql);
+      for (const statement of companiesAlterSql
+        .split(";")
+        .map((sql) => sql.trim())
+        .filter(Boolean)) {
+        await db.query(statement);
+      }
+    })();
   }
 
   return ready;

@@ -29,7 +29,7 @@ const withBilling = async (payload) => {
 
 const withOperationCountries = async (payload) => {
   const listed = await countryRepository.list();
-  const allowed = new Set(listed.map((country) => country.id));
+  const allowed = new Set(listed.map((country) => String(country.id)));
   const countries = payload.countries.filter((id) => allowed.has(String(id)));
 
   if (countries.length === 0 || countries.length !== payload.countries.length) {

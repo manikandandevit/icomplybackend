@@ -3,6 +3,11 @@ export const STANDARD_PRICE_PER_USER = 99;
 
 export const companiesAlterSql = `
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS password_hash TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS billing_country_id INTEGER;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS billing_currency_code TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS billing_currency_symbol TEXT;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS country_users JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE public.companies ALTER COLUMN monthly_value TYPE NUMERIC(14, 2);
 `;
 
 export const companiesTableSql = `
@@ -65,7 +70,7 @@ export const mapCompany = (row) => ({
   city: row.city || "",
   state: row.state || "",
   establishments: row.establishments,
-  monthlyValue: row.monthly_value,
+  monthlyValue: row.monthly_value == null ? null : Number(row.monthly_value),
   status: row.status,
   trialDaysLeft: row.trial_days_left,
   pan: row.pan,
@@ -75,7 +80,16 @@ export const mapCompany = (row) => ({
   contactName: row.contact_name || "",
   street: row.street || "",
   pin: row.pin || "",
-  countries: Array.isArray(row.countries) ? row.countries : [],
+  countries: Array.isArray(row.countries) ? row.countries.map((item) => String(item)) : [],
+  countryUsers:
+    row.country_users && typeof row.country_users === "object" && !Array.isArray(row.country_users)
+      ? Object.fromEntries(
+          Object.entries(row.country_users).map(([id, count]) => [String(id), Number(count) || 0])
+        )
+      : {},
+  billingCountryId: row.billing_country_id ? String(row.billing_country_id) : "",
+  billingCurrencyCode: row.billing_currency_code || "",
+  billingCurrencySymbol: row.billing_currency_symbol || "",
   uen: row.uen || "",
   ssm: row.ssm || "",
   dbd: row.dbd || "",
