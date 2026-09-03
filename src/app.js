@@ -15,6 +15,7 @@ import { countryRouter } from "./modules/Country/index.js";
 import { pricingRouter } from "./modules/Pricing/index.js";
 import { onboardRouter } from "./modules/Onboard/index.js";
 import { caUsersRouter } from "./modules/CAUsers/index.js";
+import { caHrMasterRouter } from "./modules/CAHrMaster/index.js";
 
 export const createApp = () => {
   const app = express();
@@ -47,6 +48,7 @@ export const createApp = () => {
   app.use("/api/ca-companies", caCompaniesRouter);
   app.use("/api/ca-establishments", caEstablishmentsRouter);
   app.use("/api/ca-users", caUsersRouter);
+  app.use("/api/ca-hr-master", caHrMasterRouter);
   app.use("/api/countries", countryRouter);
   app.use("/api/pricing", pricingRouter);
   app.use("/api/onboard", onboardRouter);
