@@ -37,3 +37,22 @@ export const authenticateToken = (req, _res, next) => {
     return next(new AppError("Invalid or expired session", 401, "UNAUTHORIZED"));
   }
 };
+
+export const companyIdFromUser = (user) => {
+  if (user?.type === "company" && user.companyId) {
+    return String(user.companyId);
+  }
+
+  return null;
+};
+
+export const requireCompanyAdmin = (req, _res, next) => {
+  const companyId = companyIdFromUser(req.user);
+
+  if (!companyId) {
+    return next(new AppError("Company admin access is required", 403, "FORBIDDEN"));
+  }
+
+  req.companyId = companyId;
+  return next();
+};

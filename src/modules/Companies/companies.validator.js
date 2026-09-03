@@ -116,6 +116,14 @@ export const validateCompanyBody = (body = {}, { passwordRequired = true } = {})
     errors.billingCountryId = "Country is required";
   }
 
+  const addressCountryId = String(body.addressCountryId ?? "").trim();
+
+  if (!addressCountryId) {
+    errors.addressCountryId = "Registered address country is required";
+  } else if (!countries.some((id) => String(id) === String(addressCountryId))) {
+    errors.addressCountryId = "Select a country from countries of operation";
+  }
+
   if (countries.length === 0) {
     errors.countries = "Select at least one country";
   }
@@ -146,6 +154,7 @@ export const validateCompanyBody = (body = {}, { passwordRequired = true } = {})
       gstin,
       countries,
       billingCountryId,
+      addressCountryId,
       street,
       city,
       state,

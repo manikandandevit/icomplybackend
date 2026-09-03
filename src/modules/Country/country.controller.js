@@ -44,6 +44,27 @@ export const countryController = {
     });
   }),
 
+  getStates: asyncHandler(async (req, res) => {
+    const country = req.query.countryCode || req.query.countryName || req.query.country || "";
+    const states = countryService.getStates(country);
+
+    return success(res, {
+      message: "States loaded",
+      data: { states },
+    });
+  }),
+
+  getCities: asyncHandler(async (req, res) => {
+    const country = req.query.countryCode || req.query.countryName || req.query.country || "";
+    const state = req.query.stateCode || req.query.stateName || req.query.state || "";
+    const cities = countryService.getCities(country, state);
+
+    return success(res, {
+      message: "Cities loaded",
+      data: { cities },
+    });
+  }),
+
   create: asyncHandler(async (req, res) => {
     const name = validatedName(res, req.body);
 

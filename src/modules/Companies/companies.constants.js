@@ -9,6 +9,7 @@ ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS billing_currency_symbol TE
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS country_users JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS onboard_amount NUMERIC(14, 2);
 ALTER TABLE public.companies ALTER COLUMN monthly_value TYPE NUMERIC(14, 2);
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS address_country_id INTEGER;
 `;
 
 export const companiesTableSql = `
@@ -81,6 +82,7 @@ export const mapCompany = (row) => ({
   contactName: row.contact_name || "",
   street: row.street || "",
   pin: row.pin || "",
+  addressCountryId: row.address_country_id ? String(row.address_country_id) : "",
   countries: Array.isArray(row.countries) ? row.countries.map((item) => String(item)) : [],
   countryUsers:
     row.country_users && typeof row.country_users === "object" && !Array.isArray(row.country_users)

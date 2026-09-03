@@ -13,10 +13,23 @@ const MIME_TO_EXT = {
 
 export const LOGO_MIME_TYPES = Object.keys(MIME_TO_EXT);
 export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
-export const LOGO_KEY_PATTERN = /^companies\/[0-9a-f-]{36}\.(png|jpg|jpeg|webp|svg)$/i;
+export const LOGO_KEY_PATTERN = /^(companies|ca-companies)\/[0-9a-f-]{36}\.(png|jpg|jpeg|webp|svg)$/i;
+
+export const s3PublicUrl = (key) => {
+  const endpoint = String(config.s3.endpoint || "")
+    .replace(/\/+$/, "")
+    .replace(/\/s3$/i, "");
+  const bucket = config.s3.bucket;
+
+  if (!endpoint || !bucket || !key) {
+    return null;
+  }
+
+  return `${endpoint}/object/public/${bucket}/${key}`;
+};
 
 export const companiesStorage = {
-  async upload(file) {
+  async upload(file, { prefix = "companies" } = {}) {
     if (!config.s3.bucket || !config.s3.accessKeyId) {
       throw new AppError("Logo storage is not configured", 500, "STORAGE_NOT_CONFIGURED");
     }
@@ -26,7 +39,8 @@ export const companiesStorage = {
       throw new AppError("Use PNG, JPG, SVG or WebP", 400, "INVALID_LOGO_TYPE");
     }
 
-    const key = `companies/${randomUUID()}.${ext}`;
+    const folder = prefix === "ca-companies" ? "ca-companies" : "companies";
+    const key = `${folder}/${randomUUID()}.${ext}`;
 
     await s3Client.send(
       new PutObjectCommand({
@@ -37,7 +51,7 @@ export const companiesStorage = {
       })
     );
 
-    return { key };
+    return { key, url: s3PublicUrl(key) };
   },
 
   async get(key) {
