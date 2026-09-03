@@ -19,6 +19,7 @@ export const validateMasterBody = (masterType, body = {}) => {
     endTime: null,
     totalHours: null,
     multiplier: null,
+    days: null,
   };
 
   if (masterType === "designation") {
@@ -28,6 +29,16 @@ export const validateMasterBody = (masterType, body = {}) => {
     } else {
       value.relatedId = departmentId;
     }
+  }
+
+  if (masterType === "leave-types") {
+    const days = String(body.days ?? body.values?.days ?? "").trim();
+    if (!days) {
+      errors.days = "No of days is required";
+    } else if (Number.isNaN(Number(days)) || Number(days) <= 0) {
+      errors.days = "No of days must be a positive number";
+    }
+    value.days = days;
   }
 
   if (masterType === "shift-type") {

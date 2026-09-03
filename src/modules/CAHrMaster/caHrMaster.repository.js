@@ -1,6 +1,7 @@
 import { db } from "../../core/db/pool.js";
 import {
   caHrMastersAlterSql,
+  caHrMastersBackfillSql,
   caHrMastersIndexSql,
   caHrMastersTableSql,
   mapCAHrMaster,
@@ -29,6 +30,7 @@ const ensureTable = () => {
         .filter(Boolean)) {
         await db.query(statement);
       }
+      await db.query(caHrMastersBackfillSql);
     })();
   }
 
@@ -36,7 +38,7 @@ const ensureTable = () => {
 };
 
 const selectColumns = `
-  m.id, m.master_type, m.name, m.related_id, m.start_time, m.end_time, m.total_hours, m.multiplier,
+  m.id, m.master_type, m.name, m.related_id, m.start_time, m.end_time, m.total_hours, m.multiplier, m.days,
   m.created_by_company_id, m.created_at,
   d.name AS department_name
 `;
@@ -115,7 +117,7 @@ export const caHrMasterRepository = {
 
     const { rows } = await db.query(
       `
-      SELECT id, master_type, name, related_id, start_time, end_time, total_hours, multiplier,
+      SELECT id, master_type, name, related_id, start_time, end_time, total_hours, multiplier, days,
              created_by_company_id, created_at, NULL::text AS department_name
       FROM public.ca_hr_masters
       WHERE created_by_company_id = $1
@@ -144,9 +146,9 @@ export const caHrMasterRepository = {
     const { rows } = await db.query(
       `
       INSERT INTO public.ca_hr_masters (
-        master_type, name, related_id, start_time, end_time, total_hours, multiplier, created_by_company_id
+        master_type, name, related_id, start_time, end_time, total_hours, multiplier, days, created_by_company_id
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING id
       `,
       [
@@ -157,6 +159,7 @@ export const caHrMasterRepository = {
         payload.endTime || null,
         payload.totalHours || null,
         payload.multiplier || null,
+        payload.days || null,
         cid,
       ]
     );
@@ -185,8 +188,9 @@ export const caHrMasterRepository = {
         end_time = $4,
         total_hours = $5,
         multiplier = $6,
+        days = $7,
         updated_at = NOW()
-      WHERE id = $7 AND created_by_company_id = $8 AND master_type = $9
+      WHERE id = $8 AND created_by_company_id = $9 AND master_type = $10
       `,
       [
         payload.name,
@@ -195,6 +199,7 @@ export const caHrMasterRepository = {
         payload.endTime || null,
         payload.totalHours || null,
         payload.multiplier || null,
+        payload.days || null,
         rowId,
         cid,
         masterType,

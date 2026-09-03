@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS public.ca_hr_masters (
   end_time TEXT,
   total_hours TEXT,
   multiplier TEXT,
+  days TEXT,
   created_by_company_id INTEGER NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -40,6 +41,23 @@ CREATE TABLE IF NOT EXISTS public.ca_hr_masters (
 
 export const caHrMastersAlterSql = `
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS related_id INTEGER;
+ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS days TEXT;
+`;
+
+export const caHrMastersBackfillSql = `
+UPDATE public.ca_hr_masters
+SET days = CASE
+  WHEN lower(name) LIKE '%casual%' OR lower(name) LIKE '%cl%' THEN '12'
+  WHEN lower(name) LIKE '%sick%' OR lower(name) LIKE '%sl%' THEN '12'
+  WHEN lower(name) LIKE '%earned%' OR lower(name) LIKE '%el%' OR lower(name) LIKE '%privilege%' THEN '15'
+  WHEN lower(name) LIKE '%maternity%' THEN '180'
+  WHEN lower(name) LIKE '%paternity%' THEN '15'
+  WHEN lower(name) LIKE '%comp%' THEN '5'
+  ELSE '12'
+END,
+updated_at = NOW()
+WHERE master_type = 'leave-types'
+  AND (days IS NULL OR btrim(days) = '');
 `;
 
 export const caHrMastersIndexSql = `
@@ -68,6 +86,10 @@ export const mapCAHrMaster = (row) => {
 
   if (row.master_type === "ot-type") {
     values.multiplier = row.multiplier || "";
+  }
+
+  if (row.master_type === "leave-types") {
+    values.days = row.days || "";
   }
 
   return {
