@@ -3,6 +3,7 @@ import { companiesRepository } from "../Companies/companies.repository.js";
 import { countryRepository } from "../Country/country.repository.js";
 import { companiesStorage, LOGO_KEY_PATTERN } from "../Companies/companies.storage.js";
 import { caCompaniesRepository } from "./caCompanies.repository.js";
+import { caEstablishmentsRepository } from "../CAEstablishments/caEstablishments.repository.js";
 
 const LEGACY_COUNTRY_CODES = {
   in: "india",
@@ -95,8 +96,16 @@ export const caCompaniesService = {
   async list(companyId) {
     const parent = await companiesRepository.findById(companyId);
     const companies = await caCompaniesRepository.listByCreator(companyId);
+    const counts = await caEstablishmentsRepository.countsByCreator(companyId);
+    const countOf = (source, id) => counts[`${source}:${id}`] || 0;
 
-    return { parent, companies };
+    return {
+      parent: parent ? { ...parent, establishments: countOf("parent", parent.id) } : null,
+      companies: companies.map((company) => ({
+        ...company,
+        establishments: countOf("ca", company.id),
+      })),
+    };
   },
 
   async get(id, companyId) {

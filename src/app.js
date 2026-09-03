@@ -10,9 +10,11 @@ import { brandingRouter } from "./modules/Branding/index.js";
 import { signOutRouter } from "./modules/SignOut/index.js";
 import { companiesRouter } from "./modules/Companies/index.js";
 import { caCompaniesRouter } from "./modules/CACompanies/index.js";
+import { caEstablishmentsRouter } from "./modules/CAEstablishments/index.js";
 import { countryRouter } from "./modules/Country/index.js";
 import { pricingRouter } from "./modules/Pricing/index.js";
 import { onboardRouter } from "./modules/Onboard/index.js";
+import { caUsersRouter } from "./modules/CAUsers/index.js";
 
 export const createApp = () => {
   const app = express();
@@ -43,6 +45,8 @@ export const createApp = () => {
   app.use("/api/signout", signOutRouter);
   app.use("/api/companies", companiesRouter);
   app.use("/api/ca-companies", caCompaniesRouter);
+  app.use("/api/ca-establishments", caEstablishmentsRouter);
+  app.use("/api/ca-users", caUsersRouter);
   app.use("/api/countries", countryRouter);
   app.use("/api/pricing", pricingRouter);
   app.use("/api/onboard", onboardRouter);
