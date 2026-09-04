@@ -164,7 +164,8 @@ export const companiesService = {
 
     const billed = await withSubscription(await withBilling(await withOperationCountries(payload)));
     const passwordHash = await bcrypt.hash(payload.password, 10);
-    return companiesRepository.create({ ...billed, passwordHash });
+    const status = billed.plan === "Free Trial" ? "Active" : "Inactive";
+    return companiesRepository.create({ ...billed, passwordHash, status });
   },
 
   async update(id, payload) {

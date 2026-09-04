@@ -26,7 +26,7 @@ const sendAppError = (res, error) => {
 
 export const caCompaniesController = {
   list: asyncHandler(async (req, res) => {
-    const result = await caCompaniesService.list(req.companyId);
+    const result = await caCompaniesService.list(req.companyId, req.companyAccess);
 
     return success(res, {
       message: "Companies loaded",

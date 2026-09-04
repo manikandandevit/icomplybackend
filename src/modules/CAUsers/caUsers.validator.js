@@ -6,6 +6,7 @@ export const validateCAUserBody = (body, { passwordRequired = true } = {}) => {
   const email = typeof body?.email === "string" ? body.email.trim() : "";
   const password = typeof body?.password === "string" ? body.password : "";
   const role = typeof body?.role === "string" ? body.role.trim() : "Viewer";
+  const designationId = typeof body?.designationId === "string" ? body.designationId.trim() : String(body?.designationId || "").trim();
   const companyAccess = typeof body?.companyAccess === "string" ? body.companyAccess.trim() : "All Companies";
   const status = body?.status === "Inactive" ? "Inactive" : "Active";
 
@@ -26,7 +27,11 @@ export const validateCAUserBody = (body, { passwordRequired = true } = {}) => {
   }
 
   if (!role) {
-    errors.role = "Role is required";
+    errors.role = "Designation is required";
+  }
+
+  if (!designationId) {
+    errors.designationId = "Designation is required";
   }
 
   return {
@@ -37,6 +42,7 @@ export const validateCAUserBody = (body, { passwordRequired = true } = {}) => {
       email,
       password: password.trim() || "",
       role,
+      designationId,
       companyAccess: companyAccess || "All Companies",
       status,
     },

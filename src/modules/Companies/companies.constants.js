@@ -10,6 +10,7 @@ ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS country_users JSONB NOT NU
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS onboard_amount NUMERIC(14, 2);
 ALTER TABLE public.companies ALTER COLUMN monthly_value TYPE NUMERIC(14, 2);
 ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS address_country_id INTEGER;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS trial_started_at TIMESTAMPTZ;
 `;
 
 export const companiesTableSql = `
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS public.companies (
   establishments INTEGER NOT NULL DEFAULT 1,
   monthly_value INTEGER,
   trial_days_left INTEGER,
+  trial_started_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 `;
@@ -60,6 +62,22 @@ export const initialsFrom = (legalName, tradeName) => {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 };
 
+export const trialDaysRemaining = (row) => {
+  if (row.plan === "Standard") return null;
+  const start = row.trial_started_at || row.created_at;
+  if (!start) return row.trial_days_left ?? FREE_TRIAL_DAYS;
+  const startMs = new Date(start).getTime();
+  if (Number.isNaN(startMs)) return row.trial_days_left ?? FREE_TRIAL_DAYS;
+  const elapsedDays = Math.floor((Date.now() - startMs) / (24 * 60 * 60 * 1000));
+  return Math.max(0, FREE_TRIAL_DAYS - elapsedDays);
+};
+
+export const isFreeTrialExpired = (row) => {
+  if (row.plan === "Standard") return false;
+  const left = trialDaysRemaining(row);
+  return left != null && left <= 0;
+};
+
 export const mapCompany = (row) => ({
   id: String(row.id),
   name: row.trade_name || row.legal_name,
@@ -74,7 +92,8 @@ export const mapCompany = (row) => ({
   establishments: row.establishments,
   monthlyValue: row.monthly_value == null ? null : Number(row.monthly_value),
   status: row.status,
-  trialDaysLeft: row.trial_days_left,
+  trialDaysLeft: trialDaysRemaining(row),
+  trialStartedAt: row.trial_started_at ? new Date(row.trial_started_at).toISOString() : null,
   pan: row.pan,
   gstin: row.gstin || "",
   email: row.email,
@@ -87,7 +106,7 @@ export const mapCompany = (row) => ({
   countryUsers:
     row.country_users && typeof row.country_users === "object" && !Array.isArray(row.country_users)
       ? Object.fromEntries(
-          Object.entries(row.country_users).map(([id, count]) => [String(id), Number(count) || 0])
+          Object.entries(row.country_users).map(([id, count]) => [String(id), Number(count) || 0]),
         )
       : {},
   billingCountryId: row.billing_country_id ? String(row.billing_country_id) : "",

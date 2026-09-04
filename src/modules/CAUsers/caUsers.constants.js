@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.ca_users (
 
 export const caUsersAlterSql = `
 ALTER TABLE public.ca_users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+ALTER TABLE public.ca_users ADD COLUMN IF NOT EXISTS designation_id INTEGER;
 `;
 
 export const caUsersIndexSql = `
@@ -37,8 +38,10 @@ export const mapCAUser = (row) => ({
       .toUpperCase()
       .slice(0, 2) || "U",
   role: row.role || "Viewer",
+  designationId: row.designation_id != null ? String(row.designation_id) : "",
   companyAccess: row.company_access || "All Companies",
   status: row.status === "Inactive" ? "Inactive" : "Active",
   hasPassword: Boolean(row.password_hash),
   createdAt: row.created_at,
+  createdByCompanyId: row.created_by_company_id != null ? String(row.created_by_company_id) : "",
 });

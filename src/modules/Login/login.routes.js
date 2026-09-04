@@ -19,3 +19,4 @@ export const loginRouter = Router();
 
 loginRouter.post("/", loginLimiter, validateLoginRequest, loginController.login);
 loginRouter.get("/profile", authenticateToken, loginController.profile);
+loginRouter.post("/reset-password", authenticateToken, loginController.resetPassword);

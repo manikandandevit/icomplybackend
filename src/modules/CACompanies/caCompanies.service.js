@@ -1,4 +1,5 @@
 import { AppError } from "../../core/errors/AppError.js";
+import { matchesCompanyAccess } from "../../core/access/companyAccess.js";
 import { companiesRepository } from "../Companies/companies.repository.js";
 import { countryRepository } from "../Country/country.repository.js";
 import { companiesStorage, LOGO_KEY_PATTERN } from "../Companies/companies.storage.js";
@@ -93,18 +94,25 @@ export const caCompaniesService = {
     return companiesStorage.get(key);
   },
 
-  async list(companyId) {
+  async list(companyId, companyAccess) {
     const parent = await companiesRepository.findById(companyId);
     const companies = await caCompaniesRepository.listByCreator(companyId);
     const counts = await caEstablishmentsRepository.countsByCreator(companyId);
     const countOf = (source, id) => counts[`${source}:${id}`] || 0;
 
+    const parentRow = parent ? { ...parent, establishments: countOf("parent", parent.id) } : null;
+    const childRows = companies.map((company) => ({
+      ...company,
+      establishments: countOf("ca", company.id),
+    }));
+
     return {
-      parent: parent ? { ...parent, establishments: countOf("parent", parent.id) } : null,
-      companies: companies.map((company) => ({
-        ...company,
-        establishments: countOf("ca", company.id),
-      })),
+      parent: parentRow && matchesCompanyAccess(companyAccess, parentRow.legalName, parentRow.tradeName, parentRow.name)
+        ? parentRow
+        : null,
+      companies: childRows.filter((company) =>
+        matchesCompanyAccess(companyAccess, company.legalName, company.tradeName, company.name),
+      ),
     };
   },
 

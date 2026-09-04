@@ -40,6 +40,13 @@ const selectColumns = `
   contact_name, email, mobile, created_by_company_id, created_at
 `;
 
+const selectColumnsWithLiveCount = `
+  e.id, e.name, e.type, e.status, e.company_id, e.company_source, e.company_name, e.country_id, e.country_name,
+  e.effective_date, COALESCE(c.cnt, 0)::int AS employee_count, e.nature_of_work, e.address, e.city, e.state, e.pin,
+  e.pf_code, e.pf_status, e.esi_applicable, e.esi_code, e.lwf_code, e.pt_reg_no, e.pt_state,
+  e.contact_name, e.email, e.mobile, e.created_by_company_id, e.created_at
+`;
+
 const writeValues = (payload) => [
   payload.name,
   payload.type,
@@ -79,15 +86,38 @@ export const caEstablishmentsRepository = {
     await ensureTable();
     const { rows } = await db.query(
       `
-      SELECT ${selectColumns}
-      FROM public.ca_establishments
-      WHERE created_by_company_id = $1
-      ORDER BY id DESC
+      SELECT ${selectColumnsWithLiveCount}
+      FROM public.ca_establishments e
+      LEFT JOIN (
+        SELECT establishment_id, COUNT(*)::int AS cnt
+        FROM public.ca_employees
+        WHERE created_by_company_id = $1
+        GROUP BY establishment_id
+      ) c ON c.establishment_id = e.id
+      WHERE e.created_by_company_id = $1
+      ORDER BY e.id DESC
       `,
       [creatorId]
     );
 
     return rows.map(mapEstablishment);
+  },
+
+  async syncEmployeeCount(establishmentId) {
+    const rowId = parseRowId(establishmentId);
+    if (!rowId) return;
+
+    await ensureTable();
+    await db.query(
+      `
+      UPDATE public.ca_establishments e
+      SET employee_count = (
+        SELECT COUNT(*)::int FROM public.ca_employees c WHERE c.establishment_id = e.id
+      )
+      WHERE e.id = $1
+      `,
+      [rowId]
+    );
   },
 
   async countsByCreator(createdByCompanyId) {
@@ -123,9 +153,15 @@ export const caEstablishmentsRepository = {
     await ensureTable();
     const { rows } = await db.query(
       `
-      SELECT ${selectColumns}
-      FROM public.ca_establishments
-      WHERE id = $1
+      SELECT ${selectColumnsWithLiveCount}
+      FROM public.ca_establishments e
+      LEFT JOIN (
+        SELECT establishment_id, COUNT(*)::int AS cnt
+        FROM public.ca_employees
+        WHERE establishment_id = $1
+        GROUP BY establishment_id
+      ) c ON c.establishment_id = e.id
+      WHERE e.id = $1
       LIMIT 1
       `,
       [rowId]

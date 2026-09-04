@@ -1,4 +1,5 @@
 import { AppError } from "../../core/errors/AppError.js";
+import { isAllCompanyAccess, matchesCompanyAccess } from "../../core/access/companyAccess.js";
 import { companiesRepository } from "../Companies/companies.repository.js";
 import { countryRepository } from "../Country/country.repository.js";
 import { caCompaniesRepository } from "../CACompanies/caCompanies.repository.js";
@@ -100,20 +101,65 @@ const resolveCountry = (company, countryId, listed) => {
   return allowedCountryIds(company, listed)[0] || "";
 };
 
-export const caEstablishmentsService = {
-  list: (companyId) => caEstablishmentsRepository.listByCreator(companyId),
+const allowedCompanyKeys = async (companyId, companyAccess) => {
+  if (isAllCompanyAccess(companyAccess)) {
+    return null;
+  }
 
-  async get(id, companyId) {
+  const parent = await companiesRepository.findById(companyId);
+  const children = await caCompaniesRepository.listByCreator(companyId);
+  const keys = new Set();
+
+  if (parent && matchesCompanyAccess(companyAccess, parent.legalName, parent.tradeName, parent.name)) {
+    keys.add(`parent:${parent.id}`);
+  }
+
+  for (const company of children) {
+    if (matchesCompanyAccess(companyAccess, company.legalName, company.tradeName, company.name)) {
+      keys.add(`ca:${company.id}`);
+    }
+  }
+
+  return keys;
+};
+
+const inCompanyScope = (keys, row, companyAccess) => {
+  if (!keys) {
+    return true;
+  }
+  if (keys.has(`${row.companySource}:${row.companyId}`)) {
+    return true;
+  }
+  return matchesCompanyAccess(companyAccess, row.companyName);
+};
+
+const denyCompanyScope = async (companyId, companyAccess, row) => {
+  const keys = await allowedCompanyKeys(companyId, companyAccess);
+  if (inCompanyScope(keys, row, companyAccess)) {
+    return;
+  }
+  throw new AppError("You can only access your assigned company data", 403, "FORBIDDEN");
+};
+
+export const caEstablishmentsService = {
+  async list(companyId, companyAccess) {
+    const rows = await caEstablishmentsRepository.listByCreator(companyId);
+    const keys = await allowedCompanyKeys(companyId, companyAccess);
+    return rows.filter((row) => inCompanyScope(keys, row, companyAccess));
+  },
+
+  async get(id, companyId, companyAccess) {
     const establishment = await caEstablishmentsRepository.findById(id);
 
     if (!establishment || !ownedBy(establishment, companyId)) {
       throw new AppError("Establishment not found", 404, "ESTABLISHMENT_NOT_FOUND");
     }
 
+    await denyCompanyScope(companyId, companyAccess, establishment);
     return establishment;
   },
 
-  async create(companyId, payload) {
+  async create(companyId, payload, companyAccess) {
     const parent = await companiesRepository.findById(companyId);
 
     if (!parent) {
@@ -121,6 +167,11 @@ export const caEstablishmentsService = {
     }
 
     const company = await resolveCompany(payload.companyId, payload.companySource, companyId);
+    await denyCompanyScope(companyId, companyAccess, {
+      companySource: payload.companySource,
+      companyId: payload.companyId,
+      companyName: company.name,
+    });
     const listed = await countryRepository.list();
     const countryId = resolveCountry(company, payload.countryId, listed);
 
@@ -139,14 +190,20 @@ export const caEstablishmentsService = {
     });
   },
 
-  async update(id, companyId, payload) {
+  async update(id, companyId, payload, companyAccess) {
     const existing = await caEstablishmentsRepository.findById(id);
 
     if (!existing || !ownedBy(existing, companyId)) {
       throw new AppError("Establishment not found", 404, "ESTABLISHMENT_NOT_FOUND");
     }
 
+    await denyCompanyScope(companyId, companyAccess, existing);
     const company = await resolveCompany(payload.companyId, payload.companySource, companyId);
+    await denyCompanyScope(companyId, companyAccess, {
+      companySource: payload.companySource,
+      companyId: payload.companyId,
+      companyName: company.name,
+    });
     const listed = await countryRepository.list();
     const countryId = resolveCountry(company, payload.countryId, listed);
 
@@ -168,12 +225,14 @@ export const caEstablishmentsService = {
     return updated;
   },
 
-  async updateStatus(id, companyId, status) {
+  async updateStatus(id, companyId, status, companyAccess) {
     const existing = await caEstablishmentsRepository.findById(id);
 
     if (!existing || !ownedBy(existing, companyId)) {
       throw new AppError("Establishment not found", 404, "ESTABLISHMENT_NOT_FOUND");
     }
+
+    await denyCompanyScope(companyId, companyAccess, existing);
 
     const next = status === "Active" ? "Active" : "Inactive";
     const updated = await caEstablishmentsRepository.updateStatus(id, next);

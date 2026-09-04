@@ -19,7 +19,7 @@ const sendAppError = (res, error) => {
 
 export const caEstablishmentsController = {
   list: asyncHandler(async (req, res) => {
-    const establishments = await caEstablishmentsService.list(req.companyId);
+    const establishments = await caEstablishmentsService.list(req.companyId, req.companyAccess);
 
     return success(res, {
       message: "Establishments loaded",
@@ -29,7 +29,7 @@ export const caEstablishmentsController = {
 
   get: asyncHandler(async (req, res) => {
     try {
-      const establishment = await caEstablishmentsService.get(req.params.id, req.companyId);
+      const establishment = await caEstablishmentsService.get(req.params.id, req.companyId, req.companyAccess);
 
       return success(res, {
         message: "Establishment loaded",
@@ -54,7 +54,7 @@ export const caEstablishmentsController = {
     }
 
     try {
-      const establishment = await caEstablishmentsService.create(req.companyId, value);
+      const establishment = await caEstablishmentsService.create(req.companyId, value, req.companyAccess);
       const message = "Establishment registered";
 
       return success(res, {
@@ -82,7 +82,7 @@ export const caEstablishmentsController = {
     }
 
     try {
-      const establishment = await caEstablishmentsService.update(req.params.id, req.companyId, value);
+      const establishment = await caEstablishmentsService.update(req.params.id, req.companyId, value, req.companyAccess);
       const message = "Establishment updated";
 
       return success(res, {
@@ -99,7 +99,7 @@ export const caEstablishmentsController = {
     const status = String(req.body?.status ?? "").trim() === "Active" ? "Active" : "Inactive";
 
     try {
-      const establishment = await caEstablishmentsService.updateStatus(req.params.id, req.companyId, status);
+      const establishment = await caEstablishmentsService.updateStatus(req.params.id, req.companyId, status, req.companyAccess);
       const message = status === "Active" ? "Establishment set to Active" : "Establishment set to Inactive";
 
       return success(res, {

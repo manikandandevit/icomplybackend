@@ -1,4 +1,5 @@
 import { db } from "../../core/db/pool.js";
+import { AppError } from "../../core/errors/AppError.js";
 import { caEmployeesIndexSql, caEmployeesTableSql, mapCAEmployee } from "./caEmployees.constants.js";
 
 let ready = null;
@@ -33,6 +34,7 @@ const selectColumns = `
   shift_type_id, shift_type_name,
   ot_applicable, ot_type_id, ot_type_name,
   gender_id, gender_name, marital_status_id, marital_status_name,
+  bank_details, details,
   created_by_company_id, created_at
 `;
 
@@ -105,8 +107,9 @@ export const caEmployeesRepository = {
     const cid = parseRowId(companyId);
     if (!cid) return null;
 
-    const { rows } = await db.query(
-      `
+    try {
+      const { rows } = await db.query(
+        `
       INSERT INTO public.ca_employees (
         employee_code, name, email, mobile, join_date, status,
         company_id, company_source, company_name,
@@ -117,6 +120,7 @@ export const caEmployeesRepository = {
         shift_type_id, shift_type_name,
         ot_applicable, ot_type_id, ot_type_name,
         gender_id, gender_name, marital_status_id, marital_status_name,
+        bank_details, details, password_hash, must_reset_password,
         created_by_company_id
       )
       VALUES (
@@ -129,42 +133,163 @@ export const caEmployeesRepository = {
         $18,$19,
         $20,$21,$22,
         $23,$24,$25,$26,
-        $27
+        $27::jsonb,
+        $28::jsonb,
+        $29,
+        $30,
+        $31
       )
       RETURNING id
       `,
-      [
-        payload.employeeCode,
-        payload.name,
-        payload.email,
-        payload.mobile,
-        payload.joinDate,
-        payload.status || "Active",
-        parseRowId(payload.companyId),
-        payload.companySource,
-        payload.companyName,
-        parseRowId(payload.establishmentId),
-        payload.establishmentName,
-        parseRowId(payload.departmentId),
-        payload.departmentName,
-        parseRowId(payload.designationId),
-        payload.designationName,
-        parseRowId(payload.employmentTypeId),
-        payload.employmentTypeName,
-        parseRowId(payload.shiftTypeId),
-        payload.shiftTypeName,
-        Boolean(payload.otApplicable),
-        payload.otApplicable ? parseRowId(payload.otTypeId) : null,
-        payload.otApplicable ? payload.otTypeName || null : null,
-        payload.genderId ? parseRowId(payload.genderId) : null,
-        payload.genderName || null,
-        payload.maritalStatusId ? parseRowId(payload.maritalStatusId) : null,
-        payload.maritalStatusName || null,
-        cid,
-      ]
-    );
+        [
+          payload.employeeCode,
+          payload.name,
+          payload.email,
+          payload.mobile,
+          payload.joinDate,
+          payload.status || "Active",
+          parseRowId(payload.companyId),
+          payload.companySource,
+          payload.companyName,
+          parseRowId(payload.establishmentId),
+          payload.establishmentName,
+          parseRowId(payload.departmentId),
+          payload.departmentName,
+          parseRowId(payload.designationId),
+          payload.designationName,
+          parseRowId(payload.employmentTypeId),
+          payload.employmentTypeName,
+          payload.shiftTypeId ? parseRowId(payload.shiftTypeId) : null,
+          payload.shiftTypeName || null,
+          Boolean(payload.otApplicable),
+          payload.otApplicable ? parseRowId(payload.otTypeId) : null,
+          payload.otApplicable ? payload.otTypeName || null : null,
+          payload.genderId ? parseRowId(payload.genderId) : null,
+          payload.genderName || null,
+          payload.maritalStatusId ? parseRowId(payload.maritalStatusId) : null,
+          payload.maritalStatusName || null,
+          JSON.stringify(Array.isArray(payload.bankDetails) ? payload.bankDetails : []),
+          JSON.stringify(payload.details && typeof payload.details === "object" ? payload.details : {}),
+          payload.passwordHash || null,
+          payload.mustResetPassword !== false,
+          cid,
+        ]
+      );
 
+      return this.findById(rows[0].id, companyId);
+    } catch (error) {
+      if (error?.code === "23505") {
+        throw new AppError("Employee code already exists", 409, "EMPLOYEE_CODE_DUPLICATE");
+      }
+      throw error;
+    }
+  },
+
+  async updateStatus(id, companyId, status) {
+    await ensureTable();
+    const rowId = parseRowId(id);
+    const cid = parseRowId(companyId);
+    if (!rowId || !cid) return null;
+
+    const next = status === "Inactive" ? "Inactive" : "Active";
+    const { rows } = await db.query(
+      `
+      UPDATE public.ca_employees
+      SET status = $3, updated_at = NOW()
+      WHERE id = $1 AND created_by_company_id = $2
+      RETURNING id
+      `,
+      [rowId, cid, next]
+    );
+    if (!rows[0]) return null;
     return this.findById(rows[0].id, companyId);
+  },
+
+  async update(id, companyId, payload) {
+    await ensureTable();
+    const rowId = parseRowId(id);
+    const cid = parseRowId(companyId);
+    if (!rowId || !cid) return null;
+
+    try {
+      const { rows } = await db.query(
+        `
+        UPDATE public.ca_employees
+        SET
+          employee_code = $3,
+          name = $4,
+          email = $5,
+          mobile = $6,
+          join_date = $7,
+          status = $8,
+          company_id = $9,
+          company_source = $10,
+          company_name = $11,
+          establishment_id = $12,
+          establishment_name = $13,
+          department_id = $14,
+          department_name = $15,
+          designation_id = $16,
+          designation_name = $17,
+          employment_type_id = $18,
+          employment_type_name = $19,
+          shift_type_id = $20,
+          shift_type_name = $21,
+          ot_applicable = $22,
+          ot_type_id = $23,
+          ot_type_name = $24,
+          gender_id = $25,
+          gender_name = $26,
+          marital_status_id = $27,
+          marital_status_name = $28,
+          bank_details = $29::jsonb,
+          details = $30::jsonb,
+          updated_at = NOW()
+        WHERE id = $1 AND created_by_company_id = $2
+        RETURNING id
+        `,
+        [
+          rowId,
+          cid,
+          payload.employeeCode,
+          payload.name,
+          payload.email,
+          payload.mobile,
+          payload.joinDate,
+          payload.status || "Active",
+          parseRowId(payload.companyId),
+          payload.companySource,
+          payload.companyName,
+          parseRowId(payload.establishmentId),
+          payload.establishmentName,
+          parseRowId(payload.departmentId),
+          payload.departmentName,
+          parseRowId(payload.designationId),
+          payload.designationName,
+          parseRowId(payload.employmentTypeId),
+          payload.employmentTypeName,
+          payload.shiftTypeId ? parseRowId(payload.shiftTypeId) : null,
+          payload.shiftTypeName || null,
+          Boolean(payload.otApplicable),
+          payload.otApplicable ? parseRowId(payload.otTypeId) : null,
+          payload.otApplicable ? payload.otTypeName || null : null,
+          payload.genderId ? parseRowId(payload.genderId) : null,
+          payload.genderName || null,
+          payload.maritalStatusId ? parseRowId(payload.maritalStatusId) : null,
+          payload.maritalStatusName || null,
+          JSON.stringify(Array.isArray(payload.bankDetails) ? payload.bankDetails : []),
+          JSON.stringify(payload.details && typeof payload.details === "object" ? payload.details : {}),
+        ]
+      );
+
+      if (!rows[0]) return null;
+      return this.findById(rows[0].id, companyId);
+    } catch (error) {
+      if (error?.code === "23505") {
+        throw new AppError("Employee code already exists", 409, "EMPLOYEE_CODE_DUPLICATE");
+      }
+      throw error;
+    }
   },
 
   async delete(id, companyId) {

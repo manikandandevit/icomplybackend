@@ -1,5 +1,5 @@
 import { db } from "../../core/db/pool.js";
-import { companiesAlterSql, companiesTableSql, initialsFrom, mapCompany } from "./companies.constants.js";
+import { FREE_TRIAL_DAYS, companiesAlterSql, companiesTableSql, initialsFrom, mapCompany } from "./companies.constants.js";
 
 let ready = null;
 
@@ -28,7 +28,7 @@ export const companiesRepository = {
         id, legal_name, trade_name, pan, gstin, countries, uen, ssm, dbd,
         street, city, state, pin, contact_name, email, mobile, logo_url,
         initials, accent, status, plan, users, establishments,
-        monthly_value, trial_days_left, created_at,
+        monthly_value, trial_days_left, created_at, trial_started_at,
         billing_country_id, billing_currency_code, billing_currency_symbol, country_users, onboard_amount, address_country_id
       FROM public.companies
       ORDER BY id DESC
@@ -68,7 +68,7 @@ export const companiesRepository = {
         id, legal_name, trade_name, pan, gstin, countries, uen, ssm, dbd,
         street, city, state, pin, contact_name, email, mobile, logo_url,
         initials, accent, status, plan, users, establishments,
-        monthly_value, trial_days_left, created_at,
+        monthly_value, trial_days_left, created_at, trial_started_at,
         billing_country_id, billing_currency_code, billing_currency_symbol, country_users, onboard_amount, address_country_id
       FROM public.companies
       WHERE id = $1
@@ -104,13 +104,15 @@ export const companiesRepository = {
         legal_name, trade_name, pan, gstin, countries, uen, ssm, dbd,
         street, city, state, pin, contact_name, email, mobile, initials,
         plan, users, monthly_value, trial_days_left, password_hash, logo_url,
-        billing_country_id, billing_currency_code, billing_currency_symbol, country_users, onboard_amount, address_country_id
+        billing_country_id, billing_currency_code, billing_currency_symbol, country_users, onboard_amount, address_country_id,
+        status, trial_started_at
       )
       VALUES (
         $1, $2, $3, $4, $5::jsonb, $6, $7, $8,
         $9, $10, $11, $12, $13, $14, $15, $16,
         $17, $18, $19, $20, $21, $22,
-        $23, $24, $25, $26::jsonb, $27, $28
+        $23, $24, $25, $26::jsonb, $27, $28,
+        $29, $30
       )
       RETURNING *
       `,
@@ -143,6 +145,8 @@ export const companiesRepository = {
         JSON.stringify(payload.countryUsers ?? {}),
         payload.onboardAmount ?? null,
         payload.addressCountryId || null,
+        payload.status || (payload.plan === "Free Trial" ? "Active" : "Inactive"),
+        payload.plan === "Free Trial" ? new Date() : null,
       ]
     );
 
@@ -224,17 +228,41 @@ export const companiesRepository = {
 
   async updateStatus(id, status) {
     await ensureTable();
+    const next = status === "Active" ? "Active" : "Inactive";
     const { rows } = await db.query(
       `
       UPDATE public.companies
-      SET status = $2
+      SET
+        status = $2,
+        trial_started_at = CASE
+          WHEN $2 = 'Active' AND plan <> 'Standard' THEN NOW()
+          ELSE trial_started_at
+        END,
+        trial_days_left = CASE
+          WHEN $2 = 'Active' AND plan <> 'Standard' THEN $3
+          ELSE trial_days_left
+        END
       WHERE id = $1
       RETURNING *
       `,
-      [id, status]
+      [id, next, FREE_TRIAL_DAYS]
     );
 
     return rows[0] ? mapCompany(rows[0]) : null;
+  },
+
+  async markInactive(id) {
+    await ensureTable();
+    const { rows } = await db.query(
+      `
+      UPDATE public.companies
+      SET status = 'Inactive', trial_days_left = 0
+      WHERE id = $1
+      RETURNING id
+      `,
+      [id],
+    );
+    return (rows[0] && rows[0].id) || null;
   },
 
   async updateUsers(id, payload) {
