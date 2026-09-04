@@ -96,6 +96,7 @@ export const caCompaniesService = {
 
   async list(companyId, companyAccess) {
     const parent = await companiesRepository.findById(companyId);
+    const listed = await countryRepository.list();
     const companies = await caCompaniesRepository.listByCreator(companyId);
     const counts = await caEstablishmentsRepository.countsByCreator(companyId);
     const countOf = (source, id) => counts[`${source}:${id}`] || 0;
@@ -106,6 +107,12 @@ export const caCompaniesService = {
       establishments: countOf("ca", company.id),
     }));
 
+    const operationCountries = [
+      ...operationCountryIds(parent, listed),
+      countryIdFrom(parent?.addressCountryId, listed),
+      countryIdFrom(parent?.billingCountryId, listed),
+    ].filter(Boolean);
+
     return {
       parent: parentRow && matchesCompanyAccess(companyAccess, parentRow.legalName, parentRow.tradeName, parentRow.name)
         ? parentRow
@@ -113,6 +120,7 @@ export const caCompaniesService = {
       companies: childRows.filter((company) =>
         matchesCompanyAccess(companyAccess, company.legalName, company.tradeName, company.name),
       ),
+      operationCountries: [...new Set(operationCountries)],
     };
   },
 
