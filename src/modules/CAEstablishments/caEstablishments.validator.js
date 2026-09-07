@@ -39,7 +39,7 @@ export const validateCAEstablishmentBody = (body = {}) => {
   const city = requireText(errors, "city", body.city, "City");
   const state = requireText(errors, "state", body.state, "State");
   const pin = requireText(errors, "pin", body.pin, "Pin code");
-  const pfCode = requireText(errors, "pfCode", body.pfCode, "PF registration code");
+  const pfCode = textOf(body.pfCode);
   const contactName = requireText(errors, "contactName", body.contactName, "Contact name");
   const email = textOf(body.email);
   const mobile = requireText(errors, "mobile", body.mobile, "Mobile number");

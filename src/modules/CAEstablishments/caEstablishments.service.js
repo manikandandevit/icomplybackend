@@ -130,7 +130,7 @@ const inCompanyScope = (keys, row, companyAccess) => {
   if (keys.has(`${row.companySource}:${row.companyId}`)) {
     return true;
   }
-  return matchesCompanyAccess(companyAccess, row.companyName);
+  return matchesCompanyAccess(companyAccess, row.companyName, row.name);
 };
 
 const denyCompanyScope = async (companyId, companyAccess, row) => {

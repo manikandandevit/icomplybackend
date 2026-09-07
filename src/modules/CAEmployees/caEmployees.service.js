@@ -7,7 +7,8 @@ import { caEmployeesRepository } from "./caEmployees.repository.js";
 export const DEFAULT_EMPLOYEE_PASSWORD = "Employee@123";
 
 const inEmployeeScope = (companyAccess, employee) =>
-  isAllCompanyAccess(companyAccess) || matchesCompanyAccess(companyAccess, employee.companyName);
+  isAllCompanyAccess(companyAccess) ||
+  matchesCompanyAccess(companyAccess, employee.companyName, employee.establishmentName);
 
 export const caEmployeesService = {
   async list(companyId, companyAccess) {

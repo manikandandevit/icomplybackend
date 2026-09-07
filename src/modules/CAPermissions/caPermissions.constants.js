@@ -9,6 +9,7 @@ export const HR_MASTER_NAV = {
   gender: "gender",
   "leave-category": "leave-category",
   "leave-types": "leave-types",
+  "holiday-type": "holiday-type",
   "attendance-type": "attendance-type",
   "ot-type": "ot-type",
   "bank-account-type": "bank-account-type",

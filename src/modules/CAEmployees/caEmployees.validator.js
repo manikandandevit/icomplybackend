@@ -91,7 +91,6 @@ export const validateEmployeeBody = (body = {}) => {
   required(details.emergencyName, "Emergency contact name", errors, "emergencyName");
   required(details.emergencyRelationship, "Emergency relationship", errors, "emergencyRelationship");
   required(details.emergencyPhone, "Emergency phone", errors, "emergencyPhone");
-  required(details.emergencyAltPhone, "Alternate phone", errors, "emergencyAltPhone");
   required(details.emergencyAddress, "Emergency address", errors, "emergencyAddress");
   required(details.emergencyState, "Emergency state", errors, "emergencyState");
   required(details.emergencyCity, "Emergency city", errors, "emergencyCity");
