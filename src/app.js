@@ -19,7 +19,9 @@ import { caHrMasterRouter } from "./modules/CAHrMaster/index.js";
 import { caEmployeesRouter } from "./modules/CAEmployees/index.js";
 import { caLeaveRequestsRouter } from "./modules/CALeaveRequests/index.js";
 import { caLeaveRevokesRouter } from "./modules/CALeaveRevokes/index.js";
+import { caHolidaysRouter } from "./modules/CAHolidays/index.js";
 import { caPermissionsRouter } from "./modules/CAPermissions/index.js";
+import { caAttendanceRouter } from "./modules/CAAttendance/index.js";
 
 export const createApp = () => {
   const app = express();
@@ -56,7 +58,9 @@ export const createApp = () => {
   app.use("/api/ca-employees", caEmployeesRouter);
   app.use("/api/ca-leave-requests", caLeaveRequestsRouter);
   app.use("/api/ca-leave-revokes", caLeaveRevokesRouter);
+  app.use("/api/ca-holidays", caHolidaysRouter);
   app.use("/api/ca-permissions", caPermissionsRouter);
+  app.use("/api/ca-attendance", caAttendanceRouter);
   app.use("/api/countries", countryRouter);
   app.use("/api/pricing", pricingRouter);
   app.use("/api/onboard", onboardRouter);

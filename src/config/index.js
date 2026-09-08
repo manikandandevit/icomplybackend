@@ -33,4 +33,11 @@ export const config = Object.freeze({
     logoKey: process.env.S3_LOGO_KEY ?? "icomply.png",
     tabbarKey: process.env.S3_TABBAR_KEY ?? "Tabbar.png",
   },
+  smtp: {
+    host: process.env.SMTP_HOST || "",
+    port: Number(process.env.SMTP_PORT) || 587,
+    email: process.env.SMTP_EMAIL || "",
+    password: String(process.env.SMTP_PASSWORD || "").replace(/\s+/g, ""),
+    fromName: process.env.SMTP_FROM_NAME || "iComply HR",
+  },
 });

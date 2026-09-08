@@ -1,6 +1,8 @@
 import { Router } from "express";
+import multer from "multer";
 import { authenticateToken, requireCompanyAdmin } from "../Login/login.middleware.js";
 import { caPermissionsService } from "../CAPermissions/caPermissions.service.js";
+import { ATTACHMENT_MAX_BYTES, ATTACHMENT_MIME_TYPES } from "../../core/storage/leaveAttachments.js";
 import { caLeaveRequestsController } from "./caLeaveRequests.controller.js";
 
 const requireLeaveApply = async (req, _res, next) => {
@@ -19,6 +21,14 @@ const requireLeaveApply = async (req, _res, next) => {
 
 export const caLeaveRequestsRouter = Router();
 
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: ATTACHMENT_MAX_BYTES },
+  fileFilter: (_req, file, callback) => {
+    callback(null, ATTACHMENT_MIME_TYPES.includes(file.mimetype));
+  },
+});
+
 const requireLeaveReview = async (req, _res, next) => {
   try {
     await caPermissionsService.assertAccess(
@@ -34,6 +44,15 @@ const requireLeaveReview = async (req, _res, next) => {
 };
 
 caLeaveRequestsRouter.get("/", authenticateToken, requireCompanyAdmin, caLeaveRequestsController.list);
+caLeaveRequestsRouter.get("/balances", authenticateToken, requireCompanyAdmin, caLeaveRequestsController.balances);
+caLeaveRequestsRouter.post(
+  "/attachment",
+  authenticateToken,
+  requireCompanyAdmin,
+  requireLeaveApply,
+  upload.single("file"),
+  caLeaveRequestsController.uploadAttachment,
+);
 caLeaveRequestsRouter.post(
   "/",
   authenticateToken,

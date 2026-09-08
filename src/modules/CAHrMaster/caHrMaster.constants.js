@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS public.ca_hr_masters (
   eligible_gender_id INTEGER,
   min_hours TEXT,
   max_hours TEXT,
+  carry_forward TEXT,
+  carry_forward_max TEXT,
   created_by_company_id INTEGER NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -64,6 +66,8 @@ ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS country_name TEXT;
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS eligible_gender_id INTEGER;
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS min_hours TEXT;
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS max_hours TEXT;
+ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS carry_forward TEXT;
+ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS carry_forward_max TEXT;
 `;
 
 export const caHrMastersBackfillSql = `
@@ -99,6 +103,12 @@ END,
 updated_at = NOW()
 WHERE master_type IN ('leave-types', 'shift-type', 'ot-type')
   AND (code IS NULL OR btrim(code) = '');
+
+UPDATE public.ca_hr_masters
+SET carry_forward = 'no',
+    updated_at = NOW()
+WHERE master_type = 'leave-types'
+  AND (carry_forward IS NULL OR btrim(carry_forward) = '');
 `;
 
 export const caHrMastersIndexSql = `
@@ -163,6 +173,8 @@ export const mapCAHrMaster = (row) => {
     values.eligibleGenderName = row.eligible_gender_name || (row.eligible_gender_id == null ? "All" : "");
     values.leaveCategoryId = row.related_id != null ? String(row.related_id) : "";
     values.leaveCategoryName = row.related_name || "";
+    values.carryForward = String(row.carry_forward || "no").trim().toLowerCase() === "yes" ? "yes" : "no";
+    values.carryForwardMax = row.carry_forward_max || "";
   }
 
   return {

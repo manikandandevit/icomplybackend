@@ -27,6 +27,8 @@ export const validateMasterBody = (masterType, body = {}) => {
     eligibleGenderId: null,
     minHours: null,
     maxHours: null,
+    carryForward: null,
+    carryForwardMax: null,
   };
 
   const TYPES_WITH_CODE = ["leave-types", "shift-type", "ot-type"];
@@ -84,6 +86,20 @@ export const validateMasterBody = (masterType, body = {}) => {
       value.eligibleGenderId = null;
     } else {
       value.eligibleGenderId = eligibleGenderId;
+    }
+
+    const carryForward = String(body.carryForward ?? body.values?.carryForward ?? "no").trim().toLowerCase();
+    value.carryForward = carryForward === "yes" ? "yes" : "no";
+    if (value.carryForward === "yes") {
+      const carryForwardMax = String(body.carryForwardMax ?? body.values?.carryForwardMax ?? "").trim();
+      if (!carryForwardMax) {
+        errors.carryForwardMax = "Max carry forward days is required";
+      } else if (Number.isNaN(Number(carryForwardMax)) || Number(carryForwardMax) <= 0) {
+        errors.carryForwardMax = "Max carry forward days must be a positive number";
+      }
+      value.carryForwardMax = carryForwardMax;
+    } else {
+      value.carryForwardMax = null;
     }
   }
 

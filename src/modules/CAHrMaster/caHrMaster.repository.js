@@ -45,6 +45,7 @@ const ensureTable = () => {
 const selectColumns = `
   m.id, m.master_type, m.name, m.related_id, m.start_time, m.end_time, m.total_hours, m.break_time,
   m.multiplier, m.days, m.code, m.country_id, m.country_name, m.eligible_gender_id, m.min_hours, m.max_hours,
+  m.carry_forward, m.carry_forward_max,
   m.created_by_company_id, m.created_at,
   r.name AS related_name,
   g.name AS eligible_gender_name
@@ -63,7 +64,7 @@ const fromJoin = `
 
 const emptySelectRow = `
   SELECT id, master_type, name, related_id, start_time, end_time, total_hours, break_time, multiplier, days, code,
-         country_id, country_name, eligible_gender_id, min_hours, max_hours,
+         country_id, country_name, eligible_gender_id, min_hours, max_hours, carry_forward, carry_forward_max,
          created_by_company_id, created_at, NULL::text AS related_name, NULL::text AS eligible_gender_name
   FROM public.ca_hr_masters
 `;
@@ -202,9 +203,10 @@ export const caHrMasterRepository = {
       `
       INSERT INTO public.ca_hr_masters (
         master_type, name, related_id, start_time, end_time, total_hours, break_time, multiplier, days, code,
-        country_id, country_name, eligible_gender_id, min_hours, max_hours, created_by_company_id
+        country_id, country_name, eligible_gender_id, min_hours, max_hours, carry_forward, carry_forward_max,
+        created_by_company_id
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING id
       `,
       [
@@ -223,6 +225,8 @@ export const caHrMasterRepository = {
         eligibleGenderId,
         payload.minHours || null,
         payload.maxHours || null,
+        payload.carryForward || null,
+        payload.carryForwardMax || null,
         cid,
       ]
     );
@@ -261,8 +265,10 @@ export const caHrMasterRepository = {
         eligible_gender_id = $12,
         min_hours = $13,
         max_hours = $14,
+        carry_forward = $15,
+        carry_forward_max = $16,
         updated_at = NOW()
-      WHERE id = $15 AND created_by_company_id = $16 AND master_type = $17
+      WHERE id = $17 AND created_by_company_id = $18 AND master_type = $19
       `,
       [
         payload.name,
@@ -279,6 +285,8 @@ export const caHrMasterRepository = {
         eligibleGenderId,
         payload.minHours || null,
         payload.maxHours || null,
+        payload.carryForward || null,
+        payload.carryForwardMax || null,
         rowId,
         cid,
         masterType,

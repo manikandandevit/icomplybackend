@@ -1,7 +1,7 @@
 import { asyncHandler } from "../../core/middleware/asyncHandler.js";
 import { AppError } from "../../core/errors/AppError.js";
 import { fail, success } from "../../core/utils/response.js";
-import { caLeaveRevokesService } from "./caLeaveRevokes.service.js";
+import { caLeaveRevokesService, leaveActorFromReq } from "./caLeaveRevokes.service.js";
 import { validateRevokeBody } from "./caLeaveRevokes.validator.js";
 
 const sendAppError = (res, error) => {
@@ -17,7 +17,7 @@ const sendAppError = (res, error) => {
 
 export const caLeaveRevokesController = {
   list: asyncHandler(async (req, res) => {
-    const requests = await caLeaveRevokesService.list(req.companyId);
+    const requests = await caLeaveRevokesService.list(req.companyId, leaveActorFromReq(req), req.query?.scope);
     return success(res, { message: "Revoke requests loaded", data: { requests } });
   }),
 
@@ -33,7 +33,7 @@ export const caLeaveRevokesController = {
     }
 
     try {
-      const request = await caLeaveRevokesService.create(req.companyId, value);
+      const request = await caLeaveRevokesService.create(req.companyId, value, leaveActorFromReq(req));
       return success(res, {
         status: 201,
         message: "Revoke request created",
@@ -46,7 +46,12 @@ export const caLeaveRevokesController = {
 
   approve: asyncHandler(async (req, res) => {
     try {
-      const request = await caLeaveRevokesService.approve(req.params.id, req.companyId, req.actorName);
+      const request = await caLeaveRevokesService.approve(
+        req.params.id,
+        req.companyId,
+        req.actorName,
+        leaveActorFromReq(req),
+      );
       return success(res, { message: "Revoke request approved", data: { request } });
     } catch (error) {
       return sendAppError(res, error);
@@ -60,6 +65,7 @@ export const caLeaveRevokesController = {
         req.companyId,
         req.body?.reason,
         req.actorName,
+        leaveActorFromReq(req),
       );
       return success(res, { message: "Revoke request rejected", data: { request } });
     } catch (error) {
@@ -69,7 +75,7 @@ export const caLeaveRevokesController = {
 
   cancel: asyncHandler(async (req, res) => {
     try {
-      await caLeaveRevokesService.cancel(req.params.id, req.companyId);
+      await caLeaveRevokesService.cancel(req.params.id, req.companyId, leaveActorFromReq(req));
       return success(res, { message: "Revoke request cancelled" });
     } catch (error) {
       return sendAppError(res, error);

@@ -28,9 +28,37 @@ CREATE INDEX IF NOT EXISTS idx_ca_leave_revokes_creator
   ON public.ca_leave_revokes (created_by_company_id);
 CREATE INDEX IF NOT EXISTS idx_ca_leave_revokes_leave
   ON public.ca_leave_revokes (leave_request_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_ca_leave_revokes_pending_leave
-  ON public.ca_leave_revokes (leave_request_id)
-  WHERE status = 'Pending';
+
+DROP INDEX IF EXISTS idx_ca_leave_revokes_pending_leave;
+
+ALTER TABLE public.ca_leave_revokes
+  ADD COLUMN IF NOT EXISTS reporting_to_id INTEGER;
+
+ALTER TABLE public.ca_leave_revokes
+  ADD COLUMN IF NOT EXISTS session TEXT NOT NULL DEFAULT 'full';
+
+ALTER TABLE public.ca_leave_revokes
+  ADD COLUMN IF NOT EXISTS attachment_key TEXT;
+
+ALTER TABLE public.ca_leave_revokes
+  ADD COLUMN IF NOT EXISTS attachment_url TEXT;
+
+ALTER TABLE public.ca_leave_revokes
+  ADD COLUMN IF NOT EXISTS attachment_name TEXT;
+
+ALTER TABLE public.ca_leave_revokes
+  ADD COLUMN IF NOT EXISTS attachment_mime TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_ca_leave_revokes_reporting
+  ON public.ca_leave_revokes (created_by_company_id, reporting_to_id);
+
+UPDATE public.ca_leave_revokes r
+SET reporting_to_id = CAST(e.details->>'reportingToId' AS INTEGER)
+FROM public.ca_employees e
+WHERE r.reporting_to_id IS NULL
+  AND r.employee_id = e.id
+  AND r.created_by_company_id = e.created_by_company_id
+  AND e.details->>'reportingToId' ~ '^[0-9]+$';
 `;
 
 const dateFrom = (value) => {
@@ -61,6 +89,12 @@ export const mapCALeaveRevoke = (row) => ({
   rejectReason: row.reject_reason || "",
   approverName: row.approver_name || "",
   reviewedByName: row.reviewed_by_name || "",
+  reportingToId: row.reporting_to_id != null ? String(row.reporting_to_id) : "",
+  session: row.session === "first-half" || row.session === "second-half" ? row.session : "full",
+  attachmentKey: row.attachment_key || "",
+  attachmentUrl: row.attachment_url || "",
+  attachmentName: row.attachment_name || "",
+  attachmentMime: row.attachment_mime || "",
   status: row.status || "Pending",
   createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
 });
