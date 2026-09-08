@@ -94,8 +94,24 @@ export const caLeaveYearBalancesService = {
     return row ? Number(row.entitledDays) || 0 : liveAnnual(leaveType, employee, year);
   },
 
-  async listYear(companyId, year = currentYear()) {
+  async listYear(companyId, year = currentYear(), actor = {}) {
     const y = Number(year) || currentYear();
+    const selfOnly = Boolean(actor?.employeeId && !actor?.isOwner && !actor?.isCaUser);
+
+    if (selfOnly) {
+      const [employee, leaveTypes] = await Promise.all([
+        caEmployeesRepository.findById(actor.employeeId, companyId),
+        caHrMasterRepository.list(companyId, "leave-types"),
+      ]);
+      if (!employee) return [];
+      const balances = [];
+      for (const leaveType of leaveTypes) {
+        const row = await this.ensureEmployeeYear(companyId, employee, leaveType, y);
+        if (row) balances.push(row);
+      }
+      return balances;
+    }
+
     await this.ensureCompanyYear(companyId, y);
     const [employees, leaveTypes, rows] = await Promise.all([
       caEmployeesRepository.list(companyId),

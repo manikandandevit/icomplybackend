@@ -40,7 +40,7 @@ export const assertCanReviewLeave = (request, actor, employee) => {
 export const caLeaveRequestsService = {
   list: (companyId, actor, scope) => caLeaveRequestsRepository.list(companyId, { scope, actor }),
 
-  balances: (companyId, year) => caLeaveYearBalancesService.listYear(companyId, year),
+  balances: (companyId, year, actor) => caLeaveYearBalancesService.listYear(companyId, year, actor),
 
   async create(companyId, payload, actor = {}) {
     const next = { ...payload };

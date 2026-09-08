@@ -24,24 +24,38 @@ const ensureTable = () => {
 };
 
 const selectColumns = `
-  id, leave_request_id, establishment_id, establishment_name, employee_id, employee_name, employee_code,
-  leave_type_id, leave_type_name, start_date, end_date, days, reason, reject_reason,
-  approver_name, reviewed_by_name, reporting_to_id, session,
-  attachment_key, attachment_url, attachment_name, attachment_mime, status, created_by_company_id, created_at
+  r.id, r.leave_request_id,
+  COALESCE(e.establishment_id, r.establishment_id) AS establishment_id,
+  COALESCE(NULLIF(TRIM(e.establishment_name), ''), r.establishment_name) AS establishment_name,
+  r.employee_id,
+  COALESCE(NULLIF(TRIM(e.name), ''), r.employee_name) AS employee_name,
+  COALESCE(NULLIF(TRIM(e.employee_code), ''), r.employee_code) AS employee_code,
+  r.leave_type_id, r.leave_type_name, r.start_date, r.end_date, r.days, r.reason, r.reject_reason,
+  COALESCE(NULLIF(TRIM(mgr.name), ''), r.approver_name) AS approver_name,
+  r.reviewed_by_name, r.reporting_to_id, r.session,
+  r.attachment_key, r.attachment_url, r.attachment_name, r.attachment_mime, r.status, r.created_by_company_id, r.created_at
+`;
+
+const fromJoined = `
+  FROM public.ca_leave_revokes r
+  LEFT JOIN public.ca_employees e
+    ON e.id = r.employee_id AND e.created_by_company_id = r.created_by_company_id
+  LEFT JOIN public.ca_employees mgr
+    ON mgr.id = r.reporting_to_id AND mgr.created_by_company_id = r.created_by_company_id
 `;
 
 const q = (client) => client || db;
 
 const teamMatchSql = (empIdParam, empTextParam) => `
   (
-    reporting_to_id = ${empIdParam}
+    r.reporting_to_id = ${empIdParam}
     OR (
-      reporting_to_id IS NULL
-      AND employee_id IN (
-        SELECT e.id
-        FROM public.ca_employees e
-        WHERE e.created_by_company_id = $1
-          AND (e.details->>'reportingToId') = ${empTextParam}
+      r.reporting_to_id IS NULL
+      AND r.employee_id IN (
+        SELECT team.id
+        FROM public.ca_employees team
+        WHERE team.created_by_company_id = $1
+          AND (team.details->>'reportingToId') = ${empTextParam}
       )
     )
   )
@@ -59,26 +73,26 @@ export const caLeaveRevokesRepository = {
 
     let sql = `
       SELECT ${selectColumns}
-      FROM public.ca_leave_revokes
-      WHERE created_by_company_id = $1
+      ${fromJoined}
+      WHERE r.created_by_company_id = $1
     `;
     const params = [cid];
 
     if (!useAll) {
       const empText = String(actor.employeeId);
       if (scope === "mine") {
-        sql += " AND employee_id = $2";
+        sql += " AND r.employee_id = $2";
         params.push(empId);
       } else if (scope === "overview") {
-        sql += ` AND (employee_id = $2 OR ${teamMatchSql("$2", "$3")})`;
+        sql += ` AND (r.employee_id = $2 OR ${teamMatchSql("$2", "$3")})`;
         params.push(empId, empText);
       } else {
-        sql += ` AND employee_id <> $2 AND ${teamMatchSql("$2", "$3")}`;
+        sql += ` AND r.employee_id <> $2 AND ${teamMatchSql("$2", "$3")}`;
         params.push(empId, empText);
       }
     }
 
-    sql += " ORDER BY id DESC";
+    sql += " ORDER BY r.id DESC";
     const { rows } = await db.query(sql, params);
     return rows.map(mapCALeaveRevoke);
   },
@@ -91,8 +105,8 @@ export const caLeaveRevokesRepository = {
     const { rows } = await q(client).query(
       `
       SELECT ${selectColumns}
-      FROM public.ca_leave_revokes
-      WHERE id = $1 AND created_by_company_id = $2
+      ${fromJoined}
+      WHERE r.id = $1 AND r.created_by_company_id = $2
       LIMIT 1
       `,
       [rowId, cid],
@@ -110,23 +124,23 @@ export const caLeaveRevokesRepository = {
     if (excludeId) {
       const skip = parseRowId(excludeId);
       if (skip) {
-        excludeSql = " AND id <> $6";
+        excludeSql = " AND r.id <> $6";
         params.push(skip);
       }
     }
     const { rows } = await db.query(
       `
       SELECT ${selectColumns}
-      FROM public.ca_leave_revokes
-      WHERE leave_request_id = $1
-        AND created_by_company_id = $2
-        AND status = 'Pending'
-        AND start_date <= $4::date
-        AND end_date >= $3::date
+      ${fromJoined}
+      WHERE r.leave_request_id = $1
+        AND r.created_by_company_id = $2
+        AND r.status = 'Pending'
+        AND r.start_date <= $4::date
+        AND r.end_date >= $3::date
         AND (
-          COALESCE(session, 'full') = 'full'
+          COALESCE(r.session, 'full') = 'full'
           OR $5 = 'full'
-          OR COALESCE(session, 'full') = $5
+          OR COALESCE(r.session, 'full') = $5
         )
         ${excludeSql}
       LIMIT 1

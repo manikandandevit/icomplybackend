@@ -19,7 +19,12 @@ const ensureTable = () => {
 };
 
 const selectColumns = `
-  a.id, a.establishment_id, a.establishment_name, a.employee_id, a.employee_name, a.employee_code,
+  a.id,
+  COALESCE(e.establishment_id, a.establishment_id) AS establishment_id,
+  COALESCE(NULLIF(TRIM(e.establishment_name), ''), a.establishment_name) AS establishment_name,
+  a.employee_id,
+  COALESCE(NULLIF(TRIM(e.name), ''), a.employee_name) AS employee_name,
+  COALESCE(NULLIF(TRIM(e.employee_code), ''), a.employee_code) AS employee_code,
   a.date, a.check_in, a.check_out, a.status, a.requested_check_in, a.requested_check_out,
   a.regularization_status, a.regularization_reason, a.regularization_reviewed_by,
   a.created_by_company_id, a.created_at, a.updated_at,

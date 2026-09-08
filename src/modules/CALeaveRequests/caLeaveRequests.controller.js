@@ -24,7 +24,7 @@ export const caLeaveRequestsController = {
 
   balances: asyncHandler(async (req, res) => {
     const year = Number(req.query?.year) || new Date().getFullYear();
-    const balances = await caLeaveRequestsService.balances(req.companyId, year);
+    const balances = await caLeaveRequestsService.balances(req.companyId, year, leaveActorFromReq(req));
     return success(res, { message: "Leave balances loaded", data: { balances, year } });
   }),
 

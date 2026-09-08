@@ -121,41 +121,49 @@ const mapDetails = (raw) => {
   };
 };
 
-export const mapCAEmployee = (row) => ({
-  id: String(row.id),
-  employeeCode: row.employee_code || "",
-  name: row.name || "",
-  email: row.email || "",
-  mobile: row.mobile || "",
-  joinDate: dateFrom(row.join_date),
-  status: row.status === "Inactive" ? "Inactive" : "Active",
-  companyId: String(row.company_id),
-  companySource: row.company_source === "ca" ? "ca" : "parent",
-  companyName: row.company_name || "",
-  establishmentId: String(row.establishment_id),
-  establishmentName: row.establishment_name || "",
-  ctc: row.ctc != null && row.ctc !== "" ? String(row.ctc) : "",
-  departmentId: String(row.department_id),
-  departmentName: row.department_name || "",
-  designationId: String(row.designation_id),
-  designationName: row.designation_name || "",
-  employmentTypeId: String(row.employment_type_id),
-  employmentTypeName: row.employment_type_name || "",
-  shiftTypeId: row.shift_type_id != null ? String(row.shift_type_id) : "",
-  shiftTypeName: row.shift_type_name || "",
-  otApplicable: Boolean(row.ot_applicable),
-  otTypeId: row.ot_type_id != null ? String(row.ot_type_id) : "",
-  otTypeName: row.ot_type_name || "",
-  genderId: row.gender_id != null ? String(row.gender_id) : "",
-  genderName: row.gender_name || "",
-  maritalStatusId: row.marital_status_id != null ? String(row.marital_status_id) : "",
-  maritalStatusName: row.marital_status_name || "",
-  bankDetails: mapBanks(row.bank_details),
-  details: mapDetails(row.details),
-  initials: String(row.name || "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() || "")
-    .join(""),
-});
+export const mapCAEmployee = (row) => {
+  const details = mapDetails(row.details);
+  const liveReportingToName = String(row.live_reporting_to_name || "").trim();
+  if (liveReportingToName) {
+    details.reportingToName = liveReportingToName;
+  }
+
+  return {
+    id: String(row.id),
+    employeeCode: row.employee_code || "",
+    name: row.name || "",
+    email: row.email || "",
+    mobile: row.mobile || "",
+    joinDate: dateFrom(row.join_date),
+    status: row.status === "Inactive" ? "Inactive" : "Active",
+    companyId: String(row.company_id),
+    companySource: row.company_source === "ca" ? "ca" : "parent",
+    companyName: row.company_name || "",
+    establishmentId: String(row.establishment_id),
+    establishmentName: row.establishment_name || "",
+    ctc: row.ctc != null && row.ctc !== "" ? String(row.ctc) : "",
+    departmentId: String(row.department_id),
+    departmentName: row.department_name || "",
+    designationId: String(row.designation_id),
+    designationName: row.designation_name || "",
+    employmentTypeId: String(row.employment_type_id),
+    employmentTypeName: row.employment_type_name || "",
+    shiftTypeId: row.shift_type_id != null ? String(row.shift_type_id) : "",
+    shiftTypeName: row.shift_type_name || "",
+    otApplicable: Boolean(row.ot_applicable),
+    otTypeId: row.ot_type_id != null ? String(row.ot_type_id) : "",
+    otTypeName: row.ot_type_name || "",
+    genderId: row.gender_id != null ? String(row.gender_id) : "",
+    genderName: row.gender_name || "",
+    maritalStatusId: row.marital_status_id != null ? String(row.marital_status_id) : "",
+    maritalStatusName: row.marital_status_name || "",
+    bankDetails: mapBanks(row.bank_details),
+    details,
+    initials: String(row.name || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() || "")
+      .join(""),
+  };
+};

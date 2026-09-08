@@ -25,17 +25,25 @@ const ensureTable = () => {
 };
 
 const selectColumns = `
-  id, employee_code, name, email, mobile, join_date, status,
-  company_id, company_source, company_name,
-  establishment_id, establishment_name, ctc,
-  department_id, department_name,
-  designation_id, designation_name,
-  employment_type_id, employment_type_name,
-  shift_type_id, shift_type_name,
-  ot_applicable, ot_type_id, ot_type_name,
-  gender_id, gender_name, marital_status_id, marital_status_name,
-  bank_details, details,
-  created_by_company_id, created_at
+  e.id, e.employee_code, e.name, e.email, e.mobile, e.join_date, e.status,
+  e.company_id, e.company_source, e.company_name,
+  e.establishment_id, e.establishment_name, e.ctc,
+  e.department_id, e.department_name,
+  e.designation_id, e.designation_name,
+  e.employment_type_id, e.employment_type_name,
+  e.shift_type_id, e.shift_type_name,
+  e.ot_applicable, e.ot_type_id, e.ot_type_name,
+  e.gender_id, e.gender_name, e.marital_status_id, e.marital_status_name,
+  e.bank_details, e.details,
+  e.created_by_company_id, e.created_at,
+  NULLIF(TRIM(mgr.name), '') AS live_reporting_to_name
+`;
+
+const fromJoined = `
+  FROM public.ca_employees e
+  LEFT JOIN public.ca_employees mgr
+    ON mgr.created_by_company_id = e.created_by_company_id
+   AND mgr.id::text = NULLIF(TRIM(COALESCE(e.details->>'reportingToId', '')), '')
 `;
 
 export const caEmployeesRepository = {
@@ -47,9 +55,9 @@ export const caEmployeesRepository = {
     const { rows } = await db.query(
       `
       SELECT ${selectColumns}
-      FROM public.ca_employees
-      WHERE created_by_company_id = $1
-      ORDER BY id DESC
+      ${fromJoined}
+      WHERE e.created_by_company_id = $1
+      ORDER BY e.id DESC
       `,
       [cid]
     );
@@ -65,8 +73,8 @@ export const caEmployeesRepository = {
     const { rows } = await db.query(
       `
       SELECT ${selectColumns}
-      FROM public.ca_employees
-      WHERE id = $1 AND created_by_company_id = $2
+      ${fromJoined}
+      WHERE e.id = $1 AND e.created_by_company_id = $2
       LIMIT 1
       `,
       [rowId, cid]
@@ -84,7 +92,7 @@ export const caEmployeesRepository = {
     if (excludeId) {
       const rowId = parseRowId(excludeId);
       if (rowId) {
-        excludeSql = " AND id <> $3";
+        excludeSql = " AND e.id <> $3";
         params.push(rowId);
       }
     }
@@ -92,8 +100,8 @@ export const caEmployeesRepository = {
     const { rows } = await db.query(
       `
       SELECT ${selectColumns}
-      FROM public.ca_employees
-      WHERE created_by_company_id = $1 AND lower(employee_code) = $2
+      ${fromJoined}
+      WHERE e.created_by_company_id = $1 AND lower(e.employee_code) = $2
       ${excludeSql}
       LIMIT 1
       `,
@@ -286,13 +294,117 @@ export const caEmployeesRepository = {
       );
 
       if (!rows[0]) return null;
-      return this.findById(rows[0].id, companyId);
+      const employee = await this.findById(rows[0].id, companyId);
+      if (employee) {
+        await this.syncDenormalizedProfile(companyId, employee);
+      }
+      return employee;
     } catch (error) {
       if (error?.code === "23505") {
         throw new AppError("Employee code already exists", 409, "EMPLOYEE_CODE_DUPLICATE");
       }
       throw error;
     }
+  },
+
+  async syncDenormalizedProfile(companyId, employee) {
+    const cid = parseRowId(companyId);
+    const empId = parseRowId(employee?.id);
+    if (!cid || !empId) return;
+
+    const name = String(employee.name || "").trim();
+    const code = String(employee.employeeCode || "").trim();
+    const estId = parseRowId(employee.establishmentId);
+    const estName = String(employee.establishmentName || "").trim();
+    const empText = String(empId);
+
+    const ignoreMissingTable = async (fn) => {
+      try {
+        await fn();
+      } catch (error) {
+        if (error?.code === "42P01" || error?.code === "42703") return;
+        throw error;
+      }
+    };
+
+    await ignoreMissingTable(() =>
+      db.query(
+        `
+        UPDATE public.ca_attendance
+        SET employee_name = $3,
+            employee_code = $4,
+            establishment_id = COALESCE($5, establishment_id),
+            establishment_name = CASE WHEN $6 = '' THEN establishment_name ELSE $6 END,
+            updated_at = NOW()
+        WHERE created_by_company_id = $1 AND employee_id = $2
+        `,
+        [cid, empId, name, code, estId, estName],
+      ),
+    );
+
+    await ignoreMissingTable(() =>
+      db.query(
+        `
+        UPDATE public.ca_leave_requests
+        SET employee_name = $3,
+            employee_code = $4,
+            establishment_id = COALESCE($5, establishment_id),
+            establishment_name = CASE WHEN $6 = '' THEN establishment_name ELSE $6 END,
+            updated_at = NOW()
+        WHERE created_by_company_id = $1 AND employee_id = $2
+        `,
+        [cid, empId, name, code, estId, estName],
+      ),
+    );
+
+    await ignoreMissingTable(() =>
+      db.query(
+        `
+        UPDATE public.ca_leave_requests
+        SET approver_name = $3, updated_at = NOW()
+        WHERE created_by_company_id = $1 AND reporting_to_id = $2
+        `,
+        [cid, empId, name],
+      ),
+    );
+
+    await ignoreMissingTable(() =>
+      db.query(
+        `
+        UPDATE public.ca_leave_revokes
+        SET employee_name = $3,
+            employee_code = $4,
+            establishment_id = COALESCE($5, establishment_id),
+            establishment_name = CASE WHEN $6 = '' THEN establishment_name ELSE $6 END,
+            updated_at = NOW()
+        WHERE created_by_company_id = $1 AND employee_id = $2
+        `,
+        [cid, empId, name, code, estId, estName],
+      ),
+    );
+
+    await ignoreMissingTable(() =>
+      db.query(
+        `
+        UPDATE public.ca_leave_revokes
+        SET approver_name = $3, updated_at = NOW()
+        WHERE created_by_company_id = $1 AND reporting_to_id = $2
+        `,
+        [cid, empId, name],
+      ),
+    );
+
+    await db.query(
+      `
+      UPDATE public.ca_employees
+      SET details = jsonb_set(COALESCE(details, '{}'::jsonb), '{reportingToName}', to_jsonb($3::text), true),
+          updated_at = NOW()
+      WHERE created_by_company_id = $1
+        AND id <> $2
+        AND (details->>'reportingToId') = $4
+      `,
+      [cid, empId, name, empText],
+    );
   },
 
   async delete(id, companyId) {
