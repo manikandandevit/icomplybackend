@@ -7,6 +7,11 @@ CREATE TABLE IF NOT EXISTS public.ca_companies (
   gstin TEXT,
   street TEXT,
   city TEXT,
+
+
+
+
+  
   state TEXT,
   pin TEXT,
   contact_name TEXT,
