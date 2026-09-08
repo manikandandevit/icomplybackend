@@ -1,8 +1,8 @@
 import { asyncHandler } from "../../core/middleware/asyncHandler.js";
 import { AppError } from "../../core/errors/AppError.js";
 import { fail, success } from "../../core/utils/response.js";
-import { caLeaveRequestsService } from "./caLeaveRequests.service.js";
-import { validateLeaveRequestBody } from "./caLeaveRequests.validator.js";
+import { caLeaveRevokesService } from "./caLeaveRevokes.service.js";
+import { validateRevokeBody } from "./caLeaveRevokes.validator.js";
 
 const sendAppError = (res, error) => {
   if (error instanceof AppError) {
@@ -15,14 +15,14 @@ const sendAppError = (res, error) => {
   throw error;
 };
 
-export const caLeaveRequestsController = {
+export const caLeaveRevokesController = {
   list: asyncHandler(async (req, res) => {
-    const requests = await caLeaveRequestsService.list(req.companyId);
-    return success(res, { message: "Leave requests loaded", data: { requests } });
+    const requests = await caLeaveRevokesService.list(req.companyId);
+    return success(res, { message: "Revoke requests loaded", data: { requests } });
   }),
 
   create: asyncHandler(async (req, res) => {
-    const { isValid, errors, value } = validateLeaveRequestBody(req.body);
+    const { isValid, errors, value } = validateRevokeBody(req.body);
     if (!isValid) {
       return fail(res, {
         status: 422,
@@ -33,10 +33,10 @@ export const caLeaveRequestsController = {
     }
 
     try {
-      const request = await caLeaveRequestsService.create(req.companyId, value);
+      const request = await caLeaveRevokesService.create(req.companyId, value);
       return success(res, {
         status: 201,
-        message: "Leave request created",
+        message: "Revoke request created",
         data: { request },
       });
     } catch (error) {
@@ -46,8 +46,8 @@ export const caLeaveRequestsController = {
 
   approve: asyncHandler(async (req, res) => {
     try {
-      const request = await caLeaveRequestsService.approve(req.params.id, req.companyId, req.actorName);
-      return success(res, { message: "Leave request approved", data: { request } });
+      const request = await caLeaveRevokesService.approve(req.params.id, req.companyId, req.actorName);
+      return success(res, { message: "Revoke request approved", data: { request } });
     } catch (error) {
       return sendAppError(res, error);
     }
@@ -55,13 +55,13 @@ export const caLeaveRequestsController = {
 
   reject: asyncHandler(async (req, res) => {
     try {
-      const request = await caLeaveRequestsService.reject(
+      const request = await caLeaveRevokesService.reject(
         req.params.id,
         req.companyId,
         req.body?.reason,
         req.actorName,
       );
-      return success(res, { message: "Leave request rejected", data: { request } });
+      return success(res, { message: "Revoke request rejected", data: { request } });
     } catch (error) {
       return sendAppError(res, error);
     }
@@ -69,8 +69,8 @@ export const caLeaveRequestsController = {
 
   cancel: asyncHandler(async (req, res) => {
     try {
-      await caLeaveRequestsService.cancel(req.params.id, req.companyId);
-      return success(res, { message: "Leave request cancelled" });
+      await caLeaveRevokesService.cancel(req.params.id, req.companyId);
+      return success(res, { message: "Revoke request cancelled" });
     } catch (error) {
       return sendAppError(res, error);
     }

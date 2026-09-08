@@ -18,6 +18,7 @@ import { caUsersRouter } from "./modules/CAUsers/index.js";
 import { caHrMasterRouter } from "./modules/CAHrMaster/index.js";
 import { caEmployeesRouter } from "./modules/CAEmployees/index.js";
 import { caLeaveRequestsRouter } from "./modules/CALeaveRequests/index.js";
+import { caLeaveRevokesRouter } from "./modules/CALeaveRevokes/index.js";
 import { caPermissionsRouter } from "./modules/CAPermissions/index.js";
 
 export const createApp = () => {
@@ -54,6 +55,7 @@ export const createApp = () => {
   app.use("/api/ca-hr-master", caHrMasterRouter);
   app.use("/api/ca-employees", caEmployeesRouter);
   app.use("/api/ca-leave-requests", caLeaveRequestsRouter);
+  app.use("/api/ca-leave-revokes", caLeaveRevokesRouter);
   app.use("/api/ca-permissions", caPermissionsRouter);
   app.use("/api/countries", countryRouter);
   app.use("/api/pricing", pricingRouter);

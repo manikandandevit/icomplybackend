@@ -117,4 +117,19 @@ export const caLeaveRequestsService = {
     }
     return updated;
   },
+
+  async cancel(id, companyId) {
+    const request = await caLeaveRequestsRepository.findById(id, companyId);
+    if (!request) {
+      throw new AppError("Leave request not found", 404, "LEAVE_REQUEST_NOT_FOUND");
+    }
+    if (request.status !== "Pending") {
+      throw new AppError("Only pending leave can be cancelled", 422, "LEAVE_REQUEST_NOT_PENDING");
+    }
+    const removed = await caLeaveRequestsRepository.removePending(id, companyId);
+    if (!removed) {
+      throw new AppError("Unable to cancel leave request", 500, "LEAVE_REQUEST_CANCEL_FAILED");
+    }
+    return request;
+  },
 };

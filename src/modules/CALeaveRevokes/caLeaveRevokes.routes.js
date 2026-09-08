@@ -1,14 +1,14 @@
 import { Router } from "express";
 import { authenticateToken, requireCompanyAdmin } from "../Login/login.middleware.js";
 import { caPermissionsService } from "../CAPermissions/caPermissions.service.js";
-import { caLeaveRequestsController } from "./caLeaveRequests.controller.js";
+import { caLeaveRevokesController } from "./caLeaveRevokes.controller.js";
 
-const requireLeaveApply = async (req, _res, next) => {
+const requireRevokeApply = async (req, _res, next) => {
   try {
     await caPermissionsService.assertAccess(
       req.companyId,
       { isOwner: Boolean(req.isCompanyOwner), designationId: req.designationId, designationName: req.designationName },
-      "leave-apply",
+      "revoke-apply",
       "access",
     );
     return next();
@@ -17,14 +17,12 @@ const requireLeaveApply = async (req, _res, next) => {
   }
 };
 
-export const caLeaveRequestsRouter = Router();
-
-const requireLeaveReview = async (req, _res, next) => {
+const requireRevokeReview = async (req, _res, next) => {
   try {
     await caPermissionsService.assertAccess(
       req.companyId,
       { isOwner: Boolean(req.isCompanyOwner), designationId: req.designationId, designationName: req.designationName },
-      "leave-requests",
+      "revoke-requests",
       "access",
     );
     return next();
@@ -33,32 +31,34 @@ const requireLeaveReview = async (req, _res, next) => {
   }
 };
 
-caLeaveRequestsRouter.get("/", authenticateToken, requireCompanyAdmin, caLeaveRequestsController.list);
-caLeaveRequestsRouter.post(
+export const caLeaveRevokesRouter = Router();
+
+caLeaveRevokesRouter.get("/", authenticateToken, requireCompanyAdmin, caLeaveRevokesController.list);
+caLeaveRevokesRouter.post(
   "/",
   authenticateToken,
   requireCompanyAdmin,
-  requireLeaveApply,
-  caLeaveRequestsController.create,
+  requireRevokeApply,
+  caLeaveRevokesController.create,
 );
-caLeaveRequestsRouter.patch(
+caLeaveRevokesRouter.patch(
   "/:id/approve",
   authenticateToken,
   requireCompanyAdmin,
-  requireLeaveReview,
-  caLeaveRequestsController.approve,
+  requireRevokeReview,
+  caLeaveRevokesController.approve,
 );
-caLeaveRequestsRouter.patch(
+caLeaveRevokesRouter.patch(
   "/:id/reject",
   authenticateToken,
   requireCompanyAdmin,
-  requireLeaveReview,
-  caLeaveRequestsController.reject,
+  requireRevokeReview,
+  caLeaveRevokesController.reject,
 );
-caLeaveRequestsRouter.delete(
+caLeaveRevokesRouter.delete(
   "/:id",
   authenticateToken,
   requireCompanyAdmin,
-  requireLeaveApply,
-  caLeaveRequestsController.cancel,
+  requireRevokeApply,
+  caLeaveRevokesController.cancel,
 );
