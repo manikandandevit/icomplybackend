@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.ca_employees (
   company_name TEXT NOT NULL,
   establishment_id INTEGER NOT NULL,
   establishment_name TEXT NOT NULL,
+  ctc NUMERIC,
   department_id INTEGER NOT NULL,
   department_name TEXT NOT NULL,
   designation_id INTEGER NOT NULL,
@@ -61,6 +62,9 @@ ALTER TABLE public.ca_employees
 
 ALTER TABLE public.ca_employees
   ALTER COLUMN shift_type_name DROP NOT NULL;
+
+ALTER TABLE public.ca_employees
+  ADD COLUMN IF NOT EXISTS ctc NUMERIC;
 `;
 
 const dateFrom = (value) => {
@@ -130,6 +134,7 @@ export const mapCAEmployee = (row) => ({
   companyName: row.company_name || "",
   establishmentId: String(row.establishment_id),
   establishmentName: row.establishment_name || "",
+  ctc: row.ctc != null && row.ctc !== "" ? String(row.ctc) : "",
   departmentId: String(row.department_id),
   departmentName: row.department_name || "",
   designationId: String(row.designation_id),

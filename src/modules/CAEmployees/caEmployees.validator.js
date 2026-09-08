@@ -49,6 +49,11 @@ export const validateEmployeeBody = (body = {}) => {
   const companyName = required(body.companyName, "Company", errors, "companyName");
   const establishmentId = required(body.establishmentId, "Establishment", errors, "establishmentId");
   const establishmentName = required(body.establishmentName, "Establishment", errors, "establishmentName");
+  const ctcRaw = String(body.ctc ?? "").trim();
+  if (!ctcRaw || !/^\d+(\.\d+)?$/.test(ctcRaw)) {
+    errors.ctc = "CTC is required and must be a number";
+  }
+  const ctc = Number(ctcRaw);
   const departmentId = required(body.departmentId, "Department", errors, "departmentId");
   const departmentName = required(body.departmentName, "Department", errors, "departmentName");
   const designationId = required(body.designationId, "Designation", errors, "designationId");
@@ -140,6 +145,7 @@ export const validateEmployeeBody = (body = {}) => {
       companyName,
       establishmentId,
       establishmentName,
+      ctc: Number.isFinite(ctc) ? ctc : 0,
       departmentId,
       departmentName,
       designationId,

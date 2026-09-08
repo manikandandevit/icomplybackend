@@ -63,8 +63,10 @@ export const requireCompanyAdmin = async (req, _res, next) => {
     req.designationName = null;
     req.caUserId = null;
     req.employeeId = null;
+    req.actorName = req.user?.name || req.user?.email || "Company Admin";
 
     if (req.isCompanyOwner) {
+      req.actorName = "Company Admin";
       return next();
     }
 
@@ -84,6 +86,7 @@ export const requireCompanyAdmin = async (req, _res, next) => {
       req.designationId = employee.designation_id != null ? String(employee.designation_id) : null;
       req.designationName = employee.designation_name || null;
       req.employeeId = String(employee.id);
+      req.actorName = employee.name || req.actorName;
       return next();
     }
 
@@ -98,6 +101,7 @@ export const requireCompanyAdmin = async (req, _res, next) => {
     req.designationId = caUser.designationId || null;
     req.designationName = caUser.role || null;
     req.caUserId = caUser.id;
+    req.actorName = caUser.name || req.actorName;
     return next();
   } catch (error) {
     return next(error);
