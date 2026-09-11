@@ -11,6 +11,11 @@ const inEmployeeScope = (companyAccess, employee) =>
   matchesCompanyAccess(companyAccess, employee.companyName, employee.establishmentName);
 
 export const caEmployeesService = {
+  /** Direct count from employee master — source of truth for headcount. */
+  async counts(companyId) {
+    return caEmployeesRepository.countsByCompany(companyId);
+  },
+
   async list(companyId, companyAccess) {
     const rows = await caEmployeesRepository.list(companyId);
     return rows.filter((row) => inEmployeeScope(companyAccess, row));
@@ -69,6 +74,7 @@ export const caEmployeesService = {
     if (!updated) {
       throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");
     }
+    await caEstablishmentsRepository.syncEmployeeCount(updated.establishmentId);
     return updated;
   },
 

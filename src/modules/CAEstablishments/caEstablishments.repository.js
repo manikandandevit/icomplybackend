@@ -98,13 +98,35 @@ export const caEstablishmentsRepository = {
     await db.query(
       `
       UPDATE public.ca_establishments e
-      SET employee_count = GREATEST(
-        COALESCE(employee_count, 0),
-        (SELECT COUNT(*)::int FROM public.ca_employees c WHERE c.establishment_id = e.id)
+      SET employee_count = (
+        SELECT COUNT(*)::int
+        FROM public.ca_employees c
+        WHERE c.establishment_id = e.id
+          AND c.status = 'Active'
       )
       WHERE e.id = $1
       `,
       [rowId]
+    );
+  },
+
+  async syncAllForCompany(createdByCompanyId) {
+    const creatorId = parseRowId(createdByCompanyId);
+    if (!creatorId) return;
+
+    await ensureTable();
+    await db.query(
+      `
+      UPDATE public.ca_establishments e
+      SET employee_count = (
+        SELECT COUNT(*)::int
+        FROM public.ca_employees c
+        WHERE c.establishment_id = e.id
+          AND c.status = 'Active'
+      )
+      WHERE e.created_by_company_id = $1
+      `,
+      [creatorId]
     );
   },
 

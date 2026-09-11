@@ -16,6 +16,14 @@ const sendAppError = (res, error) => {
 };
 
 export const caEmployeesController = {
+  counts: asyncHandler(async (req, res) => {
+    const counts = await caEmployeesService.counts(req.companyId);
+    return success(res, {
+      message: "Employee counts loaded",
+      data: counts,
+    });
+  }),
+
   list: asyncHandler(async (req, res) => {
     const employees = await caEmployeesService.list(req.companyId, req.companyAccess);
     return success(res, {

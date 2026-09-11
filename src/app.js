@@ -22,6 +22,7 @@ import { caLeaveRevokesRouter } from "./modules/CALeaveRevokes/index.js";
 import { caHolidaysRouter } from "./modules/CAHolidays/index.js";
 import { caPermissionsRouter } from "./modules/CAPermissions/index.js";
 import { caAttendanceRouter } from "./modules/CAAttendance/index.js";
+import { caPayrollMasterRouter } from "./modules/CAPayrollMaster/index.js";
 
 export const createApp = () => {
   const app = express();
@@ -61,6 +62,7 @@ export const createApp = () => {
   app.use("/api/ca-holidays", caHolidaysRouter);
   app.use("/api/ca-permissions", caPermissionsRouter);
   app.use("/api/ca-attendance", caAttendanceRouter);
+  app.use("/api/ca-payroll-master", caPayrollMasterRouter);
   app.use("/api/countries", countryRouter);
   app.use("/api/pricing", pricingRouter);
   app.use("/api/onboard", onboardRouter);

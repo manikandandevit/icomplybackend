@@ -64,6 +64,45 @@ export const caEmployeesRepository = {
     return rows.map(mapCAEmployee);
   },
 
+  /** Returns Active employee counts grouped by company and establishment.
+   *  Used by the Companies and Establishments pages to show real headcount.
+   */
+  async countsByCompany(companyId) {
+    await ensureTable();
+    const cid = parseRowId(companyId);
+    if (!cid) return { byCompany: {}, byEstablishment: {}, total: 0 };
+
+    const { rows } = await db.query(
+      `
+      SELECT
+        company_source,
+        company_id::text,
+        establishment_id::text,
+        COUNT(*)::int AS cnt
+      FROM public.ca_employees
+      WHERE created_by_company_id = $1
+        AND status = 'Active'
+      GROUP BY company_source, company_id, establishment_id
+      `,
+      [cid]
+    );
+
+    const byCompany = {};
+    const byEstablishment = {};
+    let total = 0;
+
+    for (const row of rows) {
+      const companyKey = `${row.company_source === 'ca' ? 'ca' : 'parent'}:${row.company_id}`;
+      byCompany[companyKey] = (byCompany[companyKey] ?? 0) + row.cnt;
+      if (row.establishment_id) {
+        byEstablishment[row.establishment_id] = (byEstablishment[row.establishment_id] ?? 0) + row.cnt;
+      }
+      total += row.cnt;
+    }
+
+    return { byCompany, byEstablishment, total };
+  },
+
   async findById(id, companyId) {
     await ensureTable();
     const rowId = parseRowId(id);

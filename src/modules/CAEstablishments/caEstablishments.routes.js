@@ -5,6 +5,7 @@ import { caEstablishmentsController } from "./caEstablishments.controller.js";
 
 export const caEstablishmentsRouter = Router();
 
+caEstablishmentsRouter.post("/sync-counts", authenticateToken, requireCompanyAdmin, caEstablishmentsController.syncCounts);
 caEstablishmentsRouter.get("/", authenticateToken, requireCompanyAdmin, caEstablishmentsController.list);
 caEstablishmentsRouter.get("/:id", authenticateToken, requireCompanyAdmin, caEstablishmentsController.get);
 caEstablishmentsRouter.patch("/:id/status", authenticateToken, requireCompanyAdmin, requireNavPermission("establishments"), caEstablishmentsController.updateStatus);

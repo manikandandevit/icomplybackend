@@ -3,6 +3,7 @@ import { AppError } from "../../core/errors/AppError.js";
 import { createToast } from "../../core/toast/index.js";
 import { fail, success } from "../../core/utils/response.js";
 import { caEstablishmentsService } from "./caEstablishments.service.js";
+import { caEstablishmentsRepository } from "./caEstablishments.repository.js";
 import { validateCAEstablishmentBody } from "./caEstablishments.validator.js";
 
 const sendAppError = (res, error) => {
@@ -110,5 +111,13 @@ export const caEstablishmentsController = {
     } catch (error) {
       return sendAppError(res, error);
     }
+  }),
+  syncCounts: asyncHandler(async (req, res) => {
+    await caEstablishmentsRepository.syncAllForCompany(req.companyId);
+    const establishments = await caEstablishmentsService.list(req.companyId, req.companyAccess);
+    return success(res, {
+      message: "Employee counts synced",
+      data: { establishments },
+    });
   }),
 };
