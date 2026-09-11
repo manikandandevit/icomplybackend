@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS public.ca_hr_masters (
   max_hours TEXT,
   carry_forward TEXT,
   carry_forward_max TEXT,
+  sandwich TEXT DEFAULT 'no',
+  prorate TEXT DEFAULT 'yes',
   created_by_company_id INTEGER NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -68,6 +70,8 @@ ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS min_hours TEXT;
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS max_hours TEXT;
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS carry_forward TEXT;
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS carry_forward_max TEXT;
+ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS sandwich TEXT DEFAULT 'no';
+ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS prorate TEXT DEFAULT 'yes';
 `;
 
 export const caHrMastersBackfillSql = `
@@ -175,6 +179,8 @@ export const mapCAHrMaster = (row) => {
     values.leaveCategoryName = row.related_name || "";
     values.carryForward = String(row.carry_forward || "no").trim().toLowerCase() === "yes" ? "yes" : "no";
     values.carryForwardMax = row.carry_forward_max || "";
+    values.sandwich = String(row.sandwich || "no").trim().toLowerCase() === "yes" ? "yes" : "no";
+    values.prorate = String(row.prorate || "yes").trim().toLowerCase() === "no" ? "no" : "yes";
   }
 
   return {

@@ -1,5 +1,6 @@
 import { AppError } from "../../core/errors/AppError.js";
-import { countSessionDays, normalizeSession } from "../../core/leave/workingDays.js";
+import { calculateSandwichLeave } from "../../core/leave/sandwichLeave.js";
+import { countSessionDays, isWorkingDay, normalizeSession } from "../../core/leave/workingDays.js";
 import { notifyLeaveStatus, notifyLeaveSubmitted } from "../../core/mail/leaveMail.js";
 import { caEmployeesRepository } from "../CAEmployees/caEmployees.repository.js";
 import { caEstablishmentsRepository } from "../CAEstablishments/caEstablishments.repository.js";
@@ -68,9 +69,32 @@ export const caLeaveRequestsService = {
 
     const calendar = await leaveCalendarFor(companyId, employee, establishment);
     next.session = normalizeSession(next.session);
-    next.days = countSessionDays(next.startDate, next.endDate, next.session, calendar);
-    if (next.days <= 0) {
-      throw new AppError("Selected dates are week off or holidays. Choose working days.", 422, "LEAVE_NO_WORKING_DAYS");
+
+    // 1. Holiday boundary check: Leave cannot start or end on declared holiday
+    const startHoliday = calendar.holidayMap?.get(next.startDate);
+    if (startHoliday) {
+      throw new AppError(
+        `Leave cannot start on a declared Holiday: ${startHoliday} (${next.startDate}). Leave is not required on holidays.`,
+        422,
+        "LEAVE_ON_HOLIDAY"
+      );
+    }
+    const endHoliday = calendar.holidayMap?.get(next.endDate);
+    if (endHoliday) {
+      throw new AppError(
+        `Leave cannot end on a declared Holiday: ${endHoliday} (${next.endDate}). Leave is not required on holidays.`,
+        422,
+        "LEAVE_ON_HOLIDAY"
+      );
+    }
+
+    // 2. Single-day week-off check
+    if (next.startDate === next.endDate && !isWorkingDay(next.startDate, calendar)) {
+      throw new AppError(
+        `Selected date (${next.startDate}) is a weekly off (${calendar.weekOffDay}). Leave is not required.`,
+        422,
+        "LEAVE_ON_WEEKOFF"
+      );
     }
 
     const overlap = await caLeaveRequestsRepository.findOverlapping(
@@ -91,9 +115,59 @@ export const caLeaveRequestsService = {
     const used = await caLeaveRequestsRepository.usedDays(companyId, employee.id, leaveType.id, year);
     const remaining = Math.max(entitled - used, 0);
 
-    if (next.days > remaining) {
+    const allLeaveTypes = await caHrMasterRepository.list(companyId, "leave-types");
+    const otherSandwichBalances = [];
+    for (const lt of allLeaveTypes) {
+      const isSand = String(lt.values?.sandwich || "no").toLowerCase() === "yes";
+      if (isSand && String(lt.id) !== String(leaveType.id)) {
+        const ent = await caLeaveYearBalancesService.entitledFor(companyId, employee, lt, year);
+        const u = await caLeaveRequestsRepository.usedDays(companyId, employee.id, lt.id, year);
+        otherSandwichBalances.push({
+          leaveTypeId: String(lt.id),
+          leaveTypeName: leaveTypeName(lt),
+          remaining: Math.max(ent - u, 0),
+        });
+      }
+    }
+
+    const existingLeaves = await caLeaveRequestsRepository.list(companyId, {
+      scope: "mine",
+      actor: { employeeId: employee.id },
+    });
+
+    const sandwichCalc = calculateSandwichLeave({
+      startDate: next.startDate,
+      endDate: next.endDate,
+      session: next.session,
+      leaveType,
+      calendar,
+      existingLeaves,
+      primaryBalance: remaining,
+      otherSandwichBalances,
+    });
+
+    if (sandwichCalc.workingDays <= 0 && !sandwichCalc.isSandwich) {
+      throw new AppError("Selected dates are week off or holidays. Choose working days.", 422, "LEAVE_NO_WORKING_DAYS");
+    }
+
+    const isSandwichEnabled = String(leaveType?.values?.sandwich || "no").toLowerCase() === "yes";
+    if (!isSandwichEnabled && sandwichCalc.workingDays > remaining) {
       throw new AppError(`Only ${remaining} days available`, 422, "LEAVE_BALANCE_EXCEEDED");
     }
+
+    next.days = sandwichCalc.totalDays;
+    next.sandwichDays = sandwichCalc.sandwichDays;
+    next.paidDays = sandwichCalc.paidDays;
+    next.lopDays = sandwichCalc.lopDays;
+    next.isSandwich = sandwichCalc.isSandwich;
+    next.sandwichDetails = {
+      workingDays: sandwichCalc.workingDays,
+      sandwichDays: sandwichCalc.sandwichDays,
+      sandwichDates: sandwichCalc.sandwichDates,
+      paidDays: sandwichCalc.paidDays,
+      lopDays: sandwichCalc.lopDays,
+      deductions: sandwichCalc.deductions,
+    };
 
     const created = await caLeaveRequestsRepository.create(companyId, {
       ...next,
@@ -151,7 +225,9 @@ export const caLeaveRequestsService = {
       ["Approved"],
     );
     const remaining = Math.max(entitled - used, 0);
-    if (request.days > remaining) {
+    const isSandwich = Boolean(request.isSandwich);
+    const paidNeeded = Number(request.paidDays) || Number(request.days) || 0;
+    if (!isSandwich && request.days > remaining) {
       throw new AppError(`Only ${remaining} days available`, 422, "LEAVE_BALANCE_EXCEEDED");
     }
 

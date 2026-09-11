@@ -52,6 +52,21 @@ ALTER TABLE public.ca_leave_requests
 ALTER TABLE public.ca_leave_requests
   ADD COLUMN IF NOT EXISTS attachment_mime TEXT;
 
+ALTER TABLE public.ca_leave_requests
+  ADD COLUMN IF NOT EXISTS sandwich_days NUMERIC DEFAULT 0;
+
+ALTER TABLE public.ca_leave_requests
+  ADD COLUMN IF NOT EXISTS paid_days NUMERIC DEFAULT 0;
+
+ALTER TABLE public.ca_leave_requests
+  ADD COLUMN IF NOT EXISTS lop_days NUMERIC DEFAULT 0;
+
+ALTER TABLE public.ca_leave_requests
+  ADD COLUMN IF NOT EXISTS is_sandwich BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE public.ca_leave_requests
+  ADD COLUMN IF NOT EXISTS sandwich_details JSONB;
+
 CREATE INDEX IF NOT EXISTS idx_ca_leave_requests_reporting
   ON public.ca_leave_requests (created_by_company_id, reporting_to_id);
 
@@ -87,6 +102,11 @@ export const mapCALeaveRequest = (row) => ({
   startDate: dateFrom(row.start_date),
   endDate: dateFrom(row.end_date),
   days: Number(row.days) || 0,
+  sandwichDays: Number(row.sandwich_days) || 0,
+  paidDays: row.paid_days != null ? Number(row.paid_days) : Number(row.days) || 0,
+  lopDays: Number(row.lop_days) || 0,
+  isSandwich: Boolean(row.is_sandwich),
+  sandwichDetails: row.sandwich_details && typeof row.sandwich_details === "object" ? row.sandwich_details : null,
   reason: row.reason || "",
   rejectReason: row.reject_reason || "",
   approverName: row.approver_name || "",

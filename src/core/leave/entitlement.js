@@ -1,13 +1,22 @@
-export const prorateDays = (annualDays, joinDate, year = new Date().getFullYear()) => {
+export const prorateDays = (
+  annualDays,
+  joinDate,
+  year = new Date().getFullYear(),
+  proratePolicy = "yes",
+) => {
   const days = Number(annualDays) || 0;
   if (days <= 0) return 0;
+  if (String(proratePolicy || "yes").trim().toLowerCase() === "no") {
+    return days;
+  }
   const raw = String(joinDate || "").slice(0, 10);
   const match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (!match) return days;
   const joined = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
   if (joined.getFullYear() < year) return days;
   if (joined.getFullYear() > year) return 0;
-  return Math.round((days * (12 - joined.getMonth())) / 12);
+  const remainingMonths = 12 - joined.getMonth();
+  return Math.round((days * remainingMonths) / 12);
 };
 
 export const joinYearOf = (joinDate) => {
@@ -42,6 +51,7 @@ export const yearEntitled = ({
   annualDays,
   joinDate,
   year,
+  prorate = "yes",
   carryForward = "no",
   carryForwardMax = 0,
   usedByYear = {},
@@ -52,7 +62,7 @@ export const yearEntitled = ({
   const policy = { carryForward, carryForwardMax };
   let entitled = 0;
   for (let y = start; y <= target; y += 1) {
-    const annual = prorateDays(annualDays, joinDate, y);
+    const annual = prorateDays(annualDays, joinDate, y, prorate);
     const carried =
       y === start ? 0 : carryForwardDays(Math.max(entitled - (Number(usedByYear[y - 1]) || 0), 0), policy);
     entitled = annual + carried;

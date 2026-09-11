@@ -34,6 +34,7 @@ const selectColumns = `
   COALESCE(NULLIF(TRIM(mgr.name), ''), r.approver_name) AS approver_name,
   r.reviewed_by_name, r.reporting_to_id, r.session,
   r.attachment_key, r.attachment_url, r.attachment_name, r.attachment_mime, r.status,
+  r.sandwich_days, r.paid_days, r.lop_days, r.is_sandwich, r.sandwich_details,
   r.created_by_company_id, r.created_at
 `;
 
@@ -283,9 +284,11 @@ export const caLeaveRequestsRepository = {
         establishment_id, establishment_name, employee_id, employee_name, employee_code,
         leave_type_id, leave_type_name, start_date, end_date, days, reason, status,
         approver_name, reporting_to_id, session,
-        attachment_key, attachment_url, attachment_name, attachment_mime, created_by_company_id
+        attachment_key, attachment_url, attachment_name, attachment_mime,
+        sandwich_days, paid_days, lop_days, is_sandwich, sandwich_details,
+        created_by_company_id
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Pending',$12,$13,$14,$15,$16,$17,$18,$19)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Pending',$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23::jsonb,$24)
       RETURNING id
       `,
       [
@@ -307,6 +310,11 @@ export const caLeaveRequestsRepository = {
         payload.attachmentUrl || null,
         payload.attachmentName || null,
         payload.attachmentMime || null,
+        Number(payload.sandwichDays) || 0,
+        Number(payload.paidDays) || Number(payload.days) || 0,
+        Number(payload.lopDays) || 0,
+        Boolean(payload.isSandwich),
+        JSON.stringify(payload.sandwichDetails || null),
         cid,
       ],
     );

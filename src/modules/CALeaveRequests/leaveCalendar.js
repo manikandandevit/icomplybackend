@@ -1,4 +1,4 @@
-import { expandHolidayDates } from "../../core/leave/workingDays.js";
+import { expandHolidayDates, expandHolidayMap } from "../../core/leave/workingDays.js";
 import { caEstablishmentsRepository } from "../CAEstablishments/caEstablishments.repository.js";
 import { caHolidaysRepository } from "../CAHolidays/caHolidays.repository.js";
 
@@ -11,5 +11,6 @@ export const leaveCalendarFor = async (companyId, employee, establishment) => {
   return {
     weekOffDay: employee?.details?.weekOffDay || "Sunday",
     holidayDates: expandHolidayDates(holidays, countryId),
+    holidayMap: expandHolidayMap(holidays, countryId),
   };
 };

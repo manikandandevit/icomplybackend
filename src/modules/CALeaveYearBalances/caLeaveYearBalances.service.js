@@ -6,8 +6,10 @@ import { caLeaveYearBalancesRepository } from "./caLeaveYearBalances.repository.
 
 const currentYear = () => new Date().getFullYear();
 
-const liveAnnual = (leaveType, employee, year) =>
-  prorateDays(leaveType?.values?.days, employee?.joinDate, year);
+const liveAnnual = (leaveType, employee, year) => {
+  const policy = leaveType?.values?.prorate || leaveType?.prorate || "yes";
+  return prorateDays(leaveType?.values?.days, employee?.joinDate, year, policy);
+};
 
 const withLiveAnnual = (row, leaveType, employee, year) => {
   if (!row) return null;

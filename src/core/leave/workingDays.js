@@ -49,6 +49,23 @@ export const expandHolidayDates = (holidays = [], countryId = "") => {
   return dates;
 };
 
+export const expandHolidayMap = (holidays = [], countryId = "") => {
+  const map = new Map();
+  for (const holiday of holidays) {
+    if (!holidayAppliesToCountry(holiday, countryId)) continue;
+    const start = parseIsoDate(holiday.startDate || holiday.date);
+    const end = parseIsoDate(holiday.endDate || holiday.startDate || holiday.date) || start;
+    if (!start || !end || end < start) continue;
+    const cursor = new Date(start);
+    const title = holiday.title || holiday.name || holiday.values?.name || "Company Holiday";
+    while (cursor <= end) {
+      map.set(toIsoDate(cursor), title);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
+  return map;
+};
+
 export const isWorkingDay = (iso, calendar = {}) => {
   const date = parseIsoDate(iso);
   if (!date) return false;
