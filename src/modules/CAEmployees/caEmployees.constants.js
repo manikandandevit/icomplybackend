@@ -118,6 +118,10 @@ const mapDetails = (raw) => {
     shiftStartTime: String(d.shiftStartTime || "").trim(),
     shiftEndTime: String(d.shiftEndTime || "").trim(),
     breakTime: String(d.breakTime || "").trim(),
+    paymentMethodId: String(d.paymentMethodId || d.paymentModeId || "").trim(),
+    paymentMethodName: String(d.paymentMethodName || d.paymentModeName || "").trim(),
+    paymentModeId: String(d.paymentMethodId || d.paymentModeId || "").trim(),
+    paymentModeName: String(d.paymentMethodName || d.paymentModeName || "").trim(),
   };
 };
 
@@ -142,6 +146,10 @@ export const mapCAEmployee = (row) => {
     establishmentId: String(row.establishment_id),
     establishmentName: row.establishment_name || "",
     ctc: row.ctc != null && row.ctc !== "" ? String(row.ctc) : "",
+    paymentMethodId: details.paymentMethodId,
+    paymentMethodName: details.paymentMethodName,
+    paymentModeId: details.paymentModeId,
+    paymentModeName: details.paymentModeName,
     departmentId: String(row.department_id),
     departmentName: row.department_name || "",
     designationId: String(row.designation_id),

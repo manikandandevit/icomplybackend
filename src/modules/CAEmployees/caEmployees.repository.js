@@ -103,6 +103,65 @@ export const caEmployeesRepository = {
     return { byCompany, byEstablishment, total };
   },
 
+  /** Active employee counts grouped by establishment country. */
+  async activeCountsByCountry(companyId) {
+    await ensureTable();
+    const cid = parseRowId(companyId);
+    if (!cid) return {};
+
+    const { rows } = await db.query(
+      `
+      SELECT est.country_id::text AS country_id, COUNT(*)::int AS cnt
+      FROM public.ca_employees e
+      JOIN public.ca_establishments est ON e.establishment_id = est.id
+      WHERE e.created_by_company_id = $1
+        AND e.status = 'Active'
+        AND est.country_id IS NOT NULL
+      GROUP BY est.country_id
+      `,
+      [cid]
+    );
+
+    const counts = {};
+    for (const row of rows) {
+      if (row.country_id) {
+        counts[row.country_id] = Number(row.cnt) || 0;
+      }
+    }
+    return counts;
+  },
+
+  /** Counts active employees in a specific country, optionally excluding one employee (for edits). */
+  async countActiveByCountry(companyId, countryId, excludeEmployeeId = null) {
+    await ensureTable();
+    const cid = parseRowId(companyId);
+    const coId = parseRowId(countryId);
+    if (!cid || !coId) return 0;
+
+    const excludeId = parseRowId(excludeEmployeeId);
+    const query = excludeId
+      ? `
+        SELECT COUNT(*)::int AS cnt
+        FROM public.ca_employees e
+        JOIN public.ca_establishments est ON e.establishment_id = est.id
+        WHERE e.created_by_company_id = $1
+          AND est.country_id = $2
+          AND e.status = 'Active'
+          AND e.id != $3
+        `
+      : `
+        SELECT COUNT(*)::int AS cnt
+        FROM public.ca_employees e
+        JOIN public.ca_establishments est ON e.establishment_id = est.id
+        WHERE e.created_by_company_id = $1
+          AND est.country_id = $2
+          AND e.status = 'Active'
+        `;
+    const params = excludeId ? [cid, coId, excludeId] : [cid, coId];
+    const { rows } = await db.query(query, params);
+    return Number(rows[0]?.cnt) || 0;
+  },
+
   async findById(id, companyId) {
     await ensureTable();
     const rowId = parseRowId(id);
