@@ -94,8 +94,8 @@ export const caLeaveRequestsController = {
 
   cancel: asyncHandler(async (req, res) => {
     try {
-      await caLeaveRequestsService.cancel(req.params.id, req.companyId, leaveActorFromReq(req));
-      return success(res, { message: "Leave request cancelled" });
+      const request = await caLeaveRequestsService.cancel(req.params.id, req.companyId, leaveActorFromReq(req));
+      return success(res, { message: "Leave request cancelled/revoked", data: { request } });
     } catch (error) {
       return sendAppError(res, error);
     }

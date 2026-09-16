@@ -288,16 +288,22 @@ export const caLeaveRequestsService = {
     if (!request) {
       throw new AppError("Leave request not found", 404, "LEAVE_REQUEST_NOT_FOUND");
     }
-    if (request.status !== "Pending") {
-      throw new AppError("Only pending leave can be cancelled", 422, "LEAVE_REQUEST_NOT_PENDING");
+    if (request.status !== "Pending" && request.status !== "Approved") {
+      throw new AppError("Only pending or approved leave can be cancelled/revoked", 422, "LEAVE_REQUEST_NOT_CANCELLABLE");
     }
     if (!isCompanyPrivileged(actor) && String(request.employeeId) !== String(actor.employeeId)) {
       throw new AppError("You can only cancel your own leave request", 403, "FORBIDDEN");
     }
-    const removed = await caLeaveRequestsRepository.removePending(id, companyId);
-    if (!removed) {
+    
+    // Update status to Cancelled (which covers both Cancel and Revoke logically in DB)
+    const updated = await caLeaveRequestsRepository.updateStatus(id, companyId, {
+      status: "Cancelled",
+      reviewedByName: actor.name || "Company Admin",
+    });
+
+    if (!updated) {
       throw new AppError("Unable to cancel leave request", 500, "LEAVE_REQUEST_CANCEL_FAILED");
     }
-    return request;
+    return updated;
   },
 };

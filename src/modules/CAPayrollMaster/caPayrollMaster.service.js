@@ -8,8 +8,16 @@ export const caPayrollMasterService = {
 
   async create(companyId, payload) {
     if (!payload.name?.trim()) throw new AppError("Component name is required", 422, "VALIDATION_ERROR");
-    if (payload.percentage == null || isNaN(Number(payload.percentage))) {
-      throw new AppError("Percentage is required", 422, "VALIDATION_ERROR");
+    if (payload.calculationType === "Fixed Amount") {
+      if (payload.fixedAmount == null || isNaN(Number(payload.fixedAmount))) {
+        throw new AppError("Fixed Amount is required", 422, "VALIDATION_ERROR");
+      }
+      payload.percentage = 0;
+    } else {
+      if (payload.percentage == null || isNaN(Number(payload.percentage))) {
+        throw new AppError("Percentage is required", 422, "VALIDATION_ERROR");
+      }
+      payload.fixedAmount = 0;
     }
     const component = await caPayrollMasterRepository.create(companyId, payload);
     if (!component) throw new AppError("Unable to create component", 500, "CREATE_FAILED");
@@ -18,8 +26,16 @@ export const caPayrollMasterService = {
 
   async update(id, companyId, payload) {
     if (!payload.name?.trim()) throw new AppError("Component name is required", 422, "VALIDATION_ERROR");
-    if (payload.percentage == null || isNaN(Number(payload.percentage))) {
-      throw new AppError("Percentage is required", 422, "VALIDATION_ERROR");
+    if (payload.calculationType === "Fixed Amount") {
+      if (payload.fixedAmount == null || isNaN(Number(payload.fixedAmount))) {
+        throw new AppError("Fixed Amount is required", 422, "VALIDATION_ERROR");
+      }
+      payload.percentage = 0;
+    } else {
+      if (payload.percentage == null || isNaN(Number(payload.percentage))) {
+        throw new AppError("Percentage is required", 422, "VALIDATION_ERROR");
+      }
+      payload.fixedAmount = 0;
     }
     const existing = await caPayrollMasterRepository.findById(id, companyId);
     if (!existing) throw new AppError("Component not found", 404, "NOT_FOUND");

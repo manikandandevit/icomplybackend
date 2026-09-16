@@ -36,8 +36,8 @@ export const config = Object.freeze({
   smtp: {
     host: process.env.SMTP_HOST || "",
     port: Number(process.env.SMTP_PORT) || 587,
-    email: process.env.SMTP_EMAIL || "",
-    password: String(process.env.SMTP_PASSWORD || "").replace(/\s+/g, ""),
+    email: process.env.SMTP_EMAIL || process.env.SMTP_USER || "",
+    password: String(process.env.SMTP_PASSWORD || process.env.SMTP_PASS || "").replace(/\s+/g, ""),
     fromName: process.env.SMTP_FROM_NAME || "iComply HR",
   },
 });
