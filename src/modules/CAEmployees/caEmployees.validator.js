@@ -123,7 +123,11 @@ export const validateEmployeeBody = (body = {}) => {
         )
     : [];
 
-  if (bankDetails.length === 0) {
+  const isCash =
+    String(body.paymentMethodName || "").toLowerCase().includes("cash") ||
+    String(body.paymentModeName || "").toLowerCase().includes("cash");
+
+  if (!isCash && bankDetails.length === 0) {
     errors.bankDetails = "At least one bank account is required";
   }
 
