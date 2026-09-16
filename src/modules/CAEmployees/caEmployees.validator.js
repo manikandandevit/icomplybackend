@@ -71,10 +71,7 @@ export const validateEmployeeBody = (body = {}) => {
   let otTypeId = String(body.otTypeId ?? "").trim();
   let otTypeName = String(body.otTypeName ?? "").trim();
 
-  if (otApplicable) {
-    if (!otTypeId) errors.otTypeId = "OT type is required when OT is applicable";
-    if (!otTypeName) errors.otTypeName = "OT type is required when OT is applicable";
-  } else {
+  if (!otApplicable) {
     otTypeId = "";
     otTypeName = "";
   }
