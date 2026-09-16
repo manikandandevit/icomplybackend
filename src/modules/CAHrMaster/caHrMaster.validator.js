@@ -101,6 +101,12 @@ export const validateMasterBody = (masterType, body = {}) => {
     } else {
       value.carryForwardMax = null;
     }
+
+    const sandwich = String(body.sandwich ?? body.values?.sandwich ?? "no").trim().toLowerCase();
+    value.sandwich = sandwich === "yes" ? "yes" : "no";
+
+    const prorate = String(body.prorate ?? body.values?.prorate ?? "no").trim().toLowerCase();
+    value.prorate = prorate === "yes" ? "yes" : "no";
   }
 
   if (masterType === "shift-type") {

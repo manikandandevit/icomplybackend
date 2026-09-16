@@ -52,8 +52,8 @@ export const validateCACompanyBody = (body = {}, { logoRequired = true } = {}) =
   const errors = {};
   const legalName = requireText(errors, "legalName", body.legalName, "Legal company name");
   const tradeName = requireText(errors, "tradeName", body.tradeName, "Trade name");
-  const pan = requireText(errors, "pan", body.pan, "PAN").toUpperCase();
-  const gstin = requireText(errors, "gstin", body.gstin, "GSTIN").toUpperCase();
+  const pan = textOf(body.pan).toUpperCase();
+  const gstin = textOf(body.gstin).toUpperCase();
   const street = requireText(errors, "street", body.street, "Street address");
   const city = requireText(errors, "city", body.city, "City");
   const state = requireText(errors, "state", body.state, "State");
