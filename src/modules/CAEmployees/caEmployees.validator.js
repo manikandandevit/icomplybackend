@@ -32,6 +32,10 @@ const mapDetails = (body = {}) => {
     shiftStartTime: String(src.shiftStartTime ?? "").trim(),
     shiftEndTime: String(src.shiftEndTime ?? "").trim(),
     breakTime: String(src.breakTime ?? "").trim(),
+    paymentMethodId: String(src.paymentMethodId ?? src.paymentModeId ?? "").trim(),
+    paymentMethodName: String(src.paymentMethodName ?? src.paymentModeName ?? "").trim(),
+    paymentModeId: String(src.paymentModeId ?? src.paymentMethodId ?? "").trim(),
+    paymentModeName: String(src.paymentModeName ?? src.paymentMethodName ?? "").trim(),
   };
 };
 

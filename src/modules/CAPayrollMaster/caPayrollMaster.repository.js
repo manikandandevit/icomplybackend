@@ -23,6 +23,7 @@ const ensureTable = () => {
       await db.query(`ALTER TABLE public.ca_payroll_components ADD COLUMN IF NOT EXISTS fixed_amount NUMERIC NOT NULL DEFAULT 0;`);
       await db.query(`ALTER TABLE public.ca_payroll_components ADD COLUMN IF NOT EXISTS condition_max_salary NUMERIC NOT NULL DEFAULT 0;`);
       await db.query(`ALTER TABLE public.ca_payroll_components ADD COLUMN IF NOT EXISTS max_cap_amount NUMERIC NOT NULL DEFAULT 0;`);
+      await db.query(`ALTER TABLE public.ca_payroll_components ADD COLUMN IF NOT EXISTS depends_on TEXT NOT NULL DEFAULT 'CTC';`);
     })();
   }
   return ready;
@@ -34,7 +35,7 @@ export const caPayrollMasterRepository = {
     const cid = parseRowId(companyId);
     if (!cid) return [];
     const { rows } = await db.query(
-      `SELECT id, name, type, ctc_impact, percentage, country_id, country_name, calculation_type, fixed_amount, condition_max_salary, max_cap_amount, establishment_id, establishment_name, created_at
+      `SELECT id, name, type, ctc_impact, percentage, country_id, country_name, calculation_type, fixed_amount, condition_max_salary, max_cap_amount, establishment_id, establishment_name, depends_on, created_at
        FROM public.ca_payroll_components
        WHERE created_by_company_id = $1
        ORDER BY id DESC`,
@@ -49,7 +50,7 @@ export const caPayrollMasterRepository = {
     const cid = parseRowId(companyId);
     if (!rowId || !cid) return null;
     const { rows } = await db.query(
-      `SELECT id, name, type, ctc_impact, percentage, country_id, country_name, calculation_type, fixed_amount, condition_max_salary, max_cap_amount, establishment_id, establishment_name, created_at
+      `SELECT id, name, type, ctc_impact, percentage, country_id, country_name, calculation_type, fixed_amount, condition_max_salary, max_cap_amount, establishment_id, establishment_name, depends_on, created_at
        FROM public.ca_payroll_components
        WHERE id = $1 AND created_by_company_id = $2
        LIMIT 1`,
@@ -64,8 +65,8 @@ export const caPayrollMasterRepository = {
     if (!cid) return null;
     const { rows } = await db.query(
       `INSERT INTO public.ca_payroll_components
-         (name, type, ctc_impact, percentage, country_id, country_name, calculation_type, fixed_amount, condition_max_salary, max_cap_amount, establishment_id, establishment_name, created_by_company_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         (name, type, ctc_impact, percentage, country_id, country_name, calculation_type, fixed_amount, condition_max_salary, max_cap_amount, establishment_id, establishment_name, depends_on, created_by_company_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING id`,
       [
         payload.name,
@@ -80,6 +81,7 @@ export const caPayrollMasterRepository = {
         Number(payload.maxCapAmount) || 0,
         parseRowId(payload.establishmentId),
         payload.establishmentName || null,
+        payload.dependsOn || "CTC",
         cid,
       ]
     );
@@ -93,7 +95,7 @@ export const caPayrollMasterRepository = {
     if (!rowId || !cid) return null;
     const { rows } = await db.query(
       `UPDATE public.ca_payroll_components
-       SET name = $3, type = $4, ctc_impact = $5, percentage = $6, country_id = $7, country_name = $8, calculation_type = $9, fixed_amount = $10, condition_max_salary = $11, max_cap_amount = $12, establishment_id = $13, establishment_name = $14, updated_at = NOW()
+       SET name = $3, type = $4, ctc_impact = $5, percentage = $6, country_id = $7, country_name = $8, calculation_type = $9, fixed_amount = $10, condition_max_salary = $11, max_cap_amount = $12, establishment_id = $13, establishment_name = $14, depends_on = $15, updated_at = NOW()
        WHERE id = $1 AND created_by_company_id = $2
        RETURNING id`,
       [
@@ -111,6 +113,7 @@ export const caPayrollMasterRepository = {
         Number(payload.maxCapAmount) || 0,
         parseRowId(payload.establishmentId),
         payload.establishmentName || null,
+        payload.dependsOn || "CTC",
       ]
     );
     return rows[0] ? this.findById(rows[0].id, companyId) : null;

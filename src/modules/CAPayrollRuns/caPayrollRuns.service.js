@@ -88,7 +88,18 @@ export const caPayrollRunsService = {
         if (comp.calculationType === "Fixed Amount") {
           amount = comp.fixedAmount;
         } else {
-          amount = (monthlyCTC * comp.percentage) / 100;
+          // Find base amount depending on depends_on
+          let baseAmount = monthlyCTC;
+          if (comp.dependsOn && comp.dependsOn !== 'CTC') {
+             // We stored the ID of the component in dependsOn
+             const parentComp = appliedComponents.find(c => String(c.id) === String(comp.dependsOn));
+             if (parentComp) {
+                baseAmount = parentComp.amount;
+             } else {
+                baseAmount = 0; // If parent not found or not eligible, amount is 0
+             }
+          }
+          amount = (baseAmount * comp.percentage) / 100;
         }
 
         // Cap limit
@@ -98,6 +109,7 @@ export const caPayrollRunsService = {
 
         if (amount > 0) {
           appliedComponents.push({
+            id: comp.id,
             name: comp.name,
             amount: amount,
             type: comp.ctcImpact

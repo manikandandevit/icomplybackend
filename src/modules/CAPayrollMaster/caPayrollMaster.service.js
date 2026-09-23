@@ -13,10 +13,12 @@ export const caPayrollMasterService = {
         throw new AppError("Fixed Amount is required", 422, "VALIDATION_ERROR");
       }
       payload.percentage = 0;
+      payload.dependsOn = "CTC";
     } else {
       if (payload.percentage == null || isNaN(Number(payload.percentage))) {
         throw new AppError("Percentage is required", 422, "VALIDATION_ERROR");
       }
+      if (!payload.dependsOn?.trim()) payload.dependsOn = "CTC";
       payload.fixedAmount = 0;
     }
     const component = await caPayrollMasterRepository.create(companyId, payload);
@@ -31,10 +33,12 @@ export const caPayrollMasterService = {
         throw new AppError("Fixed Amount is required", 422, "VALIDATION_ERROR");
       }
       payload.percentage = 0;
+      payload.dependsOn = "CTC";
     } else {
       if (payload.percentage == null || isNaN(Number(payload.percentage))) {
         throw new AppError("Percentage is required", 422, "VALIDATION_ERROR");
       }
+      if (!payload.dependsOn?.trim()) payload.dependsOn = "CTC";
       payload.fixedAmount = 0;
     }
     const existing = await caPayrollMasterRepository.findById(id, companyId);

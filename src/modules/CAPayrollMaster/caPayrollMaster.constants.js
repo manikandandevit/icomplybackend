@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS public.ca_payroll_components (
   max_cap_amount        NUMERIC NOT NULL DEFAULT 0,
   establishment_id      INTEGER,
   establishment_name    TEXT,
+  depends_on            TEXT NOT NULL DEFAULT 'CTC',
   created_by_company_id INTEGER NOT NULL,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -40,5 +41,6 @@ export const mapPayrollComponent = (row) => ({
   maxCapAmount: Number(row.max_cap_amount ?? 0),
   establishmentId: row.establishment_id ? String(row.establishment_id) : null,
   establishmentName: row.establishment_name ?? null,
+  dependsOn: row.depends_on ?? "CTC",
   createdAt: row.created_at,
 });
