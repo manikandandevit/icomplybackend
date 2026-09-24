@@ -27,7 +27,7 @@ export const caStatutoryConfigRepository = {
     if (!cid) return [];
     
     const { rows } = await db.query(
-      `SELECT id, created_by_company_id, country_id, establishment_id, statutory_name, base_component_id, eps_percentage, epf_percentage, rules, created_at, updated_at
+      `SELECT id, created_by_company_id, country_id, establishment_id, statutory_name, base_component_id, eps_percentage, epf_percentage, pt_deduction_type, pt_specific_month, lwf_specific_month, rules, created_at, updated_at
        FROM public.ca_statutory_configs
        WHERE created_by_company_id = $1`,
       [cid]
@@ -59,13 +59,16 @@ export const caStatutoryConfigRepository = {
       // Update
       const { rows } = await db.query(
         `UPDATE public.ca_statutory_configs
-         SET base_component_id = $1, eps_percentage = $2, epf_percentage = $3, rules = $4::jsonb, updated_at = NOW()
-         WHERE id = $5
+         SET base_component_id = $1, eps_percentage = $2, epf_percentage = $3, pt_deduction_type = $4, pt_specific_month = $5, lwf_specific_month = $6, rules = $7::jsonb, updated_at = NOW()
+         WHERE id = $8
          RETURNING *`,
         [
           payload.baseComponentId || null,
           payload.epsPercentage || 0,
           payload.epfPercentage || 0,
+          payload.ptDeductionType || null,
+          payload.ptSpecificMonth || null,
+          payload.lwfSpecificMonth || null,
           rulesJson,
           existingRows[0].id
         ]
@@ -75,8 +78,8 @@ export const caStatutoryConfigRepository = {
       // Insert
       const { rows } = await db.query(
         `INSERT INTO public.ca_statutory_configs
-           (created_by_company_id, country_id, establishment_id, statutory_name, base_component_id, eps_percentage, epf_percentage, rules)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+           (created_by_company_id, country_id, establishment_id, statutory_name, base_component_id, eps_percentage, epf_percentage, pt_deduction_type, pt_specific_month, lwf_specific_month, rules)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
          RETURNING *`,
         [
           cid,
@@ -86,6 +89,9 @@ export const caStatutoryConfigRepository = {
           payload.baseComponentId || null,
           payload.epsPercentage || 0,
           payload.epfPercentage || 0,
+          payload.ptDeductionType || null,
+          payload.ptSpecificMonth || null,
+          payload.lwfSpecificMonth || null,
           rulesJson
         ]
       );

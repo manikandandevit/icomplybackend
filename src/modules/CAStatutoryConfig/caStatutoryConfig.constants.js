@@ -9,9 +9,16 @@ export const caStatutoryConfigTableSql = `
     eps_percentage NUMERIC,
     epf_percentage NUMERIC,
     rules JSONB,
+    pt_deduction_type TEXT,
+    pt_specific_month TEXT,
+    lwf_specific_month TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
+
+  ALTER TABLE public.ca_statutory_configs ADD COLUMN IF NOT EXISTS pt_deduction_type TEXT;
+  ALTER TABLE public.ca_statutory_configs ADD COLUMN IF NOT EXISTS pt_specific_month TEXT;
+  ALTER TABLE public.ca_statutory_configs ADD COLUMN IF NOT EXISTS lwf_specific_month TEXT;
 `;
 
 export const caStatutoryConfigIndexSql = `
@@ -27,6 +34,9 @@ export const mapStatutoryConfig = (row) => {
     baseComponentId: row.base_component_id,
     epsPercentage: row.eps_percentage ? Number(row.eps_percentage) : 0,
     epfPercentage: row.epf_percentage ? Number(row.epf_percentage) : 0,
+    ptDeductionType: row.pt_deduction_type || null,
+    ptSpecificMonth: row.pt_specific_month || null,
+    lwfSpecificMonth: row.lwf_specific_month || null,
     rules: row.rules ? row.rules : [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
