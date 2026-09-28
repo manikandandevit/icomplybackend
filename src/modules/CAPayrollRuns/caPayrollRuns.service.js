@@ -71,66 +71,94 @@ export const caPayrollRunsService = {
       const annualCTC = Number(emp.base_salary) || 0;
       const monthlyCTC = annualCTC / 12;
       
-      let gross = monthlyCTC; // Default if basic pay component not defined
+      const totalDays = 30; // Assuming standard 30 day month for simplicity
+      const absentDays = emp.absent || 0;
+      const lopDays = emp.lop || 0;
+      // Note: Paid leaves (emp.leave) should NOT be deducted from salary.
+      // Only absent days and LOP (Loss of Pay) reduce the payable days.
+      const unpaidDays = lopDays + absentDays;
+      const payableDays = Math.max(0, totalDays - unpaidDays);
+      const prorationFactor = payableDays / totalDays;
+
+      let gross = 0;
       let totalAdditions = 0;
       let totalDeductions = 0;
-
       const appliedComponents = [];
 
-      for (const comp of components) {
-        // Condition: eligibility max salary limit (check against monthly CTC)
-        if (comp.conditionMaxSalary > 0 && monthlyCTC > comp.conditionMaxSalary) {
-          continue; // Skip this component
-        }
+      const country = (establishment.country || "India").toLowerCase();
 
+      if (country === 'singapore') {
+        // Singapore: CTC is pro-rated first, then statutory deductions are applied
+        gross = monthlyCTC * prorationFactor;
 
-        let amount = 0;
-        if (comp.calculationType === "Fixed Amount") {
-          amount = comp.fixedAmount;
-        } else {
-          // Find base amount depending on depends_on
-          let baseAmount = monthlyCTC;
-          if (comp.dependsOn && comp.dependsOn !== 'CTC') {
-             // We stored the ID of the component in dependsOn
-             const parentComp = appliedComponents.find(c => String(c.id) === String(comp.dependsOn));
-             if (parentComp) {
-                baseAmount = parentComp.amount;
-             } else {
-                baseAmount = 0; // If parent not found or not eligible, amount is 0
-             }
-          }
-          amount = (baseAmount * comp.percentage) / 100;
-        }
+        for (const comp of components) {
+          if (comp.conditionMaxSalary > 0 && monthlyCTC > comp.conditionMaxSalary) continue;
 
-        // Cap limit
-        if (comp.maxCapAmount > 0 && amount > comp.maxCapAmount) {
-          amount = comp.maxCapAmount;
-        }
-
-        if (amount > 0) {
-          appliedComponents.push({
-            id: comp.id,
-            name: comp.name,
-            amount: amount,
-            type: comp.ctcImpact
-          });
-
-          if (comp.ctcImpact === "Add") {
-            totalAdditions += amount;
+          let amount = 0;
+          if (comp.calculationType === "Fixed Amount") {
+            amount = comp.fixedAmount;
           } else {
-            totalDeductions += amount;
+            amount = (gross * comp.percentage) / 100;
+          }
+
+          if (comp.maxCapAmount > 0 && amount > comp.maxCapAmount) amount = comp.maxCapAmount;
+
+          if (amount > 0) {
+            appliedComponents.push({ id: comp.id, name: comp.name, amount, type: comp.ctcImpact });
+            if (comp.ctcImpact === "Add") {
+              totalAdditions += amount;
+              gross += amount;
+            } else {
+              totalDeductions += amount;
+            }
           }
         }
-      }
-
-      // If basic is already part of components, we adjust it
-      if (appliedComponents.some(c => c.name.toLowerCase().includes('basic'))) {
-         gross = totalAdditions; // Use component driven gross
       } else {
-         gross += totalAdditions; // Base + allowances
+        // India: Calculate basic and other additions, pro-rate them, then apply deductions
+        for (const comp of components) {
+          if (comp.conditionMaxSalary > 0 && monthlyCTC > comp.conditionMaxSalary) continue;
+
+          let amount = 0;
+          if (comp.calculationType === "Fixed Amount") {
+            amount = comp.fixedAmount;
+          } else {
+            let baseAmount = monthlyCTC;
+            if (comp.dependsOn && comp.dependsOn !== 'CTC') {
+              const parentComp = appliedComponents.find(c => String(c.id) === String(comp.dependsOn));
+              baseAmount = parentComp ? parentComp.amount : 0;
+            }
+            amount = (baseAmount * comp.percentage) / 100;
+          }
+
+          if (comp.maxCapAmount > 0 && amount > comp.maxCapAmount) amount = comp.maxCapAmount;
+
+          if (amount > 0) {
+            // Apply proration for absent, LOP, leave
+            amount = amount * prorationFactor;
+
+            appliedComponents.push({ id: comp.id, name: comp.name, amount, type: comp.ctcImpact });
+            if (comp.ctcImpact === "Add") {
+              totalAdditions += amount;
+              gross += amount;
+            } else {
+              totalDeductions += amount;
+            }
+          }
+        }
       }
 
       const net = gross - totalDeductions;
+
+      // OT Earnings Calculation
+      const otHours = emp.ot_hours || 0;
+      let otEarnings = 0;
+      if (otHours > 0) {
+         // Basic assumption: 30 days * 8 hours = 240 hours/month, 1.5x OT rate
+         const hourlyRate = monthlyCTC / 240; 
+         otEarnings = otHours * hourlyRate * 1.5; 
+      }
+      
+      const inhandSalary = net + otEarnings;
 
       return {
         employeeId: emp.id,
@@ -139,6 +167,8 @@ export const caPayrollRunsService = {
         grossPay: gross,
         deductions: totalDeductions,
         netPay: net,
+        otEarnings: otEarnings,
+        inhandSalary: inhandSalary,
         components: appliedComponents,
         status: "Calculated"
       };
@@ -209,9 +239,17 @@ export const caPayrollRunsService = {
                       <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-weight: bold; color: #e53e3e;">Total Deductions</td>
                       <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; text-align: right; font-weight: bold; color: #e53e3e;">- Rs. ${Math.round(empData.deductions).toLocaleString()}</td>
                     </tr>
+                    <tr>
+                      <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-weight: bold; color: #333;">Net Pay</td>
+                      <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; text-align: right; font-weight: bold; color: #333;">Rs. ${Math.round(empData.netPay).toLocaleString()}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-weight: bold; color: #0284c7;">OT Earnings</td>
+                      <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; text-align: right; font-weight: bold; color: #0284c7;">+ Rs. ${Math.round(empData.otEarnings || 0).toLocaleString()}</td>
+                    </tr>
                     <tr style="background-color: #f8fafc;">
-                      <td style="padding: 15px 10px; font-weight: bold; color: #16a34a; font-size: 16px;">Net Pay</td>
-                      <td style="padding: 15px 10px; text-align: right; font-weight: bold; color: #16a34a; font-size: 16px;">Rs. ${Math.round(empData.netPay).toLocaleString()}</td>
+                      <td style="padding: 15px 10px; font-weight: bold; color: #16a34a; font-size: 16px;">Inhand Salary</td>
+                      <td style="padding: 15px 10px; text-align: right; font-weight: bold; color: #16a34a; font-size: 16px;">Rs. ${Math.round(empData.inhandSalary || empData.netPay).toLocaleString()}</td>
                     </tr>
                   </table>
                   <p style="font-size: 12px; color: #666; text-align: center; margin-top: 30px;">This is an auto-generated email. Please do not reply.</p>
@@ -272,6 +310,8 @@ export const caPayrollRunsService = {
         tableArray.rows.push(["Gross Pay", "", `${Math.round(empData.grossPay).toLocaleString()}`]);
         tableArray.rows.push(["Total Deductions", "", `-${Math.round(empData.deductions).toLocaleString()}`]);
         tableArray.rows.push(["Net Pay", "", `${Math.round(empData.netPay).toLocaleString()}`]);
+        tableArray.rows.push(["OT Earnings", "", `+${Math.round(empData.otEarnings || 0).toLocaleString()}`]);
+        tableArray.rows.push(["Inhand Salary", "", `${Math.round(empData.inhandSalary || empData.netPay).toLocaleString()}`]);
 
         doc.table(tableArray, {
           prepareHeader: () => doc.font("Helvetica-Bold").fontSize(10),

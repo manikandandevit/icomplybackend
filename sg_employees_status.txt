@@ -1,0 +1,22 @@
+Singapore HQ Employees Citizenship Details:
+
+- ID: 32, Name: Tan Wei Ming, Status: Singapore Citizen, Singpass: SP64570817
+- ID: 33, Name: Lim Siew Ling, Status: Singapore PR, Singpass: SP77971977
+- ID: 34, Name: Marcus Wong, Status: Singapore Citizen, Singpass: SP95167901
+- ID: 35, Name: Cheryl Lee, Status: Singapore Citizen, Singpass: SP85749847
+- ID: 36, Name: Kelvin Koh, Status: Singapore PR, Singpass: SP69252098
+- ID: 37, Name: Fiona Seah, Status: Singapore Citizen, Singpass: SP48029038
+- ID: 38, Name: Brandon Ng, Status: Foreigner
+- ID: 39, Name: Valerie Goh, Status: Singapore Citizen, Singpass: SP80168427
+- ID: 40, Name: Benjamin Chia, Status: Singapore Citizen, Singpass: SP88632741
+- ID: 41, Name: Serene Quek, Status: Foreigner
+- ID: 42, Name: Lucas Ong, Status: Singapore PR, Singpass: SP56027278
+- ID: 43, Name: Eunice Sim, Status: Singapore Citizen, Singpass: SP78387665
+- ID: 44, Name: Desmond Teo, Status: Singapore PR, Singpass: SP79145768
+- ID: 45, Name: Joanne Chong, Status: Singapore PR, Singpass: SP13875438
+- ID: 46, Name: Sean Tay, Status: Foreigner
+- ID: 47, Name: Priscilla Foo, Status: Singapore PR, Singpass: SP12866288
+- ID: 48, Name: Ryan Heng, Status: Foreigner
+- ID: 49, Name: Jocelyn Pang, Status: Singapore PR, Singpass: SP72478886
+- ID: 50, Name: Nicholas Yeo, Status: Singapore PR, Singpass: SP99399308
+- ID: 51, Name: Amanda Low, Status: Foreigner

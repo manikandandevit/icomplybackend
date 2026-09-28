@@ -8,6 +8,7 @@ export const caStatutoryConfigService = {
   },
 
   async save(companyId, payload) {
+    console.log("Saving statutory config for company", companyId, "Payload:", JSON.stringify(payload, null, 2));
     if (!payload.countryId || !payload.establishmentId || !payload.statutoryName) {
       return { error: new AppError("Missing required fields", 400) };
     }

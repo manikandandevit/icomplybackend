@@ -122,6 +122,8 @@ const mapDetails = (raw) => {
     paymentMethodName: String(d.paymentMethodName || d.paymentModeName || "").trim(),
     paymentModeId: String(d.paymentMethodId || d.paymentModeId || "").trim(),
     paymentModeName: String(d.paymentMethodName || d.paymentModeName || "").trim(),
+    citizenshipStatus: String(d.citizenshipStatus || "").trim(),
+    singpass: String(d.singpass || "").trim(),
   };
 };
 
