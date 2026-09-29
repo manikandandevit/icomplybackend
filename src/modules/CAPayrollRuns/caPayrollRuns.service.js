@@ -2,11 +2,28 @@ import fs from "fs";
 import path from "path";
 import PDFDocument from "pdfkit-table";
 import nodemailer from "nodemailer";
+import puppeteer from "puppeteer";
 import { AppError } from "../../core/errors/AppError.js";
 import { config } from "../../config/index.js";
 import { caPayrollRunsRepository } from "./caPayrollRuns.repository.js";
 import { caPayrollMasterRepository } from "../CAPayrollMaster/caPayrollMaster.repository.js";
 import { caEstablishmentsRepository } from "../CAEstablishments/caEstablishments.repository.js";
+import { caEmployeesRepository } from "../CAEmployees/caEmployees.repository.js";
+
+const numberToWords = (num) => {
+  const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
+  const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  if ((num = num.toString()).length > 9) return 'overflow';
+  let n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+  if (!n) return; 
+  let str = '';
+  str += (n[1] != 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore ' : '';
+  str += (n[2] != 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + 'Lakh ' : '';
+  str += (n[3] != 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'Thousand ' : '';
+  str += (n[4] != 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'Hundred ' : '';
+  str += (n[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) : '';
+  return str.trim() + " Only";
+};
 
 // Basic nodemailer transporter setup
 const transporter = nodemailer.createTransport({
@@ -329,5 +346,294 @@ export const caPayrollRunsService = {
         reject(err);
       }
     });
+  },
+
+  async sendPayslips(companyId, runId, employeeId = null) {
+    const run = await caPayrollRunsRepository.getRunById(companyId, runId);
+    if (!run) throw new AppError("Payroll run not found", 404);
+
+    let payslips = await caPayrollRunsRepository.getPayslipsByRun(companyId, runId);
+    if (employeeId) {
+      payslips = payslips.filter(p => String(p.employeeId) === String(employeeId));
+      if (payslips.length === 0) throw new AppError("Payslip not found for this employee", 404);
+    }
+
+    let successCount = 0;
+    let failCount = 0;
+
+    // Fetch logo once
+    let logoBuffer = null;
+    let logoUrlForHtml = "";
+    try {
+      if (config.s3 && config.s3.endpoint) {
+        const baseUrl = config.s3.endpoint.replace('/s3', `/object/public/${config.s3.bucket}/`);
+        logoUrlForHtml = baseUrl + config.s3.logoKey;
+        const resp = await fetch(logoUrlForHtml);
+        if (resp.ok) {
+          logoBuffer = Buffer.from(await resp.arrayBuffer());
+        }
+      }
+    } catch (e) {
+      console.error("Could not fetch logo for payslips", e);
+    }
+
+    for (const p of payslips) {
+      try {
+        const emp = await caEmployeesRepository.findById(p.employeeId, companyId);
+        if (!emp || !emp.email) {
+          failCount++;
+          continue;
+        }
+
+        const estName = run.establishmentName || "Your Company";
+        const monthYear = `${run.month} ${run.year}`;
+        const subject = `Payslip for ${monthYear} - ${estName}`;
+
+        let earningsHtml = "";
+        let deductionsHtml = "";
+        
+        if (p.breakdown && p.breakdown.components) {
+          Object.entries(p.breakdown.components).forEach(([name, amount]) => {
+            earningsHtml += `
+              <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #eee; color: #334155; font-size: 14px;">${name}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eee; color: #0f172a; font-size: 14px; text-align: right; font-weight: 500;">&#8377; ${Math.round(amount).toLocaleString("en-IN")}</td>
+              </tr>
+            `;
+          });
+        }
+
+        if (p.breakdown && p.breakdown.statutory) {
+          Object.entries(p.breakdown.statutory).forEach(([name, amount]) => {
+            deductionsHtml += `
+              <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #eee; color: #334155; font-size: 14px;">${name}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eee; color: #ef4444; font-size: 14px; text-align: right; font-weight: 500;">&#8377; ${Math.round(amount).toLocaleString("en-IN")}</td>
+              </tr>
+            `;
+          });
+        }
+
+        const html = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <style>
+              body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; margin: 0; padding: 40px 20px; }
+              .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden; }
+              .header img { max-height: 40px; margin-bottom: 10px; }
+              .header h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px; }
+              .header p { margin: 8px 0 0 0; font-size: 14px; opacity: 0.9; }
+              .content { padding: 40px; }
+              .greeting { font-size: 16px; color: #334155; margin-bottom: 30px; line-height: 1.5; }
+              .summary-box { background: linear-gradient(145deg, #f0f9ff, #e0f2fe); border: 1px solid #bae6fd; border-radius: 8px; padding: 20px; margin-bottom: 30px; text-align: center; }
+              .summary-box .label { font-size: 12px; font-weight: 700; color: #0369a1; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+              .summary-box .amount { font-size: 32px; font-weight: 800; color: #0c2340; margin: 0; }
+              .details-grid { display: flex; flex-direction: column; gap: 30px; margin-bottom: 30px; }
+              table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+              th { text-align: left; padding: 12px 10px; background-color: #f1f5f9; color: #475569; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+              .footer { background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px; text-align: center; color: #64748b; font-size: 12px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                ${logoUrlForHtml ? `<img src="${logoUrlForHtml}" alt="Logo" />` : ''}
+                <h1>${estName}</h1>
+                <p>Payslip for ${monthYear}</p>
+              </div>
+              <div class="content">
+                <div class="greeting">
+                  <strong>Dear ${p.employeeName},</strong><br/><br/>
+                  Please find below the summary of your payroll for <strong>${monthYear}</strong>. 
+                  Your salary has been processed successfully.
+                </div>
+                
+                <div class="summary-box">
+                  <div class="label">Net In-Hand Salary</div>
+                  <div class="amount">&#8377; ${Math.round(p.netPay).toLocaleString("en-IN")}</div>
+                </div>
+
+                <div class="details-grid">
+                  <div>
+                    <h3 style="margin: 0 0 10px 0; color: #0c2340; font-size: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">Earnings</h3>
+                    <table>
+                      <tr><th>Component</th><th style="text-align:right;">Amount</th></tr>
+                      ${earningsHtml}
+                      <tr>
+                        <td style="padding: 12px 10px; border-top: 2px solid #e2e8f0; color: #0c2340; font-weight: bold; font-size: 14px;">Gross Pay</td>
+                        <td style="padding: 12px 10px; border-top: 2px solid #e2e8f0; color: #0c2340; font-weight: bold; font-size: 14px; text-align: right;">&#8377; ${Math.round(p.grossPay).toLocaleString("en-IN")}</td>
+                      </tr>
+                    </table>
+                  </div>
+
+                  <div>
+                    <h3 style="margin: 0 0 10px 0; color: #0c2340; font-size: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">Deductions</h3>
+                    <table>
+                      <tr><th>Component</th><th style="text-align:right;">Amount</th></tr>
+                      ${deductionsHtml || `<tr><td colspan="2" style="padding: 10px; text-align: center; color: #94a3b8; font-size: 14px;">No deductions</td></tr>`}
+                      <tr>
+                        <td style="padding: 12px 10px; border-top: 2px solid #e2e8f0; color: #0c2340; font-weight: bold; font-size: 14px;">Total Deductions</td>
+                        <td style="padding: 12px 10px; border-top: 2px solid #e2e8f0; color: #ef4444; font-weight: bold; font-size: 14px; text-align: right;">&#8377; ${Math.round(p.deductions).toLocaleString("en-IN")}</td>
+                      </tr>
+                    </table>
+                  </div>
+                </div>
+                
+                <p style="color: #64748b; font-size: 13px; text-align: center; margin-top: 40px; font-style: italic;">
+                  This is a computer-generated payslip and does not require a physical signature.
+                </p>
+              </div>
+              <div class="footer">
+                &copy; ${new Date().getFullYear()} ${estName}. All rights reserved.<br/>
+                Powered by iComply HR
+              </div>
+            </div>
+          </body>
+          </html>
+        `;
+
+        const pdfHtml = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <style>
+              body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #1e293b; background: white; margin: 0; }
+              .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 3px solid #0c2340; padding-bottom: 20px; }
+              .logo { max-height: 50px; }
+              .company-info { text-align: right; font-size: 11px; color: #475569; line-height: 1.5; }
+              .company-info h1 { margin: 0; color: #0c2340; font-size: 20px; font-weight: 800; letter-spacing: 0.5px; }
+              .title-strip { background-color: #0c2340; color: white; text-align: center; padding: 12px; font-weight: bold; letter-spacing: 2px; font-size: 14px; margin-bottom: 30px; text-transform: uppercase; }
+              
+              .emp-grid { display: flex; gap: 20px; margin-bottom: 30px; }
+              .emp-col { flex: 1; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; }
+              .emp-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 12px; }
+              .emp-row:last-child { margin-bottom: 0; }
+              .label { color: #64748b; font-weight: 600; }
+              .value { color: #0f172a; font-weight: 700; text-align: right; }
+
+              .salary-container { display: flex; gap: 20px; margin-bottom: 30px; }
+              .salary-box { flex: 1; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+              .box-title { background: #0c2340; color: white; padding: 12px 15px; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+              .box-title.deduct { background: #be123c; }
+              .s-table { width: 100%; border-collapse: collapse; }
+              .s-table td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
+              .s-table tr:nth-child(even) { background: #f8fafc; }
+              .s-table .amt { text-align: right; font-weight: 600; }
+              .s-total { background: #f1f5f9; font-weight: 800; }
+              
+              .net-pay-section { display: flex; justify-content: space-between; align-items: center; background: #ecfdf5; border: 1px solid #10b981; padding: 20px 30px; border-radius: 8px; margin-bottom: 40px; }
+              .net-label { font-size: 14px; font-weight: 700; color: #065f46; text-transform: uppercase; letter-spacing: 1px; }
+              .net-words { font-size: 12px; color: #047857; margin-top: 5px; }
+              .net-amount { font-size: 32px; font-weight: 900; color: #065f46; }
+
+              .footer { text-align: center; color: #94a3b8; font-size: 10px; border-top: 1px dashed #cbd5e1; padding-top: 20px; }
+              .signature-area { margin-top: 50px; text-align: right; margin-bottom: 20px; }
+              .signature-area div { display: inline-block; text-align: center; }
+              .signature-area .line { border-top: 1px solid #000; width: 150px; margin-bottom: 5px; }
+              .signature-area .role { font-size: 11px; color: #64748b; font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              ${logoUrlForHtml ? `<img src="${logoUrlForHtml}" class="logo" />` : '<div style="width: 50px;"></div>'}
+              <div class="company-info">
+                <h1>${estName}</h1>
+                <div>Payslip generated through iComply HR</div>
+              </div>
+            </div>
+
+            <div class="title-strip">Payslip for the month of ${monthYear}</div>
+
+            <div class="emp-grid">
+              <div class="emp-col">
+                <div class="emp-row"><span class="label">Employee Name</span><span class="value">${p.employeeName}</span></div>
+                <div class="emp-row"><span class="label">Employee ID</span><span class="value">${p.employeeCode || p.employeeId}</span></div>
+                <div class="emp-row"><span class="label">Designation</span><span class="value">${emp.designationName || '-'}</span></div>
+                <div class="emp-row"><span class="label">Date of Joining</span><span class="value">${emp.details?.dateOfJoining || '-'}</span></div>
+              </div>
+              <div class="emp-col">
+                <div class="emp-row"><span class="label">UAN Number</span><span class="value">${emp.details?.uan || '-'}</span></div>
+                <div class="emp-row"><span class="label">PF Number</span><span class="value">${emp.details?.pfNumber || '-'}</span></div>
+                <div class="emp-row"><span class="label">PAN Number</span><span class="value">${emp.details?.panNumber || '-'}</span></div>
+                <div class="emp-row"><span class="label">Bank A/C</span><span class="value">${emp.details?.bankAccountNumber || '-'}</span></div>
+              </div>
+            </div>
+
+            <div class="salary-container">
+              <!-- Earnings -->
+              <div class="salary-box">
+                <div class="box-title">Earnings</div>
+                <table class="s-table">
+                  ${p.breakdown && p.breakdown.components ? Object.entries(p.breakdown.components).map(([k,v]) => `<tr><td>${k}</td><td class="amt">&#8377; ${Math.round(v).toLocaleString("en-IN")}</td></tr>`).join('') : ''}
+                  <tr class="s-total"><td>Gross Earnings</td><td class="amt">&#8377; ${Math.round(p.grossPay).toLocaleString("en-IN")}</td></tr>
+                </table>
+              </div>
+
+              <!-- Deductions -->
+              <div class="salary-box">
+                <div class="box-title deduct">Deductions</div>
+                <table class="s-table">
+                  ${p.breakdown && p.breakdown.statutory ? Object.entries(p.breakdown.statutory).map(([k,v]) => `<tr><td>${k}</td><td class="amt">&#8377; ${Math.round(v).toLocaleString("en-IN")}</td></tr>`).join('') : '<tr><td colspan="2" style="text-align:center; color:#94a3b8;">No Deductions</td></tr>'}
+                  <tr class="s-total"><td>Total Deductions</td><td class="amt" style="color:#be123c;">&#8377; ${Math.round(p.deductions).toLocaleString("en-IN")}</td></tr>
+                </table>
+              </div>
+            </div>
+
+            <div class="net-pay-section">
+              <div>
+                <div class="net-label">Net In-Hand Salary</div>
+                <div class="net-words">Rupees ${numberToWords(Math.round(p.netPay))}</div>
+              </div>
+              <div class="net-amount">&#8377; ${Math.round(p.netPay).toLocaleString("en-IN")}</div>
+            </div>
+
+            <div class="signature-area">
+              <div>
+                <div class="line"></div>
+                <div class="role">Authorized Signatory</div>
+              </div>
+            </div>
+
+            <div class="footer">
+              This is a computer-generated document and does not require a signature.
+            </div>
+          </body>
+          </html>
+        `;
+
+        let pdfBuffer;
+        try {
+          const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+          const page = await browser.newPage();
+          await page.setContent(pdfHtml, { waitUntil: 'networkidle0' });
+          pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
+          await browser.close();
+        } catch (err) {
+          console.error("Puppeteer PDF generation failed:", err);
+          throw new Error("PDF generation failed");
+        }
+
+        await transporter.sendMail({
+          from: `"${config.smtp.fromName}" <${config.smtp.email}>`,
+          to: emp.email,
+          subject,
+          html,
+          attachments: [
+            {
+              filename: `Payslip_${p.employeeName.replace(/\s+/g, '_')}_${monthYear.replace(/\s+/g, '_')}.pdf`,
+              content: pdfBuffer,
+              contentType: 'application/pdf'
+            }
+          ]
+        });
+        successCount++;
+      } catch (e) {
+        console.error("Error sending email to", p.employeeName, e);
+        failCount++;
+      }
+    }
+
+    return { successCount, failCount, total: payslips.length };
   }
 };

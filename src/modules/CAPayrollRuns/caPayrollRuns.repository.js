@@ -24,8 +24,24 @@ export const caPayrollRunsRepository = {
     return rows[0] ? mapPayrollRun(rows[0]) : null;
   },
 
-  async createRun(companyId, establishmentId, establishmentName, month, year) {
+  async getRunById(companyId, runId) {
     await ensureTable();
+    const { rows } = await db.query(
+      `SELECT * FROM public.ca_payroll_runs
+       WHERE created_by_company_id = $1 AND id = $2 LIMIT 1`,
+      [companyId, runId]
+    );
+    return rows[0] ? mapPayrollRun(rows[0]) : null;
+  },
+
+  async upsertRun(companyId, establishmentId, establishmentName, month, year) {
+    await ensureTable();
+    // Delete existing run for same establishment+month+year and recreate
+    const existing = await this.getRun(companyId, establishmentId, month, year);
+    if (existing) {
+      await db.query(`DELETE FROM public.ca_payslips WHERE run_id = $1`, [existing.id]);
+      await db.query(`DELETE FROM public.ca_payroll_runs WHERE id = $1`, [existing.id]);
+    }
     const { rows } = await db.query(
       `INSERT INTO public.ca_payroll_runs (establishment_id, establishment_name, run_month, run_year, created_by_company_id)
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
@@ -34,12 +50,12 @@ export const caPayrollRunsRepository = {
     return mapPayrollRun(rows[0]);
   },
 
-  async createPayslip(companyId, runId, employeeId, employeeName, grossPay, netPay, deductions) {
+  async createPayslip(companyId, runId, employeeId, employeeName, employeeCode, grossPay, netPay, deductions, ctc, breakdown) {
     await ensureTable();
     const { rows } = await db.query(
-      `INSERT INTO public.ca_payslips (run_id, employee_id, employee_name, gross_pay, net_pay, deductions, created_by_company_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [runId, employeeId, employeeName, grossPay, netPay, deductions, companyId]
+      `INSERT INTO public.ca_payslips (run_id, employee_id, employee_name, employee_code, gross_pay, net_pay, deductions, ctc, breakdown, created_by_company_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10) RETURNING *`,
+      [runId, employeeId, employeeName, employeeCode, grossPay, netPay, deductions, ctc, JSON.stringify(breakdown || {}), companyId]
     );
     return mapPayslip(rows[0]);
   },

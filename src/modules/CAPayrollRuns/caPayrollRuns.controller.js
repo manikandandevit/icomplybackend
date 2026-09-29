@@ -34,6 +34,50 @@ export const caPayrollRunsController = {
     }
   },
 
+  // NEW: Save payroll results from frontend calculation
+  async saveRun(req, res, next) {
+    try {
+      const {
+        establishmentId,
+        establishmentName,
+        month,
+        year,
+        payslips // array of { employeeId, employeeName, employeeCode, grossPay, netPay, deductions, ctc, breakdown }
+      } = req.body;
+
+      if (!establishmentId || !month || !year || !Array.isArray(payslips)) {
+        throw new AppError("Missing required fields: establishmentId, month, year, payslips", 400);
+      }
+
+      // Upsert run (delete old if exists)
+      const run = await caPayrollRunsRepository.upsertRun(
+        req.companyId, establishmentId, establishmentName || "", month, year
+      );
+
+      // Insert all payslips
+      const savedPayslips = await Promise.all(
+        payslips.map((p) =>
+          caPayrollRunsRepository.createPayslip(
+            req.companyId,
+            run.id,
+            p.employeeId,
+            p.employeeName,
+            p.employeeCode || "",
+            p.grossPay || 0,
+            p.netPay || 0,
+            p.deductions || 0,
+            p.ctc || 0,
+            p.breakdown || {}
+          )
+        )
+      );
+
+      return success(res, { data: { run, payslips: savedPayslips }, message: "Payroll saved successfully" }, 201);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async getRunHistory(req, res, next) {
     try {
       const { establishmentId, month, year } = req.query;
@@ -42,6 +86,18 @@ export const caPayrollRunsController = {
 
       const payslips = await caPayrollRunsRepository.getPayslipsByRun(req.companyId, data.id);
       return success(res, { data: { run: data, payslips }, message: "History fetched successfully" });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async sendPayslip(req, res, next) {
+    try {
+      const { runId, employeeId } = req.body;
+      if (!runId) throw new AppError("runId is required", 400);
+
+      const result = await caPayrollRunsService.sendPayslips(req.companyId, runId, employeeId);
+      return success(res, { data: result, message: "Payslips sent successfully" });
     } catch (err) {
       next(err);
     }

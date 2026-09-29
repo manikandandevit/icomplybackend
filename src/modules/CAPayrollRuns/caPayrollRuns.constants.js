@@ -18,13 +18,20 @@ export const caPayslipsTableSql = `
     run_id BIGINT NOT NULL,
     employee_id BIGINT NOT NULL,
     employee_name TEXT,
+    employee_code TEXT,
     gross_pay NUMERIC NOT NULL DEFAULT 0,
     net_pay NUMERIC NOT NULL DEFAULT 0,
     deductions NUMERIC NOT NULL DEFAULT 0,
+    ctc NUMERIC NOT NULL DEFAULT 0,
+    breakdown JSONB,
     status TEXT NOT NULL DEFAULT 'Generated',
     created_by_company_id BIGINT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
   );
+
+  ALTER TABLE public.ca_payslips ADD COLUMN IF NOT EXISTS employee_code TEXT;
+  ALTER TABLE public.ca_payslips ADD COLUMN IF NOT EXISTS ctc NUMERIC DEFAULT 0;
+  ALTER TABLE public.ca_payslips ADD COLUMN IF NOT EXISTS breakdown JSONB;
 `;
 
 export const mapPayrollRun = (row) => ({
@@ -42,9 +49,12 @@ export const mapPayslip = (row) => ({
   runId: String(row.run_id),
   employeeId: String(row.employee_id),
   employeeName: row.employee_name,
+  employeeCode: row.employee_code || "",
   grossPay: Number(row.gross_pay) || 0,
   netPay: Number(row.net_pay) || 0,
   deductions: Number(row.deductions) || 0,
+  ctc: Number(row.ctc) || 0,
+  breakdown: row.breakdown || {},
   status: row.status,
   createdAt: row.created_at,
 });

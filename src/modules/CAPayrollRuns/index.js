@@ -9,6 +9,8 @@ router.use(authenticateToken, requireCompanyAdmin);
 router.get("/prechecks", caPayrollRunsController.getPreChecks);
 router.get("/preview", caPayrollRunsController.getPreview);
 router.post("/run", caPayrollRunsController.runPayroll);
+router.post("/save", caPayrollRunsController.saveRun);
+router.post("/send-payslip", caPayrollRunsController.sendPayslip);
 router.get("/history", caPayrollRunsController.getRunHistory);
 
 export { router as caPayrollRunsRouter };
