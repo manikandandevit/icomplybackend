@@ -30,5 +30,8 @@
     "pdfkit-table": "^0.2.11",
     "pg": "^8.23.0",
     "puppeteer": "^25.12.0"
+  },
+  "allowScripts": {
+    "puppeteer@25.12.0": true
   }
 }

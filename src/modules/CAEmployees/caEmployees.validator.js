@@ -36,6 +36,7 @@ const mapDetails = (body = {}) => {
     paymentMethodName: String(src.paymentMethodName ?? src.paymentModeName ?? "").trim(),
     paymentModeId: String(src.paymentModeId ?? src.paymentMethodId ?? "").trim(),
     paymentModeName: String(src.paymentModeName ?? src.paymentMethodName ?? "").trim(),
+    uanNumber: String(src.uanNumber ?? "").trim(),
   };
 };
 
