@@ -7,6 +7,10 @@ const sendImage = async (res, loader) => {
   res.setHeader("Cache-Control", "public, max-age=3600");
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
   file.body.pipe(res);
+
+
+
+
 };
 
 export const brandingController = {
