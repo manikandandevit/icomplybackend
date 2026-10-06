@@ -51,7 +51,7 @@ const addressCountryFrom = (value) => {
 export const validateCACompanyBody = (body = {}, { logoRequired = true } = {}) => {
   const errors = {};
   const legalName = requireText(errors, "legalName", body.legalName, "Legal company name");
-  const tradeName = requireText(errors, "tradeName", body.tradeName, "Trade name");
+  const tradeName = textOf(body.tradeName);
   const pan = textOf(body.pan).toUpperCase();
   const gstin = textOf(body.gstin).toUpperCase();
   const street = requireText(errors, "street", body.street, "Street address");

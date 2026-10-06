@@ -37,7 +37,7 @@ const selectColumns = `
   id, name, type, status, company_id, company_source, company_name, country_id, country_name,
   effective_date, employee_count, nature_of_work, address, city, state, pin,
   pf_code, pf_status, esi_applicable, esi_code, lwf_code, pt_reg_no, pt_state,
-  contact_name, email, mobile, created_by_company_id, created_at
+  contact_name, email, mobile, cpf_submission_number, uen_number, cpf_status, my_epf_no, my_epf_status, my_socso_no, my_eis_no, th_ssf_no, th_ssf_status, th_revenue_tax_id, created_by_company_id, created_at
 `;
 
 const writeValues = (payload) => [
@@ -66,6 +66,16 @@ const writeValues = (payload) => [
   payload.contactName,
   payload.email,
   payload.mobile,
+  payload.cpfSubmissionNumber || null,
+  payload.uenNumber || null,
+  payload.cpfStatus || null,
+  payload.myEpfNo || null,
+  payload.myEpfStatus || null,
+  payload.mySocsoNo || null,
+  payload.myEisNo || null,
+  payload.thSsfNo || null,
+  payload.thSsfStatus || null,
+  payload.thRevenueTaxId || null,
 ];
 
 export const caEstablishmentsRepository = {
@@ -182,13 +192,13 @@ export const caEstablishmentsRepository = {
         name, type, status, company_id, company_source, company_name, country_id, country_name,
         effective_date, employee_count, nature_of_work, address, city, state, pin,
         pf_code, pf_status, esi_applicable, esi_code, lwf_code, pt_reg_no, pt_state,
-        contact_name, email, mobile, created_by_company_id
+        contact_name, email, mobile, cpf_submission_number, uen_number, cpf_status, my_epf_no, my_epf_status, my_socso_no, my_eis_no, th_ssf_no, th_ssf_status, th_revenue_tax_id, created_by_company_id
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8,
         $9, $10, $11, $12, $13, $14, $15,
         $16, $17, $18, $19, $20, $21, $22,
-        $23, $24, $25, $26
+        $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36
       )
       RETURNING *
       `,
@@ -233,7 +243,17 @@ export const caEstablishmentsRepository = {
         pt_state = $23,
         contact_name = $24,
         email = $25,
-        mobile = $26
+        mobile = $26,
+        cpf_submission_number = $27,
+        uen_number = $28,
+        cpf_status = $29,
+        my_epf_no = $30,
+        my_epf_status = $31,
+        my_socso_no = $32,
+        my_eis_no = $33,
+        th_ssf_no = $34,
+        th_ssf_status = $35,
+        th_revenue_tax_id = $36
       WHERE id = $1
       RETURNING *
       `,

@@ -54,7 +54,7 @@ export const caAttendanceService = {
       throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");
     }
 
-    const date = todayIso();
+    const date = (payload.date && /^\d{4}-\d{2}-\d{2}$/.test(payload.date)) ? payload.date : todayIso();
     const existing = await caAttendanceRepository.findByEmployeeDate(companyId, employee.id, date);
     const now = new Date().toISOString();
 
@@ -187,16 +187,16 @@ export const caAttendanceService = {
     const saved = existing
       ? await caAttendanceRepository.update(existing.id, companyId, patch)
       : await caAttendanceRepository.insert({
-          establishmentId: employee.establishmentId,
-          establishmentName: employee.establishmentName,
-          employeeId: employee.id,
-          employeeName: employee.name,
-          employeeCode: employee.employeeCode,
-          date,
-          status: "Absent",
-          createdByCompanyId: companyId,
-          ...patch,
-        });
+        establishmentId: employee.establishmentId,
+        establishmentName: employee.establishmentName,
+        employeeId: employee.id,
+        employeeName: employee.name,
+        employeeCode: employee.employeeCode,
+        date,
+        status: "Absent",
+        createdByCompanyId: companyId,
+        ...patch,
+      });
 
     if (!saved) {
       throw new AppError("Unable to submit regularization request", 500, "REGULARIZE_FAILED");

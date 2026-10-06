@@ -141,10 +141,11 @@ export const caCompaniesService = {
       throw new AppError("Parent company not found", 404, "COMPANY_NOT_FOUND");
     }
 
-    const existing = await caCompaniesRepository.findByPan(payload.pan);
-
-    if (existing) {
-      throw new AppError("A company with this PAN already exists", 409, "COMPANY_EXISTS");
+    if (payload.pan) {
+      const existing = await caCompaniesRepository.findByPan(payload.pan);
+      if (existing) {
+        throw new AppError("A company with this PAN already exists", 409, "COMPANY_EXISTS");
+      }
     }
 
     const creatorId = Number.parseInt(String(companyId), 10);
@@ -179,10 +180,11 @@ export const caCompaniesService = {
       throw new AppError("Company not found", 404, "COMPANY_NOT_FOUND");
     }
 
-    const existing = await caCompaniesRepository.findByPan(payload.pan, id);
-
-    if (existing) {
-      throw new AppError("A company with this PAN already exists", 409, "COMPANY_EXISTS");
+    if (payload.pan) {
+      const existing = await caCompaniesRepository.findByPan(payload.pan, id);
+      if (existing) {
+        throw new AppError("A company with this PAN already exists", 409, "COMPANY_EXISTS");
+      }
     }
 
     const parent = await companiesRepository.findById(companyId);

@@ -119,4 +119,7 @@ export const mapCALeaveRequest = (row) => ({
   attachmentMime: row.attachment_mime || "",
   status: row.status || "Pending",
   createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+  companySource: row.company_source || "",
+  companyId: row.company_id != null ? String(row.company_id) : "",
+  companyName: row.company_name || "",
 });

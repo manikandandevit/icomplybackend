@@ -110,22 +110,22 @@ export const validateEmployeeBody = (body = {}) => {
 
   const bankDetails = Array.isArray(body.bankDetails)
     ? body.bankDetails
-        .map((item, index) => ({
-          id: String(item?.id || `bank-${index + 1}`),
-          bankAccountTypeId: String(item?.bankAccountTypeId ?? "").trim(),
-          bankAccountTypeName: String(item?.bankAccountTypeName ?? "").trim(),
-          accountNumber: String(item?.accountNumber ?? "").trim(),
-          ifscCode: String(item?.ifscCode ?? "").trim().toUpperCase(),
-          bankNameBranch: String(item?.bankNameBranch ?? "").trim(),
-        }))
-        .filter(
-          (item) =>
-            item.bankAccountTypeId &&
-            item.bankAccountTypeName &&
-            item.accountNumber &&
-            item.ifscCode &&
-            item.bankNameBranch,
-        )
+      .map((item, index) => ({
+        id: String(item?.id || `bank-${index + 1}`),
+        bankAccountTypeId: String(item?.bankAccountTypeId ?? "").trim(),
+        bankAccountTypeName: String(item?.bankAccountTypeName ?? "").trim(),
+        accountNumber: String(item?.accountNumber ?? "").trim(),
+        ifscCode: String(item?.ifscCode ?? "").trim().toUpperCase(),
+        bankNameBranch: String(item?.bankNameBranch ?? "").trim(),
+      }))
+      .filter(
+        (item) =>
+          item.bankAccountTypeId &&
+          item.bankAccountTypeName &&
+          item.accountNumber &&
+          item.ifscCode &&
+          item.bankNameBranch,
+      )
     : [];
 
   const isCash =

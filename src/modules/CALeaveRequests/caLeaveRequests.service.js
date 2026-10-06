@@ -39,9 +39,16 @@ export const assertCanReviewLeave = (request, actor, employee) => {
 };
 
 export const caLeaveRequestsService = {
-  list: (companyId, actor, scope) => caLeaveRequestsRepository.list(companyId, { scope, actor }),
+  async list(companyId, actor, scope, companyAccess) {
+    const rows = await caLeaveRequestsRepository.list(companyId, { scope, actor });
+    const { isAllCompanyAccess, matchesCompanyAccess } = await import("../../core/access/companyAccess.js");
+    return rows.filter((row) => 
+      isAllCompanyAccess(companyAccess) || 
+      matchesCompanyAccess(companyAccess, row.companyName, row.establishmentName)
+    );
+  },
 
-  balances: (companyId, year, actor) => caLeaveYearBalancesService.listYear(companyId, year, actor),
+  balances: (companyId, year, actor, companyAccess) => caLeaveYearBalancesService.listYear(companyId, year, actor, companyAccess),
 
   async create(companyId, payload, actor = {}) {
     const next = { ...payload };
