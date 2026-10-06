@@ -9,7 +9,8 @@ const calculateOtHours = (row, employee) => {
   if (Number.isNaN(out.getTime())) return 0;
 
   const dateKey = String(row.date || "").slice(0, 10);
-  const isSunday = new Date(`${dateKey}T00:00:00`).getDay() === 0;
+  const baseIsoDate = `${dateKey}T00:00:00+05:30`;
+  const isSunday = new Date(baseIsoDate).getDay() === 0;
   if (isSunday && row.checkIn) {
     const inDate = new Date(row.checkIn);
     const diffMs = out.getTime() - inDate.getTime();
@@ -18,16 +19,21 @@ const calculateOtHours = (row, employee) => {
 
   const shiftEndTime = employee.details?.shiftEndTime;
   if (shiftEndTime) {
-    const [ehH, ehM] = shiftEndTime.split(":").map(Number);
-    const shiftEnd = new Date(`${dateKey}T00:00:00`);
-    shiftEnd.setHours(ehH, ehM, 0, 0);
-
+    let [ehH, ehM] = shiftEndTime.split(":").map(Number);
     const shiftStartTime = employee.details?.shiftStartTime;
+    let addDay = false;
     if (shiftStartTime) {
       const [shH, shM] = shiftStartTime.split(":").map(Number);
       if (ehH < shH || (ehH === shH && ehM < shM)) {
-        shiftEnd.setDate(shiftEnd.getDate() + 1);
+        addDay = true;
       }
+    }
+    
+    // Construct exact ISO string in IST
+    const shiftEndIso = `${dateKey}T${String(ehH).padStart(2, '0')}:${String(ehM).padStart(2, '0')}:00+05:30`;
+    const shiftEnd = new Date(shiftEndIso);
+    if (addDay) {
+      shiftEnd.setDate(shiftEnd.getDate() + 1);
     }
 
     const diffMs = out.getTime() - shiftEnd.getTime();

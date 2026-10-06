@@ -21,7 +21,8 @@ const stampFrom = (date, time) => {
     const [hour, minute] = raw.split(":").map(Number);
     const [year, month, day] = String(date).slice(0, 10).split("-").map(Number);
     if (!year || !month || !day) return null;
-    return new Date(year, month - 1, day, hour, minute, 0).toISOString();
+    const isoString = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+05:30`;
+    return new Date(isoString).toISOString();
   }
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();

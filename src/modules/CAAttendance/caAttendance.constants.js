@@ -59,7 +59,9 @@ const stampMinutesFromDate = (dateStr, stamp) => {
   if (!stamp) return null;
   const [year, month, day] = String(dateStr || "").slice(0, 10).split("-").map(Number);
   if (!year || !month || !day) return clockMinutes(stamp);
-  const start = new Date(year, month - 1, day, 0, 0, 0, 0).getTime();
+  // Force start of day to be in IST (+05:30) to avoid live server UTC issues
+  const startIso = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T00:00:00+05:30`;
+  const start = new Date(startIso).getTime();
   const time = new Date(stamp).getTime();
   if (Number.isNaN(time)) return null;
   return Math.round((time - start) / 60000);
