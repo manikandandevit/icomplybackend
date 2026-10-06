@@ -41,8 +41,15 @@ ALTER TABLE public.ca_attendance
 
 const clockMinutes = (value) => {
   const raw = String(value || "").trim();
-  const hm = raw.match(/^(\d{1,2}):(\d{2})/);
-  if (hm) return Number(hm[1]) * 60 + Number(hm[2]);
+  const ampmMatch = raw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (ampmMatch) {
+    let h = Number(ampmMatch[1]);
+    const m = Number(ampmMatch[2]);
+    const ampm = (ampmMatch[3] || "").toUpperCase();
+    if (ampm === "PM" && h < 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    return h * 60 + m;
+  }
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.getHours() * 60 + parsed.getMinutes();

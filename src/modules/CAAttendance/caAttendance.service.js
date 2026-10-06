@@ -2,6 +2,7 @@ import { AppError } from "../../core/errors/AppError.js";
 import { notifyRegularizationStatus, notifyRegularizationSubmitted } from "../../core/mail/attendanceMail.js";
 import { caEmployeesRepository } from "../CAEmployees/caEmployees.repository.js";
 import { caAttendanceRepository } from "./caAttendance.repository.js";
+import { syncOtRequest } from "./caAttendanceOtSync.js";
 
 const todayIso = () => {
   const now = new Date();
@@ -88,7 +89,9 @@ export const caAttendanceService = {
     if (existing.checkOut) {
       throw new AppError("Already checked out today", 422, "ALREADY_CHECKED_OUT");
     }
-    return caAttendanceRepository.update(existing.id, companyId, { checkOut: now });
+    const updated = await caAttendanceRepository.update(existing.id, companyId, { checkOut: now });
+    void syncOtRequest(companyId, existing.id);
+    return updated;
   },
 
   async create(companyId, data, actor = {}) {
@@ -121,11 +124,13 @@ export const caAttendanceService = {
     if (checkOut && checkOut <= checkIn) {
       throw new AppError("Check-out must be after check-in", 422, "CHECK_OUT_INVALID");
     }
-    return caAttendanceRepository.update(id, companyId, {
+    const updated = await caAttendanceRepository.update(id, companyId, {
       checkIn,
       checkOut,
       status: "Present",
     });
+    void syncOtRequest(companyId, id);
+    return updated;
   },
 
   async update(id, companyId, data, actor = {}) {
