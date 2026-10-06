@@ -66,8 +66,8 @@ export const caPayrollRunsService = {
       throw new AppError("Pending requests exist. Resolve Leave/OT requests first.", 400, "PENDING_REQUESTS");
     }
 
-    // Fetch active employees for establishment
-    const employees = await caPayrollRunsRepository.getEmployeesForPayroll(companyId, establishmentId);
+    // Fetch active employees for establishment with OT hours
+    const employees = await caPayrollRunsRepository.getEmployeesForPayroll(companyId, establishmentId, month, year);
     
     // Fetch the establishment details to get its country
     const establishment = await caEstablishmentsRepository.findById(establishmentId, companyId);
@@ -178,9 +178,14 @@ export const caPayrollRunsService = {
       const inhandSalary = net + otEarnings;
 
       return {
+        id: emp.id, // Ensure frontend emp.id works
         employeeId: emp.id,
+        employeeCode: emp.employeeCode || '',
         employeeName: `${emp.first_name} ${emp.last_name || ''}`.trim(),
         employeeType: emp.employee_type,
+        email: emp.email || '',
+        base_salary: emp.base_salary || 0,
+        ot_hours: otHours,
         grossPay: gross,
         deductions: totalDeductions,
         netPay: net,

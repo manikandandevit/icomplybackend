@@ -107,12 +107,21 @@ export const caPayrollRunsRepository = {
     return Number(rows[0]?.pending_count) || 0;
   },
 
-  async getEmployeesForPayroll(companyId, establishmentId) {
+  async getEmployeesForPayroll(companyId, establishmentId, month, year) {
+    const monthNum = new Date(Date.parse(month + " 1, " + year)).getMonth() + 1;
+    const startStr = `${year}-${monthNum.toString().padStart(2, '0')}-01`;
+    const lastDay = new Date(year, monthNum, 0).getDate();
+    const endStr = `${year}-${monthNum.toString().padStart(2, '0')}-${lastDay}`;
+
     const { rows } = await db.query(
-      `SELECT id, name as first_name, '' as last_name, employment_type_name as employee_type, join_date as joined_date, ctc as base_salary, status
-       FROM public.ca_employees
-       WHERE created_by_company_id = $1 AND establishment_id = $2 AND status = 'Active'`,
-      [companyId, establishmentId]
+      `SELECT e.id, e.name as first_name, '' as last_name, e.employment_type_name as employee_type, e.join_date as joined_date, e.ctc as base_salary, e.status, e.employee_code as "employeeCode", e.email,
+       COALESCE((
+         SELECT SUM(ot_hours) FROM public.ca_ot_requests
+         WHERE employee_id = e.id AND status = 'Approved' AND date >= $3 AND date <= $4
+       ), 0) as ot_hours
+       FROM public.ca_employees e
+       WHERE e.created_by_company_id = $1 AND e.establishment_id = $2 AND e.status = 'Active'`,
+      [companyId, establishmentId, startStr, endStr]
     );
     return rows;
   }
