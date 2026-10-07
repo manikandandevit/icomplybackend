@@ -26,6 +26,7 @@ import { caPayrollMasterRouter } from "./modules/CAPayrollMaster/index.js";
 import { caOtRequestsRouter } from "./modules/CAOvertime/index.js";
 import { caPayrollRunsRouter } from "./modules/CAPayrollRuns/index.js";
 import { caStatutoryConfigRouter } from "./modules/CAStatutoryConfig/index.js";
+import { caEcrSlabsRouter } from "./modules/CAEcrSlabs/index.js";
 
 export const createApp = () => {
   const app = express();
@@ -69,6 +70,7 @@ export const createApp = () => {
   app.use("/api/ca-payroll-master", caPayrollMasterRouter);
   app.use("/api/ca-payroll-runs", caPayrollRunsRouter);
   app.use("/api/ca-statutory-configs", caStatutoryConfigRouter);
+  app.use("/api/ca-ecr-slabs", caEcrSlabsRouter);
   app.use("/api/countries", countryRouter);
   app.use("/api/pricing", pricingRouter);
   app.use("/api/onboard", onboardRouter);

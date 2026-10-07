@@ -8,7 +8,10 @@ const calculateOtHours = (row, employee) => {
   const out = new Date(row.checkOut);
   if (Number.isNaN(out.getTime())) return 0;
 
-  const dateKey = String(row.date || "").slice(0, 10);
+  const dateObj = new Date(row.date);
+  if (Number.isNaN(dateObj.getTime())) return 0;
+  const dateParts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(dateObj);
+  const dateKey = `${dateParts.find(p => p.type === 'year').value}-${dateParts.find(p => p.type === 'month').value}-${dateParts.find(p => p.type === 'day').value}`;
   const baseIsoDate = `${dateKey}T00:00:00+05:30`;
   const isSunday = new Date(baseIsoDate).getDay() === 0;
   if (isSunday && row.checkIn) {

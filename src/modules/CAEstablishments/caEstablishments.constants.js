@@ -1,3 +1,4 @@
+import { formatDateToIST } from "../../core/utils/date.js";
 export const caEstablishmentsTableSql = `
 CREATE TABLE IF NOT EXISTS public.ca_establishments (
   id SERIAL PRIMARY KEY,
@@ -60,7 +61,7 @@ const dateFrom = (value) => {
     return `${year}-${month}-${day}`;
   }
 
-  return String(value).slice(0, 10);
+  return formatDateToIST(value);
 };
 
 export const mapEstablishment = (row) => ({

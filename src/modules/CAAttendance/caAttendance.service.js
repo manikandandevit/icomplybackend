@@ -1,3 +1,4 @@
+import { formatDateToIST } from "../../core/utils/date.js";
 import { AppError } from "../../core/errors/AppError.js";
 import { notifyRegularizationStatus, notifyRegularizationSubmitted } from "../../core/mail/attendanceMail.js";
 import { caEmployeesRepository } from "../CAEmployees/caEmployees.repository.js";
@@ -19,7 +20,7 @@ const stampFrom = (date, time) => {
   if (!raw) return null;
   if (/^\d{2}:\d{2}$/.test(raw)) {
     const [hour, minute] = raw.split(":").map(Number);
-    const [year, month, day] = String(date).slice(0, 10).split("-").map(Number);
+    const [year, month, day] = formatDateToIST(date).split("-").map(Number);
     if (!year || !month || !day) return null;
     const isoString = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+05:30`;
     return new Date(isoString).toISOString();
@@ -116,7 +117,7 @@ export const caAttendanceService = {
     if (!existing) {
       throw new AppError("Attendance record not found", 404, "ATTENDANCE_NOT_FOUND");
     }
-    const date = String(existing.date || "").slice(0, 10);
+    const date = formatDateToIST(existing.date || "");
     const checkIn = stampFrom(date, payload.checkIn);
     const checkOut = stampFrom(date, payload.checkOut);
     if (!checkIn) {
@@ -155,7 +156,7 @@ export const caAttendanceService = {
       throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");
     }
 
-    const date = String(payload.date || "").slice(0, 10);
+    const date = formatDateToIST(payload.date || "");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       throw new AppError("Select a date", 422, "DATE_REQUIRED");
     }

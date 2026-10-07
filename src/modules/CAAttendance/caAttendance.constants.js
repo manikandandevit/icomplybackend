@@ -1,3 +1,4 @@
+import { formatDateToIST } from "../../core/utils/date.js";
 export const caAttendanceTableSql = `
 CREATE TABLE IF NOT EXISTS public.ca_attendance (
   id SERIAL PRIMARY KEY,
@@ -57,7 +58,7 @@ const clockMinutes = (value) => {
 
 const stampMinutesFromDate = (dateStr, stamp) => {
   if (!stamp) return null;
-  const [year, month, day] = String(dateStr || "").slice(0, 10).split("-").map(Number);
+  const [year, month, day] = formatDateToIST(dateStr || "").split("-").map(Number);
   if (!year || !month || !day) return clockMinutes(stamp);
   // Force start of day to be in IST (+05:30) to avoid live server UTC issues
   const startIso = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T00:00:00+05:30`;
@@ -69,7 +70,7 @@ const stampMinutesFromDate = (dateStr, stamp) => {
 
 export const mapCAAttendance = (row) => {
   if (!row) return null;
-  const date = row.date instanceof Date ? row.date.toISOString().slice(0, 10) : String(row.date || "").slice(0, 10);
+  const date = formatDateToIST(row.date);
   const shiftStartTime = String(row.shift_start_time || "").trim();
   const shiftEndTime = String(row.shift_end_time || "").trim();
   const startMin = clockMinutes(shiftStartTime);

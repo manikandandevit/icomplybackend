@@ -1,3 +1,4 @@
+import { formatDateToIST } from "../../core/utils/date.js";
 import { db } from "../../core/db/pool.js";
 import { caOtRequestsIndexSql, caOtRequestsTableSql, mapCAOtRequest } from "./caOtRequests.constants.js";
 
@@ -87,7 +88,7 @@ export const caOtRequestsRepository = {
     const cid = parseRowId(companyId);
     if (!cid) return null;
 
-    const dateVal = data.date || data.workDate || new Date().toISOString().slice(0, 10);
+    const dateVal = data.date || data.workDate || formatDateToIST(new Date());
     const workDateVal = data.workDate || dateVal;
     const hoursVal = Number(data.hours || data.otHours) || 0;
     const otMinutesVal = Number(data.otMinutes) || Math.round(hoursVal * 60);

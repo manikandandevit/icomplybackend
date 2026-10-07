@@ -12,5 +12,15 @@ router.post("/run", caPayrollRunsController.runPayroll);
 router.post("/save", caPayrollRunsController.saveRun);
 router.post("/send-payslip", caPayrollRunsController.sendPayslip);
 router.get("/history", caPayrollRunsController.getRunHistory);
+router.get("/history-by-year", caPayrollRunsController.getRunsByYear);
+
+import multer from "multer";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+});
+
+router.post("/upload-challan", upload.single("challan"), caPayrollRunsController.uploadChallan);
 
 export { router as caPayrollRunsRouter };

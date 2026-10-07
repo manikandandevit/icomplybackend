@@ -24,6 +24,17 @@ export const caPayrollRunsRepository = {
     return rows[0] ? mapPayrollRun(rows[0]) : null;
   },
 
+  async getRunsByYear(companyId, establishmentId, year) {
+    await ensureTable();
+    await db.query(`ALTER TABLE public.ca_payroll_runs ADD COLUMN IF NOT EXISTS challan_url TEXT`); // ensure column exists
+    const { rows } = await db.query(
+      `SELECT * FROM public.ca_payroll_runs
+       WHERE created_by_company_id = $1 AND establishment_id = $2 AND run_year = $3 ORDER BY id DESC`,
+      [companyId, establishmentId, year]
+    );
+    return rows.map(mapPayrollRun);
+  },
+
   async getRunById(companyId, runId) {
     await ensureTable();
     const { rows } = await db.query(
@@ -48,6 +59,26 @@ export const caPayrollRunsRepository = {
       [establishmentId, establishmentName, month, year, companyId]
     );
     return mapPayrollRun(rows[0]);
+  },
+
+  async updateChallanUrl(companyId, runId, challanUrl, complianceType = "EPF") {
+    await ensureTable();
+    await db.query(`ALTER TABLE public.ca_payroll_runs ADD COLUMN IF NOT EXISTS challan_url TEXT`);
+    await db.query(`ALTER TABLE public.ca_payroll_runs ADD COLUMN IF NOT EXISTS epf_challan_url TEXT`);
+    await db.query(`ALTER TABLE public.ca_payroll_runs ADD COLUMN IF NOT EXISTS esic_challan_url TEXT`);
+    await db.query(`ALTER TABLE public.ca_payroll_runs ADD COLUMN IF NOT EXISTS pt_challan_url TEXT`);
+    await db.query(`ALTER TABLE public.ca_payroll_runs ADD COLUMN IF NOT EXISTS lwf_challan_url TEXT`);
+
+    let col = "epf_challan_url";
+    if (complianceType === "ESIC") col = "esic_challan_url";
+    else if (complianceType === "PT" || complianceType === "Professional Tax") col = "pt_challan_url";
+    else if (complianceType === "LWF") col = "lwf_challan_url";
+
+    const { rows } = await db.query(
+      `UPDATE public.ca_payroll_runs SET challan_url = $1, ${col} = $1 WHERE id = $2 AND created_by_company_id = $3 RETURNING *`,
+      [challanUrl, runId, companyId]
+    );
+    return rows[0] ? mapPayrollRun(rows[0]) : null;
   },
 
   async createPayslip(companyId, runId, employeeId, employeeName, employeeCode, grossPay, netPay, deductions, ctc, breakdown) {
