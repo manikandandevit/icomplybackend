@@ -36,6 +36,8 @@ const mapDetails = (body = {}) => {
     paymentMethodName: String(src.paymentMethodName ?? src.paymentModeName ?? "").trim(),
     paymentModeId: String(src.paymentModeId ?? src.paymentMethodId ?? "").trim(),
     paymentModeName: String(src.paymentModeName ?? src.paymentMethodName ?? "").trim(),
+    citizenshipStatus: String(src.citizenshipStatus ?? "").trim(),
+    singpass: String(src.singpass ?? "").trim(),
     uanNumber: String(src.uanNumber ?? "").trim(),
   };
 };
@@ -128,9 +130,14 @@ export const validateEmployeeBody = (body = {}) => {
       )
     : [];
 
-  const isCash =
-    String(body.paymentMethodName || "").toLowerCase().includes("cash") ||
-    String(body.paymentModeName || "").toLowerCase().includes("cash");
+  const paymentName = String(
+    body.paymentMethodName ||
+      body.paymentModeName ||
+      details.paymentMethodName ||
+      details.paymentModeName ||
+      ""
+  ).toLowerCase();
+  const isCash = paymentName.includes("cash") || paymentName.includes("cheque");
 
   if (!isCash && bankDetails.length === 0) {
     errors.bankDetails = "At least one bank account is required";

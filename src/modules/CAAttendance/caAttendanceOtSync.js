@@ -4,6 +4,8 @@ import { caAttendanceRepository } from "./caAttendance.repository.js";
 import { caOtRequestsRepository } from "../CAOvertime/caOtRequests.repository.js";
 
 const calculateOtHours = (row, employee) => {
+  const isOtApplicable = employee?.otApplicable !== undefined ? Boolean(employee.otApplicable) : Boolean(employee?.details?.otApplicable ?? true);
+  if (!isOtApplicable) return 0;
   if (!row.checkOut) return 0;
   const out = new Date(row.checkOut);
   if (Number.isNaN(out.getTime())) return 0;

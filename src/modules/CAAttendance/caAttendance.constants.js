@@ -99,6 +99,7 @@ export const mapCAAttendance = (row) => {
     regularizationReviewedBy: row.regularization_reviewed_by,
     shiftStartTime: shiftStartTime || null,
     shiftEndTime: shiftEndTime || null,
+    otApplicable: row.ot_applicable !== undefined && row.ot_applicable !== null ? Boolean(row.ot_applicable) : true,
     lateCheckIn,
     earlyCheckOut,
     createdByCompanyId: row.created_by_company_id,
