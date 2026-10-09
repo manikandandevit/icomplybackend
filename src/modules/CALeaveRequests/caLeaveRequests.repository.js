@@ -35,7 +35,8 @@ const selectColumns = `
   r.reviewed_by_name, r.reporting_to_id, r.session,
   r.attachment_key, r.attachment_url, r.attachment_name, r.attachment_mime, r.status,
   r.sandwich_days, r.paid_days, r.lop_days, r.is_sandwich, r.sandwich_details,
-  r.created_by_company_id, r.created_at
+  r.created_by_company_id, r.created_at,
+  e.company_source, e.company_id, e.company_name
 `;
 
 const fromJoined = `

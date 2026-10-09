@@ -1,3 +1,4 @@
+import { formatDateToIST } from "../utils/date.js";
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export const toIsoDate = (date) => {
@@ -98,7 +99,7 @@ export const countWorkingDays = (startDate, endDate, calendar = {}) => {
 export const endDateForWorkingDays = (startDate, workingCount, calendar = {}) => {
   const start = parseIsoDate(startDate);
   const need = Number(workingCount) || 0;
-  if (!start || need <= 0) return String(startDate || "").slice(0, 10);
+  if (!start || need <= 0) return formatDateToIST(startDate || "");
   let seen = 0;
   const cursor = new Date(start);
   for (let i = 0; i < 800; i += 1) {

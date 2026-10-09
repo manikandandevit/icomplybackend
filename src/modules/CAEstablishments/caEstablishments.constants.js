@@ -1,3 +1,4 @@
+import { formatDateToIST } from "../../core/utils/date.js";
 export const caEstablishmentsTableSql = `
 CREATE TABLE IF NOT EXISTS public.ca_establishments (
   id SERIAL PRIMARY KEY,
@@ -26,6 +27,16 @@ CREATE TABLE IF NOT EXISTS public.ca_establishments (
   contact_name TEXT,
   email TEXT,
   mobile TEXT,
+  cpf_submission_number TEXT,
+  uen_number TEXT,
+  cpf_status TEXT,
+  my_epf_no TEXT,
+  my_epf_status TEXT,
+  my_socso_no TEXT,
+  my_eis_no TEXT,
+  th_ssf_no TEXT,
+  th_ssf_status TEXT,
+  th_revenue_tax_id TEXT,
   created_by_company_id INTEGER NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -50,7 +61,7 @@ const dateFrom = (value) => {
     return `${year}-${month}-${day}`;
   }
 
-  return String(value).slice(0, 10);
+  return formatDateToIST(value);
 };
 
 export const mapEstablishment = (row) => ({
@@ -77,6 +88,16 @@ export const mapEstablishment = (row) => ({
   contactName: row.contact_name || "",
   email: row.email || "",
   mobile: row.mobile || "",
+  cpfSubmissionNumber: row.cpf_submission_number || "",
+  uenNumber: row.uen_number || "",
+  cpfStatus: row.cpf_status || "",
+  myEpfNo: row.my_epf_no || "",
+  myEpfStatus: row.my_epf_status || "",
+  mySocsoNo: row.my_socso_no || "",
+  myEisNo: row.my_eis_no || "",
+  thSsfNo: row.th_ssf_no || "",
+  thSsfStatus: row.th_ssf_status || "",
+  thRevenueTaxId: row.th_revenue_tax_id || "",
   natureOfWork: row.nature_of_work || "",
   employees: Number(row.employee_count) || 0,
   status: row.status === "Active" ? "Active" : "Inactive",

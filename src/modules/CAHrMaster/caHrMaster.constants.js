@@ -5,13 +5,13 @@ export const MASTER_TYPES = [
   "marital-status",
   "shift-type",
   "gender",
-  "leave-category",
   "leave-types",
   "holiday-type",
   "attendance-type",
   "ot-type",
   "bank-account-type",
   "payment-method",
+  "additional",
 ];
 
 export const MASTER_LABELS = {
@@ -21,13 +21,13 @@ export const MASTER_LABELS = {
   "marital-status": "Marital Status",
   "shift-type": "Shift Type",
   gender: "Gender",
-  "leave-category": "Leave Category",
   "leave-types": "Leave Type",
   "holiday-type": "Holiday Type",
   "attendance-type": "Attendance Type",
   "ot-type": "OT Type",
   "bank-account-type": "Bank Account Type",
   "payment-method": "Payment Method",
+  additional: "Additional",
 };
 
 export const caHrMastersTableSql = `

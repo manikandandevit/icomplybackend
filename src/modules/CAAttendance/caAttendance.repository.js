@@ -29,7 +29,8 @@ const selectColumns = `
   a.regularization_status, a.regularization_reason, a.regularization_reviewed_by,
   a.created_by_company_id, a.created_at, a.updated_at,
   NULLIF(TRIM(e.details->>'shiftStartTime'), '') AS shift_start_time,
-  NULLIF(TRIM(e.details->>'shiftEndTime'), '') AS shift_end_time
+  NULLIF(TRIM(e.details->>'shiftEndTime'), '') AS shift_end_time,
+  COALESCE(e.ot_applicable, (e.details->>'otApplicable')::boolean, true) AS ot_applicable
 `;
 
 const fromJoined = `

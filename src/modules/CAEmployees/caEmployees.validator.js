@@ -36,6 +36,8 @@ const mapDetails = (body = {}) => {
     paymentMethodName: String(src.paymentMethodName ?? src.paymentModeName ?? "").trim(),
     paymentModeId: String(src.paymentModeId ?? src.paymentMethodId ?? "").trim(),
     paymentModeName: String(src.paymentModeName ?? src.paymentMethodName ?? "").trim(),
+    citizenshipStatus: String(src.citizenshipStatus ?? "").trim(),
+    singpass: String(src.singpass ?? "").trim(),
     uanNumber: String(src.uanNumber ?? "").trim(),
   };
 };
@@ -110,27 +112,32 @@ export const validateEmployeeBody = (body = {}) => {
 
   const bankDetails = Array.isArray(body.bankDetails)
     ? body.bankDetails
-        .map((item, index) => ({
-          id: String(item?.id || `bank-${index + 1}`),
-          bankAccountTypeId: String(item?.bankAccountTypeId ?? "").trim(),
-          bankAccountTypeName: String(item?.bankAccountTypeName ?? "").trim(),
-          accountNumber: String(item?.accountNumber ?? "").trim(),
-          ifscCode: String(item?.ifscCode ?? "").trim().toUpperCase(),
-          bankNameBranch: String(item?.bankNameBranch ?? "").trim(),
-        }))
-        .filter(
-          (item) =>
-            item.bankAccountTypeId &&
-            item.bankAccountTypeName &&
-            item.accountNumber &&
-            item.ifscCode &&
-            item.bankNameBranch,
-        )
+      .map((item, index) => ({
+        id: String(item?.id || `bank-${index + 1}`),
+        bankAccountTypeId: String(item?.bankAccountTypeId ?? "").trim(),
+        bankAccountTypeName: String(item?.bankAccountTypeName ?? "").trim(),
+        accountNumber: String(item?.accountNumber ?? "").trim(),
+        ifscCode: String(item?.ifscCode ?? "").trim().toUpperCase(),
+        bankNameBranch: String(item?.bankNameBranch ?? "").trim(),
+      }))
+      .filter(
+        (item) =>
+          item.bankAccountTypeId &&
+          item.bankAccountTypeName &&
+          item.accountNumber &&
+          item.ifscCode &&
+          item.bankNameBranch,
+      )
     : [];
 
-  const isCash =
-    String(body.paymentMethodName || "").toLowerCase().includes("cash") ||
-    String(body.paymentModeName || "").toLowerCase().includes("cash");
+  const paymentName = String(
+    body.paymentMethodName ||
+      body.paymentModeName ||
+      details.paymentMethodName ||
+      details.paymentModeName ||
+      ""
+  ).toLowerCase();
+  const isCash = paymentName.includes("cash") || paymentName.includes("cheque");
 
   if (!isCash && bankDetails.length === 0) {
     errors.bankDetails = "At least one bank account is required";

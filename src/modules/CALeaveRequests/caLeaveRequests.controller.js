@@ -18,13 +18,13 @@ const sendAppError = (res, error) => {
 
 export const caLeaveRequestsController = {
   list: asyncHandler(async (req, res) => {
-    const requests = await caLeaveRequestsService.list(req.companyId, leaveActorFromReq(req), req.query?.scope);
+    const requests = await caLeaveRequestsService.list(req.companyId, leaveActorFromReq(req), req.query?.scope, req.companyAccess);
     return success(res, { message: "Leave requests loaded", data: { requests } });
   }),
 
   balances: asyncHandler(async (req, res) => {
     const year = Number(req.query?.year) || new Date().getFullYear();
-    const balances = await caLeaveRequestsService.balances(req.companyId, year, leaveActorFromReq(req));
+    const balances = await caLeaveRequestsService.balances(req.companyId, year, leaveActorFromReq(req), req.companyAccess);
     return success(res, { message: "Leave balances loaded", data: { balances, year } });
   }),
 

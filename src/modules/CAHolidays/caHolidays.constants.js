@@ -1,3 +1,4 @@
+import { formatDateToIST } from "../../core/utils/date.js";
 export const caHolidaysTableSql = `
 CREATE TABLE IF NOT EXISTS public.ca_holidays (
   id SERIAL PRIMARY KEY,
@@ -38,7 +39,7 @@ const dateFrom = (value) => {
   if (!value) return "";
   if (typeof value === "string") {
     const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
-    return match ? match[1] : value.slice(0, 10);
+    return match ? match[1] : formatDateToIST(value);
   }
   if (value instanceof Date) {
     const y = value.getFullYear();
@@ -46,7 +47,7 @@ const dateFrom = (value) => {
     const d = String(value.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }
-  return String(value).slice(0, 10);
+  return formatDateToIST(value);
 };
 
 const countDays = (startDate, endDate) => {

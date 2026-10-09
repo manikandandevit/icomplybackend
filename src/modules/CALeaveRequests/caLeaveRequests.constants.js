@@ -1,3 +1,4 @@
+import { formatDateToIST } from "../../core/utils/date.js";
 export const caLeaveRequestsTableSql = `
 CREATE TABLE IF NOT EXISTS public.ca_leave_requests (
   id SERIAL PRIMARY KEY,
@@ -87,7 +88,7 @@ const dateFrom = (value) => {
     const d = String(value.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }
-  return String(value).slice(0, 10);
+  return formatDateToIST(value);
 };
 
 export const mapCALeaveRequest = (row) => ({
@@ -119,4 +120,7 @@ export const mapCALeaveRequest = (row) => ({
   attachmentMime: row.attachment_mime || "",
   status: row.status || "Pending",
   createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+  companySource: row.company_source || "",
+  companyId: row.company_id != null ? String(row.company_id) : "",
+  companyName: row.company_name || "",
 });

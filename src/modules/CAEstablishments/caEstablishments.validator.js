@@ -81,6 +81,16 @@ export const validateCAEstablishmentBody = (body = {}) => {
       contactName,
       email,
       mobile,
+      cpfSubmissionNumber: textOf(body.cpfSubmissionNumber),
+      uenNumber: textOf(body.uenNumber),
+      cpfStatus: textOf(body.cpfStatus),
+      myEpfNo: textOf(body.myEpfNo),
+      myEpfStatus: textOf(body.myEpfStatus),
+      mySocsoNo: textOf(body.mySocsoNo),
+      myEisNo: textOf(body.myEisNo),
+      thSsfNo: textOf(body.thSsfNo),
+      thSsfStatus: textOf(body.thSsfStatus),
+      thRevenueTaxId: textOf(body.thRevenueTaxId),
     },
   };
 };

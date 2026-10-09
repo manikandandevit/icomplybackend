@@ -41,6 +41,11 @@ export const mapPayrollRun = (row) => ({
   month: row.run_month,
   year: row.run_year,
   status: row.status,
+  challanUrl: row.challan_url || null,
+  epfChallanUrl: row.epf_challan_url || row.challan_url || null,
+  esicChallanUrl: row.esic_challan_url || null,
+  ptChallanUrl: row.pt_challan_url || null,
+  lwfChallanUrl: row.lwf_challan_url || null,
   createdAt: row.created_at,
 });
 

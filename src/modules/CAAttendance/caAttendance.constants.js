@@ -1,3 +1,4 @@
+import { formatDateToIST } from "../../core/utils/date.js";
 export const caAttendanceTableSql = `
 CREATE TABLE IF NOT EXISTS public.ca_attendance (
   id SERIAL PRIMARY KEY,
@@ -41,8 +42,15 @@ ALTER TABLE public.ca_attendance
 
 const clockMinutes = (value) => {
   const raw = String(value || "").trim();
-  const hm = raw.match(/^(\d{1,2}):(\d{2})/);
-  if (hm) return Number(hm[1]) * 60 + Number(hm[2]);
+  const ampmMatch = raw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (ampmMatch) {
+    let h = Number(ampmMatch[1]);
+    const m = Number(ampmMatch[2]);
+    const ampm = (ampmMatch[3] || "").toUpperCase();
+    if (ampm === "PM" && h < 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    return h * 60 + m;
+  }
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.getHours() * 60 + parsed.getMinutes();
@@ -50,9 +58,11 @@ const clockMinutes = (value) => {
 
 const stampMinutesFromDate = (dateStr, stamp) => {
   if (!stamp) return null;
-  const [year, month, day] = String(dateStr || "").slice(0, 10).split("-").map(Number);
+  const [year, month, day] = formatDateToIST(dateStr || "").split("-").map(Number);
   if (!year || !month || !day) return clockMinutes(stamp);
-  const start = new Date(year, month - 1, day, 0, 0, 0, 0).getTime();
+  // Force start of day to be in IST (+05:30) to avoid live server UTC issues
+  const startIso = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T00:00:00+05:30`;
+  const start = new Date(startIso).getTime();
   const time = new Date(stamp).getTime();
   if (Number.isNaN(time)) return null;
   return Math.round((time - start) / 60000);
@@ -60,7 +70,7 @@ const stampMinutesFromDate = (dateStr, stamp) => {
 
 export const mapCAAttendance = (row) => {
   if (!row) return null;
-  const date = row.date instanceof Date ? row.date.toISOString().slice(0, 10) : String(row.date || "").slice(0, 10);
+  const date = formatDateToIST(row.date);
   const shiftStartTime = String(row.shift_start_time || "").trim();
   const shiftEndTime = String(row.shift_end_time || "").trim();
   const startMin = clockMinutes(shiftStartTime);
@@ -89,6 +99,7 @@ export const mapCAAttendance = (row) => {
     regularizationReviewedBy: row.regularization_reviewed_by,
     shiftStartTime: shiftStartTime || null,
     shiftEndTime: shiftEndTime || null,
+    otApplicable: row.ot_applicable !== undefined && row.ot_applicable !== null ? Boolean(row.ot_applicable) : true,
     lateCheckIn,
     earlyCheckOut,
     createdByCompanyId: row.created_by_company_id,

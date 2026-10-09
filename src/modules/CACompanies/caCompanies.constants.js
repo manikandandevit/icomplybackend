@@ -35,8 +35,10 @@ ALTER TABLE public.ca_companies ALTER COLUMN status SET DEFAULT 'Inactive';
 export const caCompaniesIndexSql = `
 CREATE INDEX IF NOT EXISTS ca_companies_created_by_idx
   ON public.ca_companies (created_by_company_id);
-CREATE UNIQUE INDEX IF NOT EXISTS ca_companies_pan_lower_idx
-  ON public.ca_companies (lower(pan));
+DROP INDEX IF EXISTS ca_companies_pan_lower_idx;
+CREATE UNIQUE INDEX IF NOT EXISTS ca_companies_pan_lower_not_empty_idx
+  ON public.ca_companies (lower(pan))
+  WHERE pan IS NOT NULL AND TRIM(pan) <> '';
 `;
 
 export const initialsFrom = (legalName, tradeName) => {

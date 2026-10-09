@@ -1,7 +1,9 @@
+import { formatDateToIST } from "../../core/utils/date.js";
 import { AppError } from "../../core/errors/AppError.js";
 import { notifyRegularizationStatus, notifyRegularizationSubmitted } from "../../core/mail/attendanceMail.js";
 import { caEmployeesRepository } from "../CAEmployees/caEmployees.repository.js";
 import { caAttendanceRepository } from "./caAttendance.repository.js";
+import { syncOtRequest } from "./caAttendanceOtSync.js";
 
 const todayIso = () => {
   const now = new Date();
@@ -18,9 +20,10 @@ const stampFrom = (date, time) => {
   if (!raw) return null;
   if (/^\d{2}:\d{2}$/.test(raw)) {
     const [hour, minute] = raw.split(":").map(Number);
-    const [year, month, day] = String(date).slice(0, 10).split("-").map(Number);
+    const [year, month, day] = formatDateToIST(date).split("-").map(Number);
     if (!year || !month || !day) return null;
-    return new Date(year, month - 1, day, hour, minute, 0).toISOString();
+    const isoString = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+05:30`;
+    return new Date(isoString).toISOString();
   }
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
@@ -54,7 +57,7 @@ export const caAttendanceService = {
       throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");
     }
 
-    const date = todayIso();
+    const date = (payload.date && /^\d{4}-\d{2}-\d{2}$/.test(payload.date)) ? payload.date : todayIso();
     const existing = await caAttendanceRepository.findByEmployeeDate(companyId, employee.id, date);
     const now = new Date().toISOString();
 
@@ -88,7 +91,9 @@ export const caAttendanceService = {
     if (existing.checkOut) {
       throw new AppError("Already checked out today", 422, "ALREADY_CHECKED_OUT");
     }
-    return caAttendanceRepository.update(existing.id, companyId, { checkOut: now });
+    const updated = await caAttendanceRepository.update(existing.id, companyId, { checkOut: now });
+    void syncOtRequest(companyId, existing.id);
+    return updated;
   },
 
   async create(companyId, data, actor = {}) {
@@ -112,7 +117,7 @@ export const caAttendanceService = {
     if (!existing) {
       throw new AppError("Attendance record not found", 404, "ATTENDANCE_NOT_FOUND");
     }
-    const date = String(existing.date || "").slice(0, 10);
+    const date = formatDateToIST(existing.date || "");
     const checkIn = stampFrom(date, payload.checkIn);
     const checkOut = stampFrom(date, payload.checkOut);
     if (!checkIn) {
@@ -121,11 +126,13 @@ export const caAttendanceService = {
     if (checkOut && checkOut <= checkIn) {
       throw new AppError("Check-out must be after check-in", 422, "CHECK_OUT_INVALID");
     }
-    return caAttendanceRepository.update(id, companyId, {
+    const updated = await caAttendanceRepository.update(id, companyId, {
       checkIn,
       checkOut,
       status: "Present",
     });
+    void syncOtRequest(companyId, id);
+    return updated;
   },
 
   async update(id, companyId, data, actor = {}) {
@@ -149,7 +156,7 @@ export const caAttendanceService = {
       throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");
     }
 
-    const date = String(payload.date || "").slice(0, 10);
+    const date = formatDateToIST(payload.date || "");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       throw new AppError("Select a date", 422, "DATE_REQUIRED");
     }
@@ -187,16 +194,16 @@ export const caAttendanceService = {
     const saved = existing
       ? await caAttendanceRepository.update(existing.id, companyId, patch)
       : await caAttendanceRepository.insert({
-          establishmentId: employee.establishmentId,
-          establishmentName: employee.establishmentName,
-          employeeId: employee.id,
-          employeeName: employee.name,
-          employeeCode: employee.employeeCode,
-          date,
-          status: "Absent",
-          createdByCompanyId: companyId,
-          ...patch,
-        });
+        establishmentId: employee.establishmentId,
+        establishmentName: employee.establishmentName,
+        employeeId: employee.id,
+        employeeName: employee.name,
+        employeeCode: employee.employeeCode,
+        date,
+        status: "Absent",
+        createdByCompanyId: companyId,
+        ...patch,
+      });
 
     if (!saved) {
       throw new AppError("Unable to submit regularization request", 500, "REGULARIZE_FAILED");

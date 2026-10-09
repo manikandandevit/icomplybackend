@@ -1,3 +1,4 @@
+import { formatDateToIST } from "../utils/date.js";
 export const prorateDays = (
   annualDays,
   joinDate,
@@ -9,7 +10,7 @@ export const prorateDays = (
   if (String(proratePolicy || "yes").trim().toLowerCase() === "no") {
     return days;
   }
-  const raw = String(joinDate || "").slice(0, 10);
+  const raw = formatDateToIST(joinDate || "");
   const match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (!match) return days;
   const joined = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
@@ -20,7 +21,7 @@ export const prorateDays = (
 };
 
 export const joinYearOf = (joinDate) => {
-  const match = String(joinDate || "").slice(0, 10).match(/^(\d{4})-/);
+  const match = formatDateToIST(joinDate || "").match(/^(\d{4})-/);
   const year = match ? Number(match[1]) : 0;
   return year > 0 ? year : null;
 };

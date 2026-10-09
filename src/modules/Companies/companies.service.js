@@ -156,10 +156,11 @@ export const companiesService = {
   },
 
   async create(payload) {
-    const existing = await companiesRepository.findByPan(payload.pan);
-
-    if (existing) {
-      throw new AppError("A company with this PAN already exists", 409, "COMPANY_EXISTS");
+    if (payload.pan) {
+      const existing = await companiesRepository.findByPan(payload.pan);
+      if (existing) {
+        throw new AppError("A company with this PAN already exists", 409, "COMPANY_EXISTS");
+      }
     }
 
     const billed = await withSubscription(await withBilling(await withOperationCountries(payload)));
@@ -175,10 +176,11 @@ export const companiesService = {
       throw new AppError("Company not found", 404, "COMPANY_NOT_FOUND");
     }
 
-    const existing = await companiesRepository.findByPan(payload.pan, id);
-
-    if (existing) {
-      throw new AppError("A company with this PAN already exists", 409, "COMPANY_EXISTS");
+    if (payload.pan) {
+      const existing = await companiesRepository.findByPan(payload.pan, id);
+      if (existing) {
+        throw new AppError("A company with this PAN already exists", 409, "COMPANY_EXISTS");
+      }
     }
 
     const billed = await withSubscription(await withBilling(await withOperationCountries(payload)));

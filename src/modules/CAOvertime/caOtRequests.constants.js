@@ -1,3 +1,4 @@
+import { formatDateToIST } from "../../core/utils/date.js";
 export const caOtRequestsTableSql = `
 CREATE TABLE IF NOT EXISTS public.ca_ot_requests (
   id SERIAL PRIMARY KEY,
@@ -37,8 +38,8 @@ export const caOtRequestsIndexSql = [
 
 export const mapCAOtRequest = (row) => {
   if (!row) return null;
-  const dateStr = row.date instanceof Date ? row.date.toISOString().slice(0, 10) : String(row.date || "").slice(0, 10);
-  const workDateStr = row.work_date instanceof Date ? row.work_date.toISOString().slice(0, 10) : String(row.work_date || dateStr).slice(0, 10);
+  const dateStr = formatDateToIST(row.date);
+  const workDateStr = row.work_date instanceof Date ? row.work_date.toISOString().slice(0, 10) : formatDateToIST(row.work_date || dateStr);
 
   return {
     id: String(row.id),

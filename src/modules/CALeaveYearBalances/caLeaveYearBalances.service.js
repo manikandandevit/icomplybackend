@@ -96,7 +96,7 @@ export const caLeaveYearBalancesService = {
     return row ? Number(row.entitledDays) || 0 : liveAnnual(leaveType, employee, year);
   },
 
-  async listYear(companyId, year = currentYear(), actor = {}) {
+  async listYear(companyId, year = currentYear(), actor = {}, companyAccess = "All Companies") {
     const y = Number(year) || currentYear();
     const selfOnly = Boolean(actor?.employeeId && !actor?.isOwner && !actor?.isCaUser);
 
@@ -120,13 +120,29 @@ export const caLeaveYearBalancesService = {
       caHrMasterRepository.list(companyId, "leave-types"),
       caLeaveYearBalancesRepository.listByYear(companyId, y),
     ]);
-    const employeeById = new Map(employees.map((item) => [String(item.id), item]));
+    const { isAllCompanyAccess, matchesCompanyAccess } = await import("../../core/access/companyAccess.js");
+
+    const employeeById = new Map();
+    const activeEmployees = [];
+    
+    for (const item of employees) {
+      if (isAllCompanyAccess(companyAccess) || matchesCompanyAccess(companyAccess, item.companyName, item.establishmentName)) {
+        employeeById.set(String(item.id), item);
+        activeEmployees.push(item);
+      }
+    }
+
     const typeById = new Map(leaveTypes.map((item) => [String(item.id), item]));
-    return rows.map((row) => {
+    const result = [];
+    
+    for (const row of rows) {
       const employee = employeeById.get(String(row.employeeId));
+      if (!employee) continue; // Filter out balances for employees not in scope
+      
       const leaveType = typeById.get(String(row.leaveTypeId));
-      return withLiveAnnual(row, leaveType, employee, y) || row;
-    });
+      result.push(withLiveAnnual(row, leaveType, employee, y) || row);
+    }
+    return result;
   },
 
   async rollForwardAll(year = currentYear()) {
