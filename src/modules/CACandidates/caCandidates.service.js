@@ -2,8 +2,8 @@ import { caCandidatesRepository } from "./caCandidates.repository.js";
 import { AppError } from "../../core/errors/AppError.js";
 
 export const caCandidatesService = {
-  async list(companyId) {
-    return caCandidatesRepository.list(companyId);
+  async list(companyId, filter = {}) {
+    return caCandidatesRepository.list(companyId, filter);
   },
 
   async create(companyId, payload) {

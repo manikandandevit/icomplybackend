@@ -5,7 +5,8 @@ export const caCandidatesController = {
   async list(req, res, next) {
     try {
       const companyId = req.companyId;
-      const candidates = await caCandidatesService.list(companyId);
+      const { role, position, stage } = req.query;
+      const candidates = await caCandidatesService.list(companyId, { role: role || position, stage });
       return success(res, { data: { candidates } });
     } catch (err) {
       next(err);

@@ -1,5 +1,6 @@
 import { db } from "../../core/db/pool.js";
 import { caCandidatesTableSql, mapCACandidate } from "./caCandidates.constants.js";
+import { caOffersRepository } from "../CAOffers/caOffers.repository.js";
 
 let ready = null;
 const ensureTable = () => {
@@ -19,12 +20,20 @@ const ensureTable = () => {
 };
 
 export const caCandidatesRepository = {
-  async list(companyId) {
+  async list(companyId, filter = {}) {
     await ensureTable();
-    const { rows } = await db.query(
-      `SELECT * FROM public.ca_candidates WHERE created_by_company_id = $1 ORDER BY id DESC`,
-      [companyId]
-    );
+    let query = `SELECT * FROM public.ca_candidates WHERE created_by_company_id = $1`;
+    const params = [companyId];
+    if (filter.role && filter.role.trim()) {
+      params.push(`%${filter.role.trim()}%`);
+      query += ` AND role ILIKE $${params.length}`;
+    }
+    if (filter.stage && filter.stage.trim()) {
+      params.push(filter.stage.trim());
+      query += ` AND stage = $${params.length}`;
+    }
+    query += ` ORDER BY id DESC`;
+    const { rows } = await db.query(query, params);
     return rows.map(mapCACandidate);
   },
 
@@ -41,25 +50,44 @@ export const caCandidatesRepository = {
         payload.skills ? JSON.stringify(payload.skills) : '[]', companyId
       ]
     );
-    return mapCACandidate(rows[0]);
+    const candidate = mapCACandidate(rows[0]);
+    if (candidate && candidate.stage === 'Offer') {
+      try {
+        await caOffersRepository.ensureOfferForCandidate(companyId, candidate);
+      } catch (err) {
+        console.error("Failed to auto-create offer on candidate create:", err);
+      }
+    }
+    return candidate;
   },
 
   async updateStage(id, companyId, stage, assessmentCount) {
     await ensureTable();
     
+    let candidate = null;
     if (assessmentCount !== undefined) {
       const { rows } = await db.query(
         `UPDATE public.ca_candidates SET stage = $3, assessment_count = $4, updated_at = NOW() WHERE id = $1 AND created_by_company_id = $2 RETURNING *`,
         [id, companyId, stage, assessmentCount]
       );
-      return rows[0] ? mapCACandidate(rows[0]) : null;
+      candidate = rows[0] ? mapCACandidate(rows[0]) : null;
     } else {
       const { rows } = await db.query(
         `UPDATE public.ca_candidates SET stage = $3, updated_at = NOW() WHERE id = $1 AND created_by_company_id = $2 RETURNING *`,
         [id, companyId, stage]
       );
-      return rows[0] ? mapCACandidate(rows[0]) : null;
+      candidate = rows[0] ? mapCACandidate(rows[0]) : null;
     }
+
+    if (candidate && stage === 'Offer') {
+      try {
+        await caOffersRepository.ensureOfferForCandidate(companyId, candidate);
+      } catch (err) {
+        console.error("Failed to auto-create offer on updateStage:", err);
+      }
+    }
+
+    return candidate;
   },
 
   async addNote(id, companyId, noteText) {

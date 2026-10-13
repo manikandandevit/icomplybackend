@@ -30,6 +30,7 @@ import { caRecruitmentDashboardRoutes } from "./modules/CARecruitmentDashboard/i
 import { caJobRequisitionsRouter } from "./modules/CAJobRequisitions/index.js";
 import { caCandidatesRouter } from "./modules/CACandidates/index.js";
 import { caInterviewsRouter } from "./modules/CAInterviews/index.js";
+import { caOffersRouter } from "./modules/CAOffers/index.js";
 import { caEcrSlabsRouter } from "./modules/CAEcrSlabs/index.js";
 
 export const createApp = () => {
@@ -78,6 +79,7 @@ export const createApp = () => {
   app.use("/api/ca-job-requisitions", caJobRequisitionsRouter);
   app.use("/api/ca-candidates", caCandidatesRouter);
   app.use("/api/ca-interviews", caInterviewsRouter);
+  app.use("/api/ca-offers", caOffersRouter);
   app.use("/api/ca-ecr-slabs", caEcrSlabsRouter);
   app.use("/api/countries", countryRouter);
   app.use("/api/pricing", pricingRouter);
