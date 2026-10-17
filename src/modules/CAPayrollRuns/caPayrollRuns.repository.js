@@ -147,7 +147,7 @@ export const caPayrollRunsRepository = {
     const { rows } = await db.query(
       `SELECT e.id, e.name as first_name, '' as last_name, e.employment_type_name as employee_type, e.join_date as joined_date, e.ctc as base_salary, e.status, e.employee_code as "employeeCode", e.email,
        COALESCE((
-         SELECT SUM(ot_hours) FROM public.ca_ot_requests
+         SELECT SUM(COALESCE(NULLIF(ot_hours, '')::numeric, hours, 0)) FROM public.ca_ot_requests
          WHERE employee_id = e.id AND status = 'Approved' AND date >= $3 AND date <= $4
        ), 0) as ot_hours
        FROM public.ca_employees e
