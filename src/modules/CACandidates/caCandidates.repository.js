@@ -22,8 +22,12 @@ const ensureTable = () => {
 export const caCandidatesRepository = {
   async list(companyId, filter = {}) {
     await ensureTable();
-    let query = `SELECT * FROM public.ca_candidates WHERE created_by_company_id = $1`;
-    const params = [companyId];
+    let query = `SELECT * FROM public.ca_candidates WHERE 1=1`;
+    const params = [];
+    if (companyId) {
+      params.push(companyId);
+      query += ` AND created_by_company_id = $${params.length}`;
+    }
     if (filter.role && filter.role.trim()) {
       params.push(`%${filter.role.trim()}%`);
       query += ` AND role ILIKE $${params.length}`;
@@ -34,7 +38,75 @@ export const caCandidatesRepository = {
     }
     query += ` ORDER BY id DESC`;
     const { rows } = await db.query(query, params);
-    return rows.map(mapCACandidate);
+    const standardCandidates = rows.map(mapCACandidate);
+
+    // Also include candidates from HirePilot applications table
+    try {
+      let hpQuery = `
+        SELECT 
+          (a.id + 100000) AS id,
+          a.full_name AS name,
+          COALESCE(
+            NULLIF(CONCAT(SUBSTRING(SPLIT_PART(a.full_name, ' ', 1), 1, 1), SUBSTRING(SPLIT_PART(a.full_name, ' ', 2), 1, 1)), ''),
+            SUBSTRING(a.full_name, 1, 2)
+          ) AS initials,
+          CONCAT(COALESCE(NULLIF(a.experience, ''), '0 yrs'), ' · ', COALESCE(NULLIF(a.location, ''), 'Remote')) AS details,
+          o.role_name AS role,
+          COALESCE(a.ats_score, 75) AS match,
+          CASE 
+            WHEN LOWER(a.status) = 'accepted' THEN 'Shortlisted'
+            WHEN LOWER(a.status) = 'interview' OR LOWER(a.status) = 'moved' THEN 'Interview'
+            WHEN LOWER(a.status) = 'rejected' THEN 'Rejected'
+            ELSE 'Applied'
+          END AS stage,
+          'HirePilot' AS source,
+          TO_CHAR(COALESCE(a.created_at, NOW()), 'DD Mon YYYY') AS applied,
+          '[]'::jsonb AS notes,
+          0 AS assessment_count,
+          a.email,
+          a.phone,
+          a.experience,
+          a.location,
+          '[]'::jsonb AS skills,
+          COALESCE(a.company_id, o.created_by_company_id, 1) AS created_by_company_id
+        FROM public.hirepilot_applications a
+        JOIN public.hirepilot_openings o ON o.id = a.opening_id
+        WHERE 1=1
+      `;
+      const hpParams = [];
+      if (companyId) {
+        hpParams.push(companyId);
+        hpQuery += ` AND (a.company_id = $${hpParams.length} OR o.created_by_company_id = $${hpParams.length} OR a.company_id IS NULL)`;
+      }
+      if (filter.role && filter.role.trim()) {
+        hpParams.push(`%${filter.role.trim()}%`);
+        hpQuery += ` AND o.role_name ILIKE $${hpParams.length}`;
+      }
+      if (filter.stage && filter.stage.trim()) {
+        hpParams.push(filter.stage.trim());
+        hpQuery += ` AND (
+          CASE 
+            WHEN LOWER(a.status) = 'accepted' THEN 'Shortlisted'
+            WHEN LOWER(a.status) = 'interview' OR LOWER(a.status) = 'moved' THEN 'Interview'
+            WHEN LOWER(a.status) = 'rejected' THEN 'Rejected'
+            ELSE 'Applied'
+          END = $${hpParams.length}
+        )`;
+      }
+      hpQuery += ` ORDER BY a.id DESC`;
+
+      const { rows: hpRows } = await db.query(hpQuery, hpParams);
+      const hpCandidates = hpRows.map(mapCACandidate);
+
+      // Avoid duplicate names if any
+      const existingNames = new Set(standardCandidates.map(c => c.name?.trim().toLowerCase()));
+      const uniqueHp = hpCandidates.filter(c => !existingNames.has(c.name?.trim().toLowerCase()));
+
+      return [...standardCandidates, ...uniqueHp];
+    } catch (hpErr) {
+      console.warn("Could not merge hirepilot applications into candidates:", hpErr?.message);
+      return standardCandidates;
+    }
   },
 
   async create(companyId, payload) {

@@ -274,7 +274,50 @@ export const hirePilotRepository = {
       Number(payload.minAtsScore || 70),
     ]);
 
-    return mapOpening(rows[0]);
+    const created = mapOpening(rows[0]);
+
+    // Also automatically insert into public.ca_job_requisitions so it is visible in Talent Acquisition Job Openings
+    try {
+      const cid = companyId ? parseInt(companyId, 10) : null;
+      if (cid) {
+        const countRes = await db.query(
+          'SELECT COUNT(*) FROM public.ca_job_requisitions WHERE created_by_company_id = $1',
+          [cid]
+        );
+        const nextNum = parseInt(countRes?.rows[0]?.count || 0, 10) + 1;
+        const reqId = `REQ-${String(nextNum).padStart(3, '0')}`;
+
+        await db.query(
+          `
+          INSERT INTO public.ca_job_requisitions (
+            req_id, position, department, location, type, hiring_manager, positions_count, priority, budget, status, approval_status, target_date, experience, skills, created_by_company_id
+          )
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+          `,
+          [
+            reqId,
+            roleName,
+            "General",
+            establishmentName || "Corporate Office",
+            "Full Time",
+            employeeName || "",
+            1,
+            "Medium",
+            "Best in Industry",
+            "Open",
+            "Approved",
+            new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+            "0-3 Years",
+            JSON.stringify(Array.isArray(sharePreferences) ? sharePreferences : []),
+            cid,
+          ]
+        );
+      }
+    } catch (syncErr) {
+      console.warn("Syncing HirePilot opening to ca_job_requisitions non-critical error:", syncErr?.message);
+    }
+
+    return created;
   },
 
   async getOpeningById(id) {
@@ -303,6 +346,24 @@ export const hirePilotRepository = {
 
   async deleteOpening(id) {
     await ensureTable();
+    try {
+      const { rows } = await db.query(
+        `SELECT role_name, created_by_company_id FROM public.hirepilot_openings WHERE id = $1`,
+        [id]
+      );
+      if (rows[0]) {
+        const { role_name, created_by_company_id } = rows[0];
+        if (created_by_company_id && role_name) {
+          await db.query(
+            `DELETE FROM public.ca_job_requisitions WHERE created_by_company_id = $1 AND LOWER(TRIM(position)) = LOWER(TRIM($2))`,
+            [created_by_company_id, role_name]
+          );
+        }
+      }
+    } catch (e) {
+      console.warn("Non-critical error deleting synced ca_job_requisition:", e?.message);
+    }
+
     await db.query(`DELETE FROM public.hirepilot_openings WHERE id = $1`, [id]);
     return { success: true };
   },
