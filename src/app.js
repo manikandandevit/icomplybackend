@@ -32,6 +32,7 @@ import { caCandidatesRouter } from "./modules/CACandidates/index.js";
 import { caInterviewsRouter } from "./modules/CAInterviews/index.js";
 import { caOffersRouter } from "./modules/CAOffers/index.js";
 import { caEcrSlabsRouter } from "./modules/CAEcrSlabs/index.js";
+import { hirePilotRouter } from "./modules/HirePilot/index.js";
 
 export const createApp = () => {
   const app = express();
@@ -81,6 +82,7 @@ export const createApp = () => {
   app.use("/api/ca-interviews", caInterviewsRouter);
   app.use("/api/ca-offers", caOffersRouter);
   app.use("/api/ca-ecr-slabs", caEcrSlabsRouter);
+  app.use("/api/hirepilot", hirePilotRouter);
   app.use("/api/countries", countryRouter);
   app.use("/api/pricing", pricingRouter);
   app.use("/api/onboard", onboardRouter);
