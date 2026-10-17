@@ -11,6 +11,9 @@ export const caCandidatesService = {
   },
 
   async updateStage(id, companyId, stage, assessmentCount) {
+    if (stage === 'Offer') {
+      throw new AppError("Candidates cannot be manually moved to Offer stage. Complete interview rounds and mark as Selected in Interview Management.", 400, "MANUAL_OFFER_MOVE_RESTRICTED");
+    }
     const updated = await caCandidatesRepository.updateStage(id, companyId, stage, assessmentCount);
     if (!updated) {
       throw new AppError("Candidate not found or unauthorized", 404, "NOT_FOUND");

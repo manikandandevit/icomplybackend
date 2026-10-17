@@ -8,5 +8,9 @@ router.use(authenticateToken, requireCompanyAdmin);
 
 router.get("/", caInterviewsController.list);
 router.post("/", caInterviewsController.create);
+router.put("/:id", caInterviewsController.update);
+router.patch("/:id/status", caInterviewsController.updateStatus);
+router.post("/:id/feedback", caInterviewsController.submitFeedback);
+router.delete("/:id", caInterviewsController.delete);
 
 export { router as caInterviewsRouter };

@@ -79,11 +79,66 @@ export const caCandidatesRepository = {
       candidate = rows[0] ? mapCACandidate(rows[0]) : null;
     }
 
-    if (candidate && stage === 'Offer') {
-      try {
-        await caOffersRepository.ensureOfferForCandidate(companyId, candidate);
-      } catch (err) {
-        console.error("Failed to auto-create offer on updateStage:", err);
+    if (candidate) {
+      if (stage === 'Interview') {
+        try {
+          const existingInt = await db.query(
+            `SELECT id FROM public.ca_interviews WHERE candidate_id = $1 AND created_by_company_id = $2 LIMIT 1`,
+            [id, companyId]
+          );
+          if (!existingInt.rows[0]) {
+            const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+            await db.query(
+              `INSERT INTO public.ca_interviews (
+                created_by_company_id, candidate_id, role, interviewer, type, datetime, mode, status
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+              [
+                companyId,
+                id,
+                candidate.role || 'Software Engineer',
+                'Assigned Interviewer',
+                'Round 1 - Technical',
+                `${todayStr} · 10:00 AM`,
+                'Video',
+                'Scheduled'
+              ]
+            );
+          }
+        } catch (err) {
+          console.error("Failed to auto-create interview entry on stage change to Interview:", err);
+        }
+      }
+
+      if (stage === 'Offer') {
+        try {
+          await caOffersRepository.ensureOfferForCandidate(companyId, candidate);
+        } catch (err) {
+          console.error("Failed to auto-create offer on updateStage:", err);
+        }
+      } else if (stage === 'Hired') {
+        try {
+          await db.query(
+            `UPDATE public.ca_offers SET status = 'Accepted', updated_at = NOW() 
+             WHERE (candidate_id = $1 OR (candidate_name IS NOT NULL AND LOWER(TRIM(candidate_name)) = LOWER(TRIM($2)))) 
+               AND created_by_company_id = $3`,
+            [id, candidate.name, companyId]
+          );
+        } catch (err) {
+          console.error("Failed to sync offer status to Accepted on updateStage:", err);
+        }
+      } else {
+        // Candidate moved to a stage other than Offer or Hired (e.g., Assessment, Interview, Screening, etc.)
+        // Remove any offers for this candidate from ca_offers so they don't appear in the Offers list!
+        try {
+          await db.query(
+            `DELETE FROM public.ca_offers 
+             WHERE (candidate_id = $1 OR (candidate_name IS NOT NULL AND LOWER(TRIM(candidate_name)) = LOWER(TRIM($2)))) 
+               AND created_by_company_id = $3`,
+            [id, candidate.name, companyId]
+          );
+        } catch (err) {
+          console.error("Failed to remove offer on moving away from Offer stage:", err);
+        }
       }
     }
 
@@ -105,6 +160,8 @@ export const caCandidatesRepository = {
 
   async delete(id, companyId) {
     await ensureTable();
+    await db.query(`DELETE FROM public.ca_offers WHERE candidate_id = $1 AND created_by_company_id = $2`, [id, companyId]);
+    await db.query(`DELETE FROM public.ca_interviews WHERE candidate_id = $1 AND created_by_company_id = $2`, [id, companyId]);
     const { rows } = await db.query(
       `DELETE FROM public.ca_candidates WHERE id = $1 AND created_by_company_id = $2 RETURNING id`,
       [id, companyId]
