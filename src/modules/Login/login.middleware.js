@@ -26,9 +26,10 @@ export const validateLoginRequest = (req, res, next) => {
 
 export const authenticateToken = (req, _res, next) => {
   const header = req.headers.authorization || "";
-  const [scheme, token] = header.split(" ");
+  const [scheme, headerToken] = header.split(" ");
+  const token = (scheme === "Bearer" && headerToken) ? headerToken : req.query?.token;
 
-  if (scheme !== "Bearer" || !token) {
+  if (!token) {
     return next(new AppError("Authentication token is required", 401, "UNAUTHORIZED"));
   }
 
