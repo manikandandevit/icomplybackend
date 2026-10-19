@@ -96,7 +96,21 @@ export const hirePilotController = {
   postOpening: async (req, res, next) => {
     try {
       const { id } = req.params;
-      const data = await hirePilotService.postOpening(id);
+      let frontendUrl = req.body?.frontendUrl;
+
+      if (!frontendUrl || typeof frontendUrl !== "string" || !frontendUrl.startsWith("http")) {
+        const origin = req.get("origin");
+        if (origin && origin.startsWith("http")) {
+          frontendUrl = origin;
+        } else {
+          frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+        }
+      }
+
+      // Strip trailing slash if any
+      frontendUrl = frontendUrl.replace(/\/+$/, "");
+
+      const data = await hirePilotService.postOpening(id, frontendUrl);
       return success(res, {
         message: "Opening published to channels successfully",
         data,
@@ -104,6 +118,12 @@ export const hirePilotController = {
     } catch (error) {
       next(error);
     }
+  },
+
+  redirectToApplyPage: async (req, res) => {
+    const { id } = req.params;
+    const frontendUrl = (process.env.FRONTEND_URL || "https://icomplyfront-end.vercel.app").replace(/\/+$/, "");
+    return res.redirect(`${frontendUrl}/careers/apply/${id}`);
   },
 
   linkedInCallback: async (req, res) => {
