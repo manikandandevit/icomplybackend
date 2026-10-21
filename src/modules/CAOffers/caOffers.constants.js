@@ -1,3 +1,4 @@
+export const caOffersTableSql = `
 CREATE TABLE IF NOT EXISTS public.ca_offers (
   id SERIAL PRIMARY KEY,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
