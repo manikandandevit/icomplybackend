@@ -9,6 +9,9 @@ const getTransporter = () => {
   if (!isConfigured()) return null;
   if (!transporter) {
     transporter = nodemailer.createTransport({
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
       host: config.smtp.host,
       port: config.smtp.port,
       secure: Number(config.smtp.port) === 465,

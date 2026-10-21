@@ -31,6 +31,9 @@ import { caJobRequisitionsRouter } from "./modules/CAJobRequisitions/index.js";
 import { caCandidatesRouter } from "./modules/CACandidates/index.js";
 import { caInterviewsRouter } from "./modules/CAInterviews/index.js";
 import { caEcrSlabsRouter } from "./modules/CAEcrSlabs/index.js";
+import { caOnboardingRouter } from "./modules/CAOnboarding/index.js";
+import { caOffboardingRouter } from "./modules/CAOffboarding/index.js";
+import { caOffersRouter } from "./modules/CAOffers/index.js";
 
 export const createApp = () => {
   const app = express();
@@ -79,6 +82,9 @@ export const createApp = () => {
   app.use("/api/ca-candidates", caCandidatesRouter);
   app.use("/api/ca-interviews", caInterviewsRouter);
   app.use("/api/ca-ecr-slabs", caEcrSlabsRouter);
+  app.use("/api/ca-onboarding", caOnboardingRouter);
+  app.use("/api/ca-offboarding", caOffboardingRouter);
+  app.use("/api/ca-offers", caOffersRouter);
   app.use("/api/countries", countryRouter);
   app.use("/api/pricing", pricingRouter);
   app.use("/api/onboard", onboardRouter);
