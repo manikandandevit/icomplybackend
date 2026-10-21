@@ -30,10 +30,11 @@ import { caRecruitmentDashboardRoutes } from "./modules/CARecruitmentDashboard/i
 import { caJobRequisitionsRouter } from "./modules/CAJobRequisitions/index.js";
 import { caCandidatesRouter } from "./modules/CACandidates/index.js";
 import { caInterviewsRouter } from "./modules/CAInterviews/index.js";
+import { caOffersRouter } from "./modules/CAOffers/index.js";
 import { caEcrSlabsRouter } from "./modules/CAEcrSlabs/index.js";
 import { caOnboardingRouter } from "./modules/CAOnboarding/index.js";
 import { caOffboardingRouter } from "./modules/CAOffboarding/index.js";
-import { caOffersRouter } from "./modules/CAOffers/index.js";
+import { hirePilotRouter } from "./modules/HirePilot/index.js";
 
 export const createApp = () => {
   const app = express();
@@ -50,7 +51,8 @@ export const createApp = () => {
       credentials: true,
     })
   );
-  app.use(express.json({ limit: "1mb" }));
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
   app.use(requestLogger);
 
   app.get("/api/health", (_req, res) => {
@@ -81,10 +83,11 @@ export const createApp = () => {
   app.use("/api/ca-job-requisitions", caJobRequisitionsRouter);
   app.use("/api/ca-candidates", caCandidatesRouter);
   app.use("/api/ca-interviews", caInterviewsRouter);
+  app.use("/api/ca-offers", caOffersRouter);
   app.use("/api/ca-ecr-slabs", caEcrSlabsRouter);
   app.use("/api/ca-onboarding", caOnboardingRouter);
   app.use("/api/ca-offboarding", caOffboardingRouter);
-  app.use("/api/ca-offers", caOffersRouter);
+  app.use("/api/hirepilot", hirePilotRouter);
   app.use("/api/countries", countryRouter);
   app.use("/api/pricing", pricingRouter);
   app.use("/api/onboard", onboardRouter);
