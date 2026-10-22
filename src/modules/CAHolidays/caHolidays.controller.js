@@ -32,7 +32,12 @@ const parsedBody = (req, res) => {
 
 export const caHolidaysController = {
   list: asyncHandler(async (req, res) => {
-    const holidays = await caHolidaysService.list(req.companyId);
+    const isEmployee = Boolean(req.employeeId && !req.isCompanyOwner && !req.caUserId);
+    const holidays = await caHolidaysService.list(req.companyId, {
+      isEmployee,
+      countryId: isEmployee ? req.countryId : (req.query?.countryId || null),
+      countryName: isEmployee ? req.countryName : (req.query?.countryName || null),
+    });
     return success(res, { message: "Holidays loaded", data: { holidays } });
   }),
 

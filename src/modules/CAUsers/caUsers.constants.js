@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS public.ca_users (
   status TEXT NOT NULL DEFAULT 'Active',
   password_hash TEXT,
   created_by_company_id INTEGER NOT NULL,
+  must_reset_password BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -16,6 +17,8 @@ CREATE TABLE IF NOT EXISTS public.ca_users (
 export const caUsersAlterSql = `
 ALTER TABLE public.ca_users ADD COLUMN IF NOT EXISTS password_hash TEXT;
 ALTER TABLE public.ca_users ADD COLUMN IF NOT EXISTS designation_id INTEGER;
+ALTER TABLE public.ca_users ADD COLUMN IF NOT EXISTS must_reset_password BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE public.ca_users ADD COLUMN IF NOT EXISTS allowed_modules JSONB NOT NULL DEFAULT '["all"]'::jsonb;
 `;
 
 export const caUsersIndexSql = `
@@ -24,6 +27,19 @@ CREATE INDEX IF NOT EXISTS ca_users_created_by_idx
 CREATE INDEX IF NOT EXISTS ca_users_email_idx
   ON public.ca_users (email);
 `;
+
+const parseAllowedModules = (raw) => {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      return ["all"];
+    }
+  }
+  return ["all"];
+};
 
 export const mapCAUser = (row) => ({
   id: String(row.id),
@@ -40,8 +56,11 @@ export const mapCAUser = (row) => ({
   role: row.role || "Viewer",
   designationId: row.designation_id != null ? String(row.designation_id) : "",
   companyAccess: row.company_access || "All Companies",
+  allowedModules: parseAllowedModules(row.allowed_modules),
   status: row.status === "Inactive" ? "Inactive" : "Active",
   hasPassword: Boolean(row.password_hash),
+  mustResetPassword: row.must_reset_password !== false,
   createdAt: row.created_at,
   createdByCompanyId: row.created_by_company_id != null ? String(row.created_by_company_id) : "",
 });
+

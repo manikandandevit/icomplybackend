@@ -29,6 +29,7 @@ export const caPermissionsController = {
       isOwner: Boolean(req.isCompanyOwner),
       designationId: req.designationId,
       designationName: req.designationName,
+      allowedModules: req.allowedModules || null,
     });
 
     return success(res, {
@@ -42,8 +43,12 @@ export const caPermissionsController = {
 
   save: asyncHandler(async (req, res) => {
     try {
-      const permissions = await caPermissionsService.save(req.companyId, req.body?.permissions);
-      const message = "Permissions saved";
+      const permissions = await caPermissionsService.save(
+        req.companyId,
+        req.body?.permissions,
+        req.body?.designationId,
+      );
+      const message = "Permissions saved successfully";
       return success(res, {
         message,
         data: { permissions },

@@ -68,6 +68,7 @@ export const requireCompanyAdmin = async (req, _res, next) => {
 
     if (req.isCompanyOwner) {
       req.actorName = "Company Admin";
+      req.allowedModules = ["all"];
       return next();
     }
 
@@ -88,6 +89,10 @@ export const requireCompanyAdmin = async (req, _res, next) => {
       req.designationName = employee.designation_name || null;
       req.employeeId = String(employee.id);
       req.actorName = employee.name || req.actorName;
+      req.establishmentId = employee.establishment_id != null ? String(employee.establishment_id) : null;
+      req.establishmentName = employee.establishment_name || null;
+      req.countryId = employee.country_id != null ? String(employee.country_id) : null;
+      req.countryName = employee.country_name || null;
       return next();
     }
 
@@ -98,6 +103,9 @@ export const requireCompanyAdmin = async (req, _res, next) => {
       return next(new AppError("Contact admin your account is inactive", 403, "USER_INACTIVE"));
     }
 
+    const isAll = Boolean(caUser.allowedModules?.includes("all"));
+    req.isCompanyOwner = isAll;
+    req.allowedModules = caUser.allowedModules || ["all"];
     req.companyAccess = caUser.companyAccess || "All Companies";
     req.designationId = caUser.designationId || null;
     req.designationName = caUser.role || null;
