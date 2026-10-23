@@ -11,7 +11,12 @@ export const validateJobRequisitionBody = (body = {}) => {
   const department = required(body.department, "Department", errors, "department");
   const location = required(body.location, "Location", errors, "location");
   const type = required(body.type, "Type", errors, "type");
-  const hiringManager = String(body.hiringManager ?? "").trim();
+  const hiringManager = required(body.hiringManager, "Hiring manager", errors, "hiringManager");
+  const hiringManagerEmail = required(body.hiringManagerEmail, "Hiring manager email", errors, "hiringManagerEmail");
+  const hiringManagerPhone = required(body.hiringManagerPhone ?? body.hiringManagerNumber, "Hiring manager number", errors, "hiringManagerPhone");
+  const approverName = String(body.approverName ?? "").trim();
+  const approverEmail = String(body.approverEmail ?? "").trim();
+  const approverPhone = String(body.approverPhone ?? "").trim();
   const priority = required(body.priority, "Priority", errors, "priority");
 
   const positionsCount = parseInt(body.positionsCount, 10);
@@ -25,6 +30,11 @@ export const validateJobRequisitionBody = (body = {}) => {
   const targetDate = String(body.targetDate ?? "").trim();
   const experience = String(body.experience ?? "").trim();
   const skills = Array.isArray(body.skills) ? body.skills : [];
+  const establishmentId = String(body.establishmentId ?? "").trim();
+  const establishmentName = String(body.establishmentName ?? "").trim();
+  const companyId = body.companyId ? String(body.companyId).trim() : "";
+  const companySource = body.companySource ? String(body.companySource).trim() : "ca";
+  const companyName = body.companyName ? String(body.companyName).trim() : "";
 
   return {
     isValid: Object.keys(errors).length === 0,
@@ -35,6 +45,11 @@ export const validateJobRequisitionBody = (body = {}) => {
       location, 
       type, 
       hiringManager,
+      hiringManagerEmail,
+      hiringManagerPhone,
+      approverName,
+      approverEmail,
+      approverPhone,
       positionsCount: isNaN(positionsCount) ? 1 : positionsCount, 
       priority, 
       budget, 
@@ -42,7 +57,12 @@ export const validateJobRequisitionBody = (body = {}) => {
       approvalStatus,
       targetDate,
       experience,
-      skills
+      skills,
+      establishmentId,
+      establishmentName,
+      companyId,
+      companySource,
+      companyName,
     },
   };
 };

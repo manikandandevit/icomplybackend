@@ -2,15 +2,18 @@ import { asyncHandler } from "../../core/middleware/asyncHandler.js";
 import { brandingService } from "./branding.service.js";
 
 const sendImage = async (res, loader) => {
-  const file = await loader();
-  res.setHeader("Content-Type", file.contentType);
-  res.setHeader("Cache-Control", "public, max-age=3600");
-  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-  file.body.pipe(res);
-
-
-
-
+  try {
+    const file = await loader();
+    res.setHeader("Content-Type", file.contentType);
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    file.body.pipe(res);
+  } catch (err) {
+    if (err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404) {
+      return res.status(404).end();
+    }
+    throw err;
+  }
 };
 
 export const brandingController = {

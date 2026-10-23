@@ -4,6 +4,12 @@ import { createToast } from "../../core/toast/index.js";
 import { fail, success } from "../../core/utils/response.js";
 import { caJobRequisitionsService } from "./caJobRequisitions.service.js";
 import { validateJobRequisitionBody } from "./caJobRequisitions.validator.js";
+import {
+  renderApprovalSuccessPage,
+  renderAlreadyApprovedPage,
+  renderApprovalRejectPage,
+  renderApprovalErrorPage,
+} from "./caJobRequisitions.views.js";
 
 const sendAppError = (res, error) => {
   if (error instanceof AppError) {
@@ -64,6 +70,53 @@ export const caJobRequisitionsController = {
       });
     } catch (error) {
       return sendAppError(res, error);
+    }
+  }),
+
+  sendApprovalRequest: asyncHandler(async (req, res) => {
+    try {
+      const host = req.get("host");
+      const protocol = req.protocol === "https" || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+      const result = await caJobRequisitionsService.sendApprovalRequest(
+        req.params.id,
+        req.companyId,
+        host,
+        protocol
+      );
+      return success(res, {
+        message: `Approval request email sent to ${result.approverName} (${result.approverEmail})`,
+        data: result,
+        toast: createToast({
+          type: "success",
+          message: `Approval email sent to ${result.approverName || "Approver"} (${result.approverEmail})`,
+        }),
+      });
+    } catch (error) {
+      return sendAppError(res, error);
+    }
+  }),
+
+  publicApprove: asyncHandler(async (req, res) => {
+    try {
+      const result = await caJobRequisitionsService.publicApprove(req.query.token);
+      if (result.status === "already_approved") {
+        return res.send(renderAlreadyApprovedPage(result.requisition));
+      }
+      return res.send(renderApprovalSuccessPage(result.requisition));
+    } catch (error) {
+      return res.status(400).send(renderApprovalErrorPage(error.message));
+    }
+  }),
+
+  publicReject: asyncHandler(async (req, res) => {
+    try {
+      const result = await caJobRequisitionsService.publicReject(req.query.token);
+      if (result.status === "already_rejected") {
+        return res.send(renderAlreadyApprovedPage(result.requisition));
+      }
+      return res.send(renderApprovalRejectPage(result.requisition));
+    } catch (error) {
+      return res.status(400).send(renderApprovalErrorPage(error.message));
     }
   }),
 

@@ -17,6 +17,9 @@ const getTransporter = () => {
         user: config.smtp.email,
         pass: config.smtp.password,
       },
+      tls: {
+        rejectUnauthorized: false,
+      },
     });
   }
   return transporter;

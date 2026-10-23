@@ -15,43 +15,25 @@ export const caInterviewsRepository = {
   async list(companyId) {
     await ensureTable();
 
-    // Auto-sync any candidate who is currently in 'Interview' stage into ca_interviews if not already there
-    await db.query(`
-      INSERT INTO public.ca_interviews (
-        created_by_company_id, candidate_id, role, interviewer, type, datetime, mode, status
-      )
-      SELECT 
-        c.created_by_company_id,
-        c.id,
-        c.role,
-        'Assigned Interviewer',
-        'Round 1 - Technical',
-        TO_CHAR(NOW() + INTERVAL '1 day', 'DD Mon YYYY') || ' · 10:00 AM',
-        'Video',
-        'Scheduled'
-      FROM public.ca_candidates c
-      WHERE c.created_by_company_id = $1 AND c.stage = 'Interview'
-        AND NOT EXISTS (
-          SELECT 1 FROM public.ca_interviews i 
-          WHERE i.candidate_id = c.id AND i.created_by_company_id = $1
-        )
-    `, [companyId]);
 
     const { rows } = await db.query(
-      `SELECT i.*, c.name as candidate_name FROM public.ca_interviews i LEFT JOIN public.ca_candidates c ON i.candidate_id = c.id WHERE i.created_by_company_id = $1 ORDER BY i.id DESC`,
+      `SELECT i.*, c.name as candidate_name, c.email as candidate_email FROM public.ca_interviews i LEFT JOIN public.ca_candidates c ON i.candidate_id = c.id WHERE i.created_by_company_id = $1 ORDER BY i.id DESC`,
       [companyId]
     );
-    return rows.map(r => ({ ...mapCAInterview(r), candidate: r.candidate_name }));
+    return rows.map(r => ({ ...mapCAInterview(r), candidate: r.candidate_name, email: r.candidate_email }));
   },
 
   async create(companyId, payload) {
     await ensureTable();
+    const isInviteSent = !!payload.inviteSent;
+    const meetingLink = payload.meetingLink || payload.meeting_link || null;
+    const venue = payload.venue || null;
     const { rows } = await db.query(
       `INSERT INTO public.ca_interviews (
-        created_by_company_id, candidate_id, role, interviewer, type, datetime, mode, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        created_by_company_id, candidate_id, role, interviewer, type, datetime, mode, status, invite_sent, invite_sent_at, round_name, meeting_link, venue
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $9 THEN NOW() ELSE NULL END, $10, $11, $12) RETURNING *`,
       [
-        companyId, payload.candidateId, payload.role, payload.interviewer, payload.type, payload.datetime, payload.mode, payload.status || 'Scheduled'
+        companyId, payload.candidateId, payload.role, payload.interviewer, payload.type, payload.datetime, payload.mode, payload.status || 'Scheduled', isInviteSent, payload.roundName || payload.type || null, meetingLink, venue
       ]
     );
     return mapCAInterview(rows[0]);
@@ -61,6 +43,8 @@ export const caInterviewsRepository = {
     await ensureTable();
     const numId = Number(id);
     if (numId > 0) {
+      const meetingLink = payload.meetingLink !== undefined ? payload.meetingLink : (payload.meeting_link !== undefined ? payload.meeting_link : null);
+      const venue = payload.venue !== undefined ? payload.venue : null;
       const { rows } = await db.query(
         `UPDATE public.ca_interviews 
          SET candidate_id = COALESCE($1, candidate_id),
@@ -68,10 +52,23 @@ export const caInterviewsRepository = {
              interviewer = COALESCE($3, interviewer),
              type = COALESCE($4, type),
              datetime = COALESCE($5, datetime),
-             mode = COALESCE($6, mode)
-         WHERE id = $7 AND created_by_company_id = $8
+             mode = COALESCE($6, mode),
+             meeting_link = COALESCE($7, meeting_link),
+             venue = COALESCE($8, venue)
+         WHERE id = $9 AND created_by_company_id = $10
          RETURNING *`,
-        [payload.candidateId || null, payload.role || null, payload.interviewer || null, payload.type || null, payload.datetime || null, payload.mode || null, numId, companyId]
+        [
+          payload.candidateId || null,
+          payload.role || null,
+          payload.interviewer || null,
+          payload.type || null,
+          payload.datetime || null,
+          payload.mode || null,
+          meetingLink,
+          venue,
+          numId,
+          companyId
+        ]
       );
       if (rows[0]) {
         const updated = mapCAInterview(rows[0]);
@@ -252,12 +249,30 @@ export const caInterviewsRepository = {
             [updated.candidateId, companyId]
           );
         }
+        if (updated.candidateId) {
+          await db.query(`
+            UPDATE public.ca_candidates
+            SET workflow_stages = COALESCE(
+              NULLIF(workflow_stages, '[]'::jsonb),
+              $1::jsonb
+            ), updated_at = NOW()
+            WHERE id = $2
+          `, [JSON.stringify([
+            { id: "workflow-doc-collection", type: "workflow", stageKey: "document_collection", title: "Document collection", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: true },
+            { id: "workflow-offer-gen", type: "workflow", stageKey: "offer_generated", title: "Offer generated", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: false },
+            { id: "workflow-offer-approval", type: "workflow", stageKey: "offer_approval", title: "Offer approval", status: "Pending", assignedTo: "Kavitha S (Finance Head)", canMarkDone: false },
+            { id: "workflow-offer-release", type: "workflow", stageKey: "offer_release", title: "Offer release", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: false },
+            { id: "workflow-offer-acceptance", type: "workflow", stageKey: "offer_acceptance", title: "Offer acceptance", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: false }
+          ]), updated.candidateId]);
+        }
+
         const candRes = await db.query(`SELECT name FROM public.ca_candidates WHERE id = $1`, [updated.candidateId]);
         return { ...updated, candidate: candRes.rows[0]?.name || 'Candidate' };
       }
     }
 
     // If dummy ID or not found in DB, upsert as frozen record
+    const { candidateId: payloadCandidateId } = payload;
     const absId = Math.abs(numId) || 1;
     const defaults = {
       1: { candidate: "Arjun Mehta", role: "Senior Software Engineer", interviewer: "Rajesh Kumar", type: "Technical", datetime: "16 Sep 2026 · 10:00 AM", mode: "Video" },
@@ -268,12 +283,30 @@ export const caInterviewsRepository = {
     };
     const def = defaults[absId] || defaults[1];
     let candId = 0;
-    const cRes = await db.query(
-      `SELECT id FROM public.ca_candidates WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND created_by_company_id = $2 LIMIT 1`,
-      [def.candidate, companyId]
-    );
-    if (cRes.rows[0]) {
-      candId = cRes.rows[0].id;
+
+    if (payloadCandidateId && Number(payloadCandidateId) > 0) {
+      const cLookup = await db.query(
+        `SELECT * FROM public.ca_candidates WHERE id = $1 AND (created_by_company_id = $2 OR $2 IS NULL) LIMIT 1`,
+        [Number(payloadCandidateId), companyId]
+      );
+      if (cLookup.rows[0]) {
+        candId = cLookup.rows[0].id;
+        def.candidate = cLookup.rows[0].name;
+        def.role = cLookup.rows[0].role || def.role;
+      }
+    }
+
+    if (!candId) {
+      const cRes = await db.query(
+        `SELECT id FROM public.ca_candidates WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND created_by_company_id = $2 LIMIT 1`,
+        [def.candidate, companyId]
+      );
+      if (cRes.rows[0]) {
+        candId = cRes.rows[0].id;
+      }
+    }
+
+    if (candId) {
       if (finalStatus === 'Selected') {
         await db.query(`UPDATE public.ca_candidates SET stage = 'Offer', updated_at = NOW() WHERE id = $1`, [candId]);
         const candRow = await db.query(`SELECT * FROM public.ca_candidates WHERE id = $1`, [candId]);
@@ -321,6 +354,24 @@ export const caInterviewsRepository = {
       candId = newC.rows[0].id;
     }
 
+    // Initialize workflow stages on candidate if not set
+    if (candId) {
+      await db.query(`
+        UPDATE public.ca_candidates
+        SET workflow_stages = COALESCE(
+          NULLIF(workflow_stages, '[]'::jsonb),
+          $1::jsonb
+        ), updated_at = NOW()
+        WHERE id = $2
+      `, [JSON.stringify([
+        { id: "workflow-doc-collection", type: "workflow", stageKey: "document_collection", title: "Document collection", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: true },
+        { id: "workflow-offer-gen", type: "workflow", stageKey: "offer_generated", title: "Offer generated", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: false },
+        { id: "workflow-offer-approval", type: "workflow", stageKey: "offer_approval", title: "Offer approval", status: "Pending", assignedTo: "Kavitha S (Finance Head)", canMarkDone: false },
+        { id: "workflow-offer-release", type: "workflow", stageKey: "offer_release", title: "Offer release", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: false },
+        { id: "workflow-offer-acceptance", type: "workflow", stageKey: "offer_acceptance", title: "Offer acceptance", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: false }
+      ]), candId]);
+    }
+
     // Check if this candidate already has an interview in DB
     const existingInt = await db.query(
       `SELECT id FROM public.ca_interviews WHERE candidate_id = $1 AND created_by_company_id = $2 LIMIT 1`,
@@ -345,6 +396,34 @@ export const caInterviewsRepository = {
     return { ...mapCAInterview(ins.rows[0]), candidate: def.candidate };
   },
 
+  async sendInvite(id, companyId) {
+    await ensureTable();
+    const numId = Number(id);
+    if (numId > 0) {
+      let { rows } = await db.query(
+        `UPDATE public.ca_interviews 
+         SET invite_sent = TRUE, invite_sent_at = NOW() 
+         WHERE id = $1 AND ($2::int IS NULL OR created_by_company_id = $2::int)
+         RETURNING *`,
+        [numId, companyId || null]
+      );
+      if (!rows[0]) {
+        const fallback = await db.query(
+          `UPDATE public.ca_interviews 
+           SET invite_sent = TRUE, invite_sent_at = NOW() 
+           WHERE id = $1
+           RETURNING *`,
+          [numId]
+        );
+        rows = fallback.rows;
+      }
+      if (rows[0]) {
+        return mapCAInterview(rows[0]);
+      }
+    }
+    return { id: numId, inviteSent: true, inviteSentAt: new Date().toISOString() };
+  },
+
   async delete(id, companyId) {
     await ensureTable();
     const res = await db.query(
@@ -354,3 +433,4 @@ export const caInterviewsRepository = {
     return res.rows[0] ? true : false;
   }
 };
+

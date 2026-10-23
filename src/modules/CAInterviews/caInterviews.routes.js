@@ -10,6 +10,7 @@ router.get("/", caInterviewsController.list);
 router.post("/", caInterviewsController.create);
 router.put("/:id", caInterviewsController.update);
 router.patch("/:id/status", caInterviewsController.updateStatus);
+router.post("/:id/send-invite", caInterviewsController.sendInvite);
 router.post("/:id/feedback", caInterviewsController.submitFeedback);
 router.delete("/:id", caInterviewsController.delete);
 

@@ -2,7 +2,8 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const required = ["JWT_SECRET"];
+const isProd = process.env.NODE_ENV === "production";
+const required = isProd ? ["JWT_SECRET"] : [];
 
 for (const key of required) {
   if (!process.env[key]) {
@@ -18,7 +19,7 @@ export const config = Object.freeze({
     "https://icomplyfront-end.vercel.app",
   ],
   jwt: {
-    secret: process.env.JWT_SECRET,
+    secret: process.env.JWT_SECRET || "icomply_jwt_secret_key_2026_super_secure_token",
     expiresIn: process.env.JWT_EXPIRES_IN ?? "8h",
   },
   database: {

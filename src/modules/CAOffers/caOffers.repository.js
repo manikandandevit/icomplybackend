@@ -51,33 +51,7 @@ export const caOffersRepository = {
       WHERE (o.candidate_id = c.id OR (o.candidate_id IS NULL AND LOWER(TRIM(o.candidate_name)) = LOWER(TRIM(c.name))))
         AND o.created_by_company_id = $1
         AND c.created_by_company_id = $1
-        AND c.stage NOT IN ('Offer', 'Hired')
-    `, [companyId]);
-
-    // 3. Auto-sync any candidates with stage = 'Offer' into ca_offers if not present
-    await db.query(`
-      INSERT INTO public.ca_offers (
-        created_by_company_id, candidate_id, candidate_name, role, status, ctc, joining_bonus, joining_date, sent_on, location, hiring_manager
-      )
-      SELECT 
-        c.created_by_company_id,
-        c.id,
-        c.name,
-        c.role,
-        'Pending Acceptance',
-        '₹96,000/mo',
-        '₹1,20,000',
-        TO_CHAR(NOW() + INTERVAL '15 days', 'DD Mon YYYY'),
-        TO_CHAR(NOW(), 'DD Mon YYYY'),
-        COALESCE(c.location, 'Chennai, India'),
-        'Rajesh Kumar'
-      FROM public.ca_candidates c
-      WHERE c.created_by_company_id = $1 AND c.stage = 'Offer'
-        AND NOT EXISTS (
-          SELECT 1 FROM public.ca_offers o 
-          WHERE (o.candidate_id = c.id OR (o.candidate_name IS NOT NULL AND LOWER(TRIM(o.candidate_name)) = LOWER(TRIM(c.name))))
-            AND o.created_by_company_id = $1
-        )
+        AND c.stage NOT IN ('Offer', 'Offer Acceptance', 'Hired')
     `, [companyId]);
 
     let query = `
@@ -105,13 +79,18 @@ export const caOffersRepository = {
         LIMIT 1
       ) jr ON true
       WHERE o.created_by_company_id = $1
-        AND (c.id IS NULL OR c.stage IN ('Offer', 'Hired'))
+        AND (c.id IS NULL OR c.stage IN ('Offer', 'Offer Acceptance', 'Hired'))
     `;
     const params = [companyId];
 
     if (filter.status && filter.status.trim()) {
       params.push(filter.status.trim());
       query += ` AND o.status ILIKE $${params.length}`;
+    }
+
+    if (filter.candidateId) {
+      params.push(Number(filter.candidateId));
+      query += ` AND o.candidate_id = $${params.length}`;
     }
 
     query += ` ORDER BY o.id DESC`;
@@ -236,6 +215,13 @@ export const caOffersRepository = {
           payload.hiringManager || payload.hiring_manager || null
         ]
       );
+      if (candidateId && Number(candidateId) > 0) {
+        try {
+          await db.query(`UPDATE public.ca_candidates SET stage = 'Offer' WHERE id = $1 AND stage NOT IN ('Offer Acceptance', 'Hired')`, [candidateId]);
+        } catch (e) {
+          // ignore
+        }
+      }
       return mapCAOffer(rows[0]);
     }
 
@@ -267,6 +253,13 @@ export const caOffersRepository = {
       const defaultUrl = `/api/ca-offers/${createdOffer.id}/pdf`;
       await db.query(`UPDATE public.ca_offers SET document_url = $1 WHERE id = $2`, [defaultUrl, createdOffer.id]);
       createdOffer.document_url = defaultUrl;
+    }
+    if (candidateId && Number(candidateId) > 0) {
+      try {
+        await db.query(`UPDATE public.ca_candidates SET stage = 'Offer' WHERE id = $1 AND stage NOT IN ('Offer Acceptance', 'Hired')`, [candidateId]);
+      } catch (e) {
+        // ignore
+      }
     }
     return mapCAOffer(createdOffer);
   },

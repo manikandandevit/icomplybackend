@@ -100,16 +100,55 @@ export function parseCtcBreakup(ctcInput) {
   };
 }
 
-export async function generateOfferLetterHtml(offer, company = {}) {
+export async function generateOfferLetterHtml(offerOrOptions, companyArg = {}) {
+  let offer = offerOrOptions || {};
+  let company = companyArg || {};
+  if (offerOrOptions && offerOrOptions.offer) {
+    offer = offerOrOptions.offer;
+    company = offerOrOptions.company || companyArg || {};
+  }
+
   const logoSrc = await getLogoBase64();
 
-  const candidateName = offer.candidate || offer.candidateName || "Candidate Name";
-  const companyName = company.trade_name || company.legal_name || "Company Name";
-  const designation = offer.role || "Designation";
-  const departmentName = offer.department || offer.departmentName || "Engineering";
-  const reportingManager = offer.reportingManager || offer.hiringManager || offer.interviewer || "Reporting Manager";
-  const dateOfJoining = offer.joiningDate || "Date Of joining";
-  const workLocation = offer.location || company.city || "Madurai";
+  const candidateName =
+    offer.candidate ||
+    offer.candidateName ||
+    offer.name ||
+    "Candidate";
+
+  const companyName =
+    company.trade_name ||
+    company.legal_name ||
+    company.name ||
+    offer.companyName ||
+    "Standard Global";
+
+  const designation =
+    offer.role ||
+    offer.position ||
+    "HR Business Partner";
+
+  const departmentName =
+    offer.department ||
+    offer.departmentName ||
+    "Human Resources";
+
+  const reportingManager =
+    offer.reportingManager ||
+    offer.hiringManager ||
+    offer.managerName ||
+    offer.interviewer ||
+    "Rajesh Kumar";
+
+  const dateOfJoining =
+    offer.joiningDate ||
+    offer.commenceDate ||
+    "28 Oct 2026";
+
+  const workLocation =
+    offer.location ||
+    company.city ||
+    "Chennai";
 
   const breakup = parseCtcBreakup(offer.ctc);
   const formattedAnnualCtc = `₹ ${breakup.annualCtc.toLocaleString("en-IN")}`;
@@ -608,7 +647,13 @@ export async function generateOfferLetterHtml(offer, company = {}) {
   `;
 }
 
-export async function generateOfferPdfBuffer(offer, company = {}) {
+export async function generateOfferPdfBuffer(offerOrOptions, companyArg = {}) {
+  let offer = offerOrOptions || {};
+  let company = companyArg || {};
+  if (offerOrOptions && offerOrOptions.offer) {
+    offer = offerOrOptions.offer;
+    company = offerOrOptions.company || companyArg || {};
+  }
   const html = await generateOfferLetterHtml(offer, company);
   let browser;
   try {
@@ -617,7 +662,7 @@ export async function generateOfferPdfBuffer(offer, company = {}) {
       args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
     });
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15000 });
     const buffer = await page.pdf({
       format: "A4",
       printBackground: true,

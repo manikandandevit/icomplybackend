@@ -290,9 +290,10 @@ export const hirePilotRepository = {
         await db.query(
           `
           INSERT INTO public.ca_job_requisitions (
-            req_id, position, department, location, type, hiring_manager, positions_count, priority, budget, status, approval_status, target_date, experience, skills, created_by_company_id
+            req_id, position, department, location, type, hiring_manager, positions_count, priority, budget, status, approval_status, target_date, experience, skills,
+            establishment_id, establishment_name, created_by_company_id
           )
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
           `,
           [
             reqId,
@@ -309,6 +310,8 @@ export const hirePilotRepository = {
             new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
             "0-3 Years",
             JSON.stringify(Array.isArray(sharePreferences) ? sharePreferences : []),
+            establishmentId || null,
+            establishmentName || "",
             cid,
           ]
         );
