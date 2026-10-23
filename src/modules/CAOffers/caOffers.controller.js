@@ -1,5 +1,5 @@
 import { config } from "../../config/index.js";
-import { success } from "../../core/utils/response.js";
+import { success, fail } from "../../core/utils/response.js";
 import { caOffersService } from "./caOffers.service.js";
 import {
   renderOfferApprovalSuccessPage,
@@ -15,10 +15,24 @@ import {
 export const caOffersController = {
   async list(req, res, next) {
     try {
-      const companyId = req.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const { status } = req.query;
-      const offers = await caOffersService.list(companyId, { status });
+      const offers = await caOffersService.list(companyId, status ? { status } : {});
       return success(res, { data: { offers } });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async getById(req, res, next) {
+    try {
+      const companyId = req.companyId || req.user?.companyId;
+      const { id } = req.params;
+      const offer = await caOffersService.getById(id, companyId);
+      if (!offer) {
+        return fail(res, { message: "Offer not found", status: 404 });
+      }
+      return success(res, { data: { offer } });
     } catch (err) {
       next(err);
     }
@@ -26,7 +40,7 @@ export const caOffersController = {
 
   async create(req, res, next) {
     try {
-      const companyId = req.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const offer = await caOffersService.create(companyId, req.body);
       return success(res, { data: { offer }, status: 201 });
     } catch (err) {
@@ -36,7 +50,7 @@ export const caOffersController = {
 
   async getPdf(req, res, next) {
     try {
-      const companyId = req.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const { id } = req.params;
       const { pdfBuffer, filename } = await caOffersService.generatePdf(id, companyId, req.query);
       res.setHeader("Content-Type", "application/pdf");
@@ -50,7 +64,7 @@ export const caOffersController = {
 
   async sendOffer(req, res, next) {
     try {
-      const companyId = req.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const { id } = req.params;
       const result = await caOffersService.sendOffer(id, companyId, req.body);
       return success(res, { data: result, message: result.message });
@@ -61,7 +75,7 @@ export const caOffersController = {
 
   async updateStatus(req, res, next) {
     try {
-      const companyId = req.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const { id } = req.params;
       const { status, stage } = req.body;
       const offer = await caOffersService.updateStatus(id, companyId, status, stage);
@@ -73,7 +87,7 @@ export const caOffersController = {
 
   async onboardCandidate(req, res, next) {
     try {
-      const companyId = req.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const { id } = req.params;
       const result = await caOffersService.onboardCandidate(id, companyId, req.body);
       return success(res, { data: result, message: result.message });
@@ -84,7 +98,7 @@ export const caOffersController = {
 
   async update(req, res, next) {
     try {
-      const companyId = req.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const { id } = req.params;
       const offer = await caOffersService.update(id, companyId, req.body);
       return success(res, { data: { offer } });
@@ -95,7 +109,7 @@ export const caOffersController = {
 
   async delete(req, res, next) {
     try {
-      const companyId = req.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const { id } = req.params;
       await caOffersService.delete(id, companyId);
       return success(res, { message: "Offer deleted successfully" });
@@ -106,7 +120,7 @@ export const caOffersController = {
 
   async getDocuments(req, res, next) {
     try {
-      const companyId = req.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const { id } = req.params;
       const documents = await caOffersService.getDocuments(id, companyId);
       return success(res, { data: { documents } });
@@ -117,7 +131,7 @@ export const caOffersController = {
 
   async updateDocuments(req, res, next) {
     try {
-      const companyId = req.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const { id } = req.params;
       const { documents } = req.body;
       const offer = await caOffersService.updateDocuments(id, companyId, documents);

@@ -19,6 +19,7 @@ router.get("/candidate-pdf", caOffersController.candidatePdf);
 router.use(authenticateToken, requireCompanyAdmin);
 
 router.get("/", caOffersController.list);
+router.get("/:id", caOffersController.getById);
 router.post("/", caOffersController.create);
 router.get("/:id/pdf", caOffersController.getPdf);
 router.post("/:id/send", caOffersController.sendOffer);

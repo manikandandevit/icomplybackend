@@ -1,24 +1,46 @@
 export const caOffersTableSql = `
-  CREATE TABLE IF NOT EXISTS public.ca_offers (
-    id SERIAL PRIMARY KEY,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by_company_id INTEGER NOT NULL,
-    candidate_id INTEGER,
-    candidate_name VARCHAR(255),
-    role VARCHAR(255),
-    status VARCHAR(50) DEFAULT 'Pending Acceptance',
-    ctc VARCHAR(100) DEFAULT '₹96,000/mo',
-    joining_bonus VARCHAR(100) DEFAULT '₹1,20,000',
-    joining_date VARCHAR(100),
-    sent_on VARCHAR(100),
-    deadline VARCHAR(100),
-    location VARCHAR(255),
-    hiring_manager VARCHAR(255),
-    approval_status VARCHAR(50) DEFAULT 'Draft',
-    documents JSONB DEFAULT '[]'::jsonb
-  );
+CREATE TABLE IF NOT EXISTS public.ca_offers (
+  id SERIAL PRIMARY KEY,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  created_by_company_id INTEGER NOT NULL,
+  candidate_id INTEGER,
+  candidate_name VARCHAR(255),
+  role VARCHAR(255),
+  status VARCHAR(50) DEFAULT 'Pending Acceptance',
+  ctc VARCHAR(100) DEFAULT '₹96,000/mo',
+  joining_bonus VARCHAR(100) DEFAULT '₹1,20,000',
+  joining_date VARCHAR(100),
+  sent_on VARCHAR(100),
+  deadline VARCHAR(100),
+  location VARCHAR(255),
+  hiring_manager VARCHAR(255),
+  approval_status VARCHAR(50) DEFAULT 'Draft',
+  req_id VARCHAR(100),
+  document_name VARCHAR(255),
+  document_url TEXT,
+  documents JSONB DEFAULT '[]'::jsonb
+);
 `;
+
+export const ALLOWED_OFFER_FIELDS = [
+  "candidate_id",
+  "candidate_name",
+  "role",
+  "ctc",
+  "joining_bonus",
+  "joining_date",
+  "sent_on",
+  "status",
+  "deadline",
+  "req_id",
+  "location",
+  "hiring_manager",
+  "approval_status",
+  "document_name",
+  "document_url",
+  "documents",
+];
 
 export const mapCAOffer = (row) => {
   if (!row) return null;

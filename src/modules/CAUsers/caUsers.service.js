@@ -2,11 +2,10 @@ import bcrypt from "bcryptjs";
 import { AppError } from "../../core/errors/AppError.js";
 import { caUsersRepository } from "./caUsers.repository.js";
 
+export const DEFAULT_CA_USER_PASSWORD = "User@123";
+
 const hashPassword = async (password) => {
-  if (!password) {
-    return null;
-  }
-  return bcrypt.hash(password, 10);
+  return bcrypt.hash(password || DEFAULT_CA_USER_PASSWORD, 10);
 };
 
 export const caUsersService = {
@@ -23,13 +22,12 @@ export const caUsersService = {
   },
 
   async create(companyId, payload) {
-    if (!payload.password) {
-      throw new AppError("Password is required", 422, "PASSWORD_REQUIRED");
-    }
+    const rawPassword = payload.password || DEFAULT_CA_USER_PASSWORD;
 
     const user = await caUsersRepository.create(companyId, {
       ...payload,
-      passwordHash: await hashPassword(payload.password),
+      passwordHash: await hashPassword(rawPassword),
+      mustResetPassword: true,
     });
 
     if (!user) {

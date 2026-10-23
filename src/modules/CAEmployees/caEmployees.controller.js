@@ -70,9 +70,22 @@ export const caEmployeesController = {
 
   updateStatus: asyncHandler(async (req, res) => {
     const status = String(req.body?.status ?? "").trim() === "Active" ? "Active" : "Inactive";
+    const resignationReason = req.body?.resignationReason || req.body?.reason || "";
+    const lastWorkingDay = req.body?.lastWorkingDay || null;
+    const resignationDate = req.body?.resignationDate || null;
     try {
-      const employee = await caEmployeesService.updateStatus(req.params.id, req.companyId, status, req.companyAccess);
-      const message = status === "Active" ? "Employee set to Active" : "Employee set to Inactive";
+      const employee = await caEmployeesService.updateStatus(
+        req.params.id,
+        req.companyId,
+        status,
+        req.companyAccess,
+        { resignationReason, lastWorkingDay, resignationDate }
+      );
+      const message = status === "Active" 
+        ? "Employee set to Active" 
+        : resignationReason 
+        ? "Employee marked as Resigned" 
+        : "Employee set to Inactive";
       return success(res, {
         message,
         data: { employee },

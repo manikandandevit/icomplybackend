@@ -29,19 +29,43 @@ const selectColumns = `
 `;
 
 export const caHolidaysRepository = {
-  async list(companyId) {
+  async list(companyId, filter = {}) {
     await ensureTable();
     const cid = parseRowId(companyId);
     if (!cid) return [];
-    const { rows } = await db.query(
-      `
+
+    let sql = `
       SELECT ${selectColumns}
       FROM public.ca_holidays
       WHERE created_by_company_id = $1
-      ORDER BY holiday_date DESC, id DESC
-      `,
-      [cid],
-    );
+    `;
+    const params = [cid];
+
+    if (filter.isEmployee) {
+      const countryId = filter.countryId ? String(filter.countryId).trim() : null;
+      const countryName = filter.countryName ? String(filter.countryName).trim() : null;
+
+      if (countryId || countryName) {
+        const conditions = ["lower(country_id) = 'all'", "lower(country_name) = 'all'"];
+        if (countryId) {
+          params.push(countryId);
+          conditions.push(`country_id = $${params.length}`);
+        }
+        if (countryName) {
+          params.push(countryName);
+          conditions.push(`lower(country_name) = lower($${params.length})`);
+        }
+        sql += ` AND (${conditions.join(" OR ")})`;
+      } else {
+        sql += ` AND (lower(country_id) = 'all' OR lower(country_name) = 'all')`;
+      }
+    } else if (filter.countryId && filter.countryId !== "all") {
+      params.push(String(filter.countryId).trim());
+      sql += ` AND (lower(country_id) = 'all' OR country_id = $${params.length})`;
+    }
+
+    sql += ` ORDER BY holiday_date DESC, id DESC`;
+    const { rows } = await db.query(sql, params);
     return rows.map(mapCAHoliday);
   },
 

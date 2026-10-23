@@ -1,17 +1,20 @@
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export const validateCAUserBody = (body, { passwordRequired = true } = {}) => {
+export const validateCAUserBody = (body, { passwordRequired = false } = {}) => {
   const errors = {};
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   const email = typeof body?.email === "string" ? body.email.trim() : "";
   const password = typeof body?.password === "string" ? body.password : "";
-  const role = typeof body?.role === "string" ? body.role.trim() : "Viewer";
-  const designationId = typeof body?.designationId === "string" ? body.designationId.trim() : String(body?.designationId || "").trim();
-  const companyAccess = typeof body?.companyAccess === "string" ? body.companyAccess.trim() : "All Companies";
+  const role = typeof body?.role === "string" && body.role.trim() ? body.role.trim() : "User";
+  const designationId = body?.designationId != null ? String(body.designationId).trim() : "";
+  const companyAccess = typeof body?.companyAccess === "string" && body.companyAccess.trim() ? body.companyAccess.trim() : "All Companies";
+  const allowedModules = Array.isArray(body?.allowedModules) && body.allowedModules.length > 0
+    ? body.allowedModules.map((m) => String(m).trim()).filter(Boolean)
+    : ["all"];
   const status = body?.status === "Inactive" ? "Inactive" : "Active";
 
   if (!name) {
-    errors.name = "Full name is required";
+    errors.name = "Username is required";
   }
 
   if (!email) {
@@ -26,14 +29,6 @@ export const validateCAUserBody = (body, { passwordRequired = true } = {}) => {
     errors.password = "Password must be at least 6 characters";
   }
 
-  if (!role) {
-    errors.role = "Designation is required";
-  }
-
-  if (!designationId) {
-    errors.designationId = "Designation is required";
-  }
-
   return {
     isValid: Object.keys(errors).length === 0,
     errors,
@@ -44,7 +39,9 @@ export const validateCAUserBody = (body, { passwordRequired = true } = {}) => {
       role,
       designationId,
       companyAccess: companyAccess || "All Companies",
+      allowedModules,
       status,
     },
   };
 };
+

@@ -63,19 +63,25 @@ const toPublicCompanyAdmin = (row) => ({
   imageUrl: row.logo_url ? `/companies/${row.id}/logo` : null,
 });
 
-const toPublicCAUser = (row) => ({
-  id: String(row.id),
-  name: row.name,
-  email: row.email,
-  role: COMPANY_ROLE,
-  department: row.role || "Company",
-  companyId: String(row.createdByCompanyId || ""),
-  isOwner: false,
-  designationId: row.designationId || null,
-  designationName: row.role || "",
-  companyAccess: row.companyAccess || "All Companies",
-  imageUrl: null,
-});
+const toPublicCAUser = (row) => {
+  const allowed = Array.isArray(row.allowedModules) ? row.allowedModules : ["all"];
+  const isAll = allowed.includes("all");
+  return {
+    id: String(row.id),
+    name: row.name,
+    email: row.email,
+    role: COMPANY_ROLE,
+    department: row.role || "Company",
+    companyId: String(row.createdByCompanyId || ""),
+    isOwner: isAll,
+    allowedModules: allowed,
+    designationId: row.designationId || null,
+    designationName: row.role || "",
+    companyAccess: row.companyAccess || "All Companies",
+    mustResetPassword: Boolean(row.mustResetPassword),
+    imageUrl: null,
+  };
+};
 
 const toPublicEmployee = (row) => ({
   id: String(row.id),
@@ -90,6 +96,10 @@ const toPublicEmployee = (row) => ({
   designationId: row.designation_id != null ? String(row.designation_id) : row.designationId || null,
   designationName: row.designation_name || row.designationName || "",
   companyAccess: row.company_name || row.companyName || "All Companies",
+  establishmentId: row.establishment_id != null ? String(row.establishment_id) : null,
+  establishmentName: row.establishment_name || null,
+  countryId: row.country_id != null ? String(row.country_id) : null,
+  countryName: row.country_name || null,
   imageUrl: null,
 });
 
@@ -118,9 +128,14 @@ const sessionFor = (user, extra = {}) => ({
     employeeId: user.employeeId,
     mustResetPassword: Boolean(user.mustResetPassword),
     isOwner: Boolean(user.isOwner),
+    allowedModules: user.allowedModules || (user.isOwner ? ["all"] : []),
     designationId: user.designationId ?? null,
     designationName: user.designationName ?? null,
     companyAccess: user.companyAccess ?? null,
+    establishmentId: user.establishmentId ?? null,
+    establishmentName: user.establishmentName ?? null,
+    countryId: user.countryId ?? null,
+    countryName: user.countryName ?? null,
     imageUrl: user.imageUrl ?? null,
   },
 });
@@ -212,13 +227,16 @@ export const loginService = {
 
       const publicUser = toPublicCAUser(caUser);
       return sessionFor(
-        { ...publicUser, tokenSub: caUserSubject(caUser.id) },
+        { ...publicUser, tokenSub: caUserSubject(caUser.id), mustResetPassword: Boolean(caUser.mustResetPassword) },
         {
           type: "ca_user",
           caUserId: String(caUser.id),
           companyId: String(caUser.createdByCompanyId),
           designationId: caUser.designationId || null,
           companyAccess: caUser.companyAccess || "All Companies",
+          isOwner: publicUser.isOwner,
+          allowedModules: publicUser.allowedModules,
+          mustResetPassword: Boolean(caUser.mustResetPassword),
         },
       );
     }
@@ -354,8 +372,45 @@ export const loginService = {
 
   async resetPassword(userPayload, { password }) {
     const sub = String(userPayload?.sub ?? "");
+    const isCAUser = userPayload?.type === "ca_user" || sub.startsWith("causer:") || sub.startsWith("ca_user:");
+
+    if (isCAUser) {
+      const caUserId = String(userPayload?.caUserId || sub.replace(/^(causer:|ca_user:)/, ""));
+      const caUser = await loginRepository.findCAUserById(caUserId);
+      if (!caUser) {
+        throw new AppError("User not found", 404, "USER_NOT_FOUND");
+      }
+      if (caUser.status !== "Active") {
+        throw new AppError(INACTIVE_ACCOUNT_MESSAGE, 403, "USER_INACTIVE");
+      }
+
+      const next = String(password ?? "");
+      if (next.length < 6) {
+        throw new AppError("Password must be at least 6 characters", 422, "VALIDATION_ERROR");
+      }
+
+      const passwordHash = await bcrypt.hash(next, 10);
+      const updated = await loginRepository.updateCAUserPassword(caUserId, passwordHash);
+      if (!updated) {
+        throw new AppError("Unable to update password", 500, "PASSWORD_UPDATE_FAILED");
+      }
+
+      const publicUser = toPublicCAUser(updated);
+      return sessionFor(
+        { ...publicUser, tokenSub: caUserSubject(updated.id), mustResetPassword: false },
+        {
+          type: "ca_user",
+          caUserId: String(updated.id),
+          companyId: String(updated.createdByCompanyId),
+          designationId: updated.designationId || null,
+          companyAccess: updated.companyAccess || "All Companies",
+          mustResetPassword: false,
+        },
+      );
+    }
+
     if (!sub.startsWith("employee:")) {
-      throw new AppError("Only employees can reset password here", 403, "FORBIDDEN");
+      throw new AppError("Only employees or users can reset password here", 403, "FORBIDDEN");
     }
 
     const employeeId = sub.slice("employee:".length);

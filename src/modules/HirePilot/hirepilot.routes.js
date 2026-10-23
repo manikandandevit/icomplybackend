@@ -10,6 +10,8 @@ hirePilotRouter.get("/oauth/linkedin/callback", hirePilotController.linkedInCall
 // Public unauthenticated routes for candidates
 hirePilotRouter.get("/public/openings/:id", hirePilotController.getPublicOpening);
 hirePilotRouter.post("/public/openings/:id/apply", hirePilotController.submitApplication);
+hirePilotRouter.get("/public/openings/:id/apply-link", hirePilotController.redirectToApplyPage);
+hirePilotRouter.get("/careers/apply/:id", hirePilotController.redirectToApplyPage);
 
 hirePilotRouter.use(authenticateToken);
 hirePilotRouter.get("/credentials", hirePilotController.listCredentials);

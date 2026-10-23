@@ -4,9 +4,19 @@ import { caLeaveYearBalancesService } from "./modules/CALeaveYearBalances/caLeav
 
 const app = createApp();
 
-app.listen(config.port, "0.0.0.0", () => {
+const server = app.listen(config.port, "0.0.0.0", () => {
   console.log(`iComply API running on http://localhost:${config.port}`);
   void caLeaveYearBalancesService.rollForwardAll().catch((error) => {
     console.error("Leave year balance roll-forward failed", error);
   });
 });
+
+const cleanup = () => {
+  server.close(() => {
+    process.exit(0);
+  });
+};
+
+process.on("SIGINT", cleanup);
+process.on("SIGTERM", cleanup);
+

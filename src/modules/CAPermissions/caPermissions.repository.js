@@ -94,22 +94,31 @@ export const caPermissionsRepository = {
     return rows.map(mapPermission);
   },
 
-  async replaceAll(companyId, rows) {
+  async replaceAll(companyId, rows, designationId = null) {
     await ensureTable();
     const cid = parseRowId(companyId);
     if (!cid) {
       return [];
     }
 
+    const did = parseRowId(designationId);
+
     const client = await db.connect();
     try {
       await client.query("BEGIN");
-      await client.query(`DELETE FROM public.ca_designation_permissions WHERE created_by_company_id = $1`, [cid]);
+      if (did) {
+        await client.query(
+          `DELETE FROM public.ca_designation_permissions WHERE created_by_company_id = $1 AND designation_id = $2`,
+          [cid, did],
+        );
+      } else {
+        await client.query(`DELETE FROM public.ca_designation_permissions WHERE created_by_company_id = $1`, [cid]);
+      }
 
       for (const row of rows) {
-        const designationId = parseRowId(row.designationId);
+        const rowDid = parseRowId(row.designationId) || did;
         const navId = String(row.navId || "").trim();
-        if (!designationId || !navId) {
+        if (!rowDid || !navId) {
           continue;
         }
 
@@ -119,8 +128,14 @@ export const caPermissionsRepository = {
             created_by_company_id, designation_id, nav_id, can_view, can_add, can_edit
           )
           VALUES ($1, $2, $3, $4, $5, $6)
+          ON CONFLICT (created_by_company_id, designation_id, nav_id)
+          DO UPDATE SET
+            can_view = EXCLUDED.can_view,
+            can_add = EXCLUDED.can_add,
+            can_edit = EXCLUDED.can_edit,
+            updated_at = NOW()
           `,
-          [cid, designationId, navId, Boolean(row.view), Boolean(row.add), Boolean(row.edit)],
+          [cid, rowDid, navId, Boolean(row.view), Boolean(row.add), Boolean(row.edit)],
         );
       }
 

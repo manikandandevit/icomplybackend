@@ -25,7 +25,7 @@ const withHolidayType = async (companyId, payload) => {
 };
 
 export const caHolidaysService = {
-  list: (companyId) => caHolidaysRepository.list(companyId),
+  list: (companyId, filter = {}) => caHolidaysRepository.list(companyId, filter),
 
   async create(companyId, payload) {
     try {

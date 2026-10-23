@@ -30,7 +30,7 @@ const ensureTable = () => {
   return ready;
 };
 
-const selectColumns = `id, name, email, role, designation_id, company_access, status, password_hash, created_by_company_id, created_at`;
+const selectColumns = `id, name, email, role, designation_id, company_access, allowed_modules, status, password_hash, created_by_company_id, created_at, must_reset_password`;
 
 export const caUsersRepository = {
   async list(companyId) {
@@ -86,8 +86,8 @@ export const caUsersRepository = {
 
     const { rows } = await db.query(
       `
-      INSERT INTO public.ca_users (name, email, role, designation_id, company_access, status, password_hash, created_by_company_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO public.ca_users (name, email, role, designation_id, company_access, allowed_modules, status, password_hash, created_by_company_id, must_reset_password)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING ${selectColumns}
       `,
       [
@@ -96,9 +96,11 @@ export const caUsersRepository = {
         payload.role,
         parseRowId(payload.designationId),
         payload.companyAccess,
+        JSON.stringify(payload.allowedModules || ["all"]),
         payload.status || "Active",
         payload.passwordHash,
         cid,
+        payload.mustResetPassword !== false,
       ]
     );
 
@@ -123,10 +125,11 @@ export const caUsersRepository = {
         role = $3,
         designation_id = $4,
         company_access = $5,
-        status = $6,
-        password_hash = COALESCE($7, password_hash),
+        allowed_modules = COALESCE($6, allowed_modules),
+        status = $7,
+        password_hash = COALESCE($8, password_hash),
         updated_at = NOW()
-      WHERE id = $8 AND created_by_company_id = $9
+      WHERE id = $9 AND created_by_company_id = $10
       RETURNING ${selectColumns}
       `,
       [
@@ -135,6 +138,7 @@ export const caUsersRepository = {
         payload.role,
         parseRowId(payload.designationId),
         payload.companyAccess,
+        payload.allowedModules !== undefined ? JSON.stringify(payload.allowedModules) : null,
         payload.status,
         payload.passwordHash ?? null,
         rowId,
@@ -248,6 +252,24 @@ export const caUsersRepository = {
       LIMIT 1
       `,
       [rowId],
+    );
+
+    return rows[0] ? mapCAUser(rows[0]) : null;
+  },
+
+  async updatePasswordAndResetFlag(id, passwordHash, mustResetPassword) {
+    await ensureTable();
+    const rowId = parseRowId(id);
+    if (!rowId) return null;
+
+    const { rows } = await db.query(
+      `
+      UPDATE public.ca_users
+      SET password_hash = $1, must_reset_password = $2, updated_at = NOW()
+      WHERE id = $3
+      RETURNING ${selectColumns}
+      `,
+      [passwordHash, Boolean(mustResetPassword), rowId]
     );
 
     return rows[0] ? mapCAUser(rows[0]) : null;

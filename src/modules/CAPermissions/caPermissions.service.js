@@ -1,4 +1,5 @@
 import { AppError } from "../../core/errors/AppError.js";
+import { MODULE_NAV_MAP } from "./caPermissions.constants.js";
 import { caPermissionsRepository } from "./caPermissions.repository.js";
 
 const asMap = (rows) => {
@@ -25,34 +26,60 @@ const permissionsFor = async (companyId, { designationId, designationName }) => 
 export const caPermissionsService = {
   list: (companyId) => caPermissionsRepository.listByCompany(companyId),
 
-  async mine(companyId, { isOwner, designationId, designationName }) {
-    if (isOwner) {
+  async mine(companyId, { isOwner, designationId, designationName, allowedModules }) {
+    if (isOwner || allowedModules?.includes("all")) {
       return {
         isOwner: true,
+        allowedModules: ["all"],
         designationId: null,
         permissions: {},
       };
     }
 
+    if (Array.isArray(allowedModules) && allowedModules.length > 0 && !allowedModules.includes("all")) {
+      const modulePerms = {};
+      for (const mod of allowedModules) {
+        const navList = MODULE_NAV_MAP[mod] || [];
+        for (const navId of navList) {
+          modulePerms[navId] = { view: true, add: true, edit: true };
+        }
+      }
+      return {
+        isOwner: false,
+        allowedModules,
+        designationId: designationId ? String(designationId) : null,
+        permissions: modulePerms,
+      };
+    }
+
     return {
       isOwner: false,
+      allowedModules: ["all"],
       designationId: designationId ? String(designationId) : null,
       permissions: await permissionsFor(companyId, { designationId, designationName }),
     };
   },
 
-  async save(companyId, permissions) {
+  async save(companyId, permissions, designationId = null) {
     const rows = Array.isArray(permissions) ? permissions : [];
-    return caPermissionsRepository.replaceAll(companyId, rows);
+    return caPermissionsRepository.replaceAll(companyId, rows, designationId);
   },
 
-  async assertAccess(companyId, { isOwner, designationId, designationName }, navId, action) {
-    if (isOwner) {
+  async assertAccess(companyId, { isOwner, designationId, designationName, allowedModules }, navId, action) {
+    if (isOwner || allowedModules?.includes("all")) {
       return true;
     }
 
     if (!navId) {
       return true;
+    }
+
+    if (Array.isArray(allowedModules) && allowedModules.length > 0 && !allowedModules.includes("all")) {
+      const allowedNavs = new Set(allowedModules.flatMap((mod) => MODULE_NAV_MAP[mod] || []));
+      if (allowedNavs.has(navId)) {
+        return true;
+      }
+      throw new AppError("You do not have permission for this action", 403, "FORBIDDEN");
     }
 
     const perm = (await permissionsFor(companyId, { designationId, designationName }))[navId] || {
@@ -74,3 +101,4 @@ export const caPermissionsService = {
     throw new AppError("You do not have permission for this action", 403, "FORBIDDEN");
   },
 };
+

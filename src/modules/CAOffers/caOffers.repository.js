@@ -1,5 +1,5 @@
 import { db } from "../../core/db/pool.js";
-import { caOffersTableSql, mapCAOffer } from "./caOffers.constants.js";
+import { caOffersTableSql, ALLOWED_OFFER_FIELDS, mapCAOffer } from "./caOffers.constants.js";
 
 let ready = null;
 const ensureTable = () => {
@@ -25,6 +25,10 @@ const ensureTable = () => {
 export const caOffersRepository = {
   async ensureTable() {
     return ensureTable();
+  },
+
+  async getById(id, companyId) {
+    return this.findById(id, companyId);
   },
 
   async list(companyId, filter = {}) {
@@ -371,22 +375,24 @@ export const caOffersRepository = {
            location = COALESCE($11, location),
            hiring_manager = COALESCE($12, hiring_manager),
            approval_status = COALESCE($13, approval_status),
+           sent_on = COALESCE($14, sent_on),
            updated_at = NOW()
        WHERE id = $1 AND created_by_company_id = $2 RETURNING *`,
       [
         id, 
         companyId, 
         payload.ctc, 
-        payload.joiningBonus, 
-        payload.joiningDate, 
-        payload.deadline, 
-        payload.status, 
+        payload.joiningBonus || payload.joining_bonus || null, 
+        payload.joiningDate || payload.joining_date || null, 
+        payload.deadline || null, 
+        payload.status || null, 
         payload.reqId || payload.req_id || null,
-        payload.documentName,
-        payload.documentUrl,
+        payload.documentName || payload.document_name || null,
+        payload.documentUrl || payload.document_url || null,
         payload.location || null,
         payload.hiringManager || payload.hiring_manager || null,
-        payload.approvalStatus || payload.approval_status || null
+        payload.approvalStatus || payload.approval_status || null,
+        payload.sentOn || payload.sent_on || null
       ]
     );
     return rows[0] ? mapCAOffer(rows[0]) : null;
