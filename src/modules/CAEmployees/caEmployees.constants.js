@@ -96,6 +96,7 @@ const mapBanks = (raw) => {
 const mapDetails = (raw) => {
   const d = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   return {
+    ...d,
     countryId: String(d.countryId || "").trim(),
     dateOfBirth: dateFrom(d.dateOfBirth),
     fatherHusbandName: String(d.fatherHusbandName || "").trim(),
