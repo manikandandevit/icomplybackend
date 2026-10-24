@@ -53,7 +53,6 @@ export const caOnboardingController = {
       next(err);
     }
   },
-
   async notifyTask(req, res) {
     try {
       const validationError = caOnboardingValidator.validateNotifyTask(req.body);
@@ -61,7 +60,7 @@ export const caOnboardingController = {
         return fail(res, { message: validationError, status: 400 });
       }
 
-      const companyId = req.user?.companyId || req.companyId;
+      const companyId = req.user?.companyId;
       const result = await caOnboardingService.notifyTask(companyId, req.body);
       return success(res, {
         message: `Notification sent to ${req.body.assigneeName} (${result.assigneeEmail})`,
@@ -83,7 +82,7 @@ export const caOnboardingController = {
         return fail(res, { message: validationError, status: 400 });
       }
 
-      const companyId = req.user?.companyId || req.companyId;
+      const companyId = req.user?.companyId;
       const results = await caOnboardingService.notifyBatch(companyId, req.body);
       return success(res, {
         message: `Batch notifications processed for ${results.length} assignees`,
@@ -100,7 +99,7 @@ export const caOnboardingController = {
 
   async getTemplates(req, res) {
     try {
-      const companyId = String(req.user?.companyId || req.companyId || "");
+      const companyId = String(req.user?.companyId || "");
       const templates = await caOnboardingService.getTemplates(companyId);
       return success(res, {
         message: "Templates retrieved successfully",
@@ -117,7 +116,7 @@ export const caOnboardingController = {
 
   async saveTemplates(req, res) {
     try {
-      const companyId = String(req.user?.companyId || req.companyId || "");
+      const companyId = String(req.user?.companyId || "");
       if (!companyId) {
         return fail(res, { message: "Invalid company ID", status: 400 });
       }
@@ -147,7 +146,7 @@ export const caOnboardingController = {
 
   async getProgress(req, res) {
     try {
-      const companyId = String(req.user?.companyId || req.companyId || "");
+      const companyId = String(req.user?.companyId || "");
       const { progress, joiners } = await caOnboardingService.getProgress(companyId);
       return success(res, {
         message: "Joiners progress retrieved successfully",
@@ -164,7 +163,7 @@ export const caOnboardingController = {
 
   async saveProgress(req, res) {
     try {
-      const companyId = String(req.user?.companyId || req.companyId || "");
+      const companyId = String(req.user?.companyId || "");
       if (!companyId) {
         return fail(res, { message: "Invalid company ID", status: 400 });
       }

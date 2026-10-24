@@ -87,7 +87,7 @@ export const caOffersController = {
 
   async onboardCandidate(req, res, next) {
     try {
-      const companyId = req.companyId || req.user?.companyId;
+      const companyId = req.companyId;
       const { id } = req.params;
       const result = await caOffersService.onboardCandidate(id, companyId, req.body);
       return success(res, { data: result, message: result.message });
