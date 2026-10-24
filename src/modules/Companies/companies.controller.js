@@ -171,4 +171,21 @@ export const companiesController = {
       throw error;
     }
   }),
+
+  loginAsCompany: asyncHandler(async (req, res) => {
+    try {
+      const session = await companiesService.loginAsCompany(req.params.id);
+      return success(res, session, "Logged in as company successfully");
+    } catch (error) {
+      if (error instanceof AppError) {
+        return fail(res, {
+          status: error.statusCode,
+          message: error.message,
+          code: error.code,
+        });
+      }
+
+      throw error;
+    }
+  }),
 };

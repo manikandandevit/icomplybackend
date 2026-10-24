@@ -65,9 +65,7 @@ export const initialsFrom = (legalName, tradeName) => {
 export const STANDARD_PLAN_DAYS = 30;
 
 export const companyExpiryDate = (row) => {
-  const start = row.plan === "Standard"
-    ? (row.created_at || row.trial_started_at)
-    : (row.trial_started_at || row.created_at);
+  const start = row.trial_started_at || row.created_at;
   if (!start) return null;
   const startMs = new Date(start).getTime();
   if (Number.isNaN(startMs)) return null;
@@ -94,7 +92,7 @@ export const isFreeTrialExpired = (row) => {
 
 export const mapCompany = (row) => {
   const expired = isCompanyExpired(row);
-  const status = expired ? "Inactive" : row.status;
+  const status = row.status === "Active" && expired ? "Inactive" : row.status;
   const expiry = companyExpiryDate(row);
 
   return {

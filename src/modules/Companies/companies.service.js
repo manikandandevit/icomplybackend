@@ -1,4 +1,6 @@
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { config } from "../../config/index.js";
 import { AppError } from "../../core/errors/AppError.js";
 import { countryRepository } from "../Country/country.repository.js";
 import { pricingRepository } from "../Pricing/pricing.repository.js";
@@ -203,6 +205,50 @@ export const companiesService = {
     }
 
     return updated;
+  },
+
+  async loginAsCompany(id) {
+    const company = await companiesRepository.findById(id);
+
+    if (!company) {
+      throw new AppError("Company not found", 404, "COMPANY_NOT_FOUND");
+    }
+
+    if (company.status !== "Active") {
+      throw new AppError("Company is inactive. Please activate it first to login.", 400, "COMPANY_INACTIVE");
+    }
+
+    const publicUser = {
+      id: String(company.id),
+      name: company.tradeName || company.legalName || company.name,
+      email: company.email,
+      role: "CompanyAdmin",
+      department: "Company",
+      companyId: String(company.id),
+      isOwner: true,
+      companyAccess: "All Companies",
+      designationId: null,
+      imageUrl: company.logoUrl,
+    };
+
+    const token = jwt.sign(
+      {
+        sub: `company:${company.id}`,
+        email: company.email,
+        role: "CompanyAdmin",
+        type: "company",
+        companyId: String(company.id),
+      },
+      config.jwt.secret,
+      { expiresIn: config.jwt.expiresIn },
+    );
+
+    return {
+      token,
+      expiresIn: config.jwt.expiresIn,
+      user: publicUser,
+      company,
+    };
   },
 
   async addUsers(id, countryUsersInput) {
