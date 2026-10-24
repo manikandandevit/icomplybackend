@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { config } from "../../config/index.js";
 import { AppError } from "../../core/errors/AppError.js";
-import { FREE_TRIAL_DAYS, isFreeTrialExpired } from "../Companies/companies.constants.js";
+import { FREE_TRIAL_DAYS, isCompanyExpired } from "../Companies/companies.constants.js";
 import { loginRepository } from "./login.repository.js";
 import { caUsersRepository } from "../CAUsers/caUsers.repository.js";
 
@@ -141,7 +141,7 @@ const sessionFor = (user, extra = {}) => ({
 });
 
 const enforceCompanyAccess = async (company) => {
-  if (company.plan !== "Standard" && isFreeTrialExpired(company) && company.status === "Active") {
+  if (isCompanyExpired(company) && company.status === "Active") {
     await loginRepository.markCompanyInactive(company.id);
     company.status = "Inactive";
     company.trial_days_left = 0;
