@@ -235,11 +235,11 @@ export const companiesRepository = {
       SET
         status = $2,
         trial_started_at = CASE
-          WHEN $2 = 'Active' AND plan <> 'Standard' THEN NOW()
+          WHEN $2 = 'Active' THEN NOW()
           ELSE trial_started_at
         END,
         trial_days_left = CASE
-          WHEN $2 = 'Active' AND plan <> 'Standard' THEN $3
+          WHEN $2 = 'Active' THEN (CASE WHEN plan = 'Standard' THEN 30 ELSE $3 END)
           ELSE trial_days_left
         END
       WHERE id = $1

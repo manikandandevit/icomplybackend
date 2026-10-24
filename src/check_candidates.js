@@ -4,4 +4,8 @@ async function run() {
   console.log(rows);
   process.exit(0);
 }
+
+
+
+
 run();
