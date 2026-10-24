@@ -62,59 +62,82 @@ export const initialsFrom = (legalName, tradeName) => {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 };
 
-export const trialDaysRemaining = (row) => {
-  if (row.plan === "Standard") return null;
-  const start = row.trial_started_at || row.created_at;
-  if (!start) return row.trial_days_left ?? FREE_TRIAL_DAYS;
+export const STANDARD_PLAN_DAYS = 30;
+
+export const companyExpiryDate = (row) => {
+  const start = row.plan === "Standard"
+    ? (row.created_at || row.trial_started_at)
+    : (row.trial_started_at || row.created_at);
+  if (!start) return null;
   const startMs = new Date(start).getTime();
-  if (Number.isNaN(startMs)) return row.trial_days_left ?? FREE_TRIAL_DAYS;
-  const elapsedDays = Math.floor((Date.now() - startMs) / (24 * 60 * 60 * 1000));
-  return Math.max(0, FREE_TRIAL_DAYS - elapsedDays);
+  if (Number.isNaN(startMs)) return null;
+  const durationDays = row.plan === "Standard" ? STANDARD_PLAN_DAYS : FREE_TRIAL_DAYS;
+  return new Date(startMs + durationDays * 24 * 60 * 60 * 1000);
+};
+
+export const isCompanyExpired = (row) => {
+  const expiry = companyExpiryDate(row);
+  if (!expiry) return false;
+  return Date.now() > expiry.getTime();
+};
+
+export const trialDaysRemaining = (row) => {
+  const expiry = companyExpiryDate(row);
+  if (!expiry) return null;
+  const elapsedMs = expiry.getTime() - Date.now();
+  return Math.max(0, Math.ceil(elapsedMs / (24 * 60 * 60 * 1000)));
 };
 
 export const isFreeTrialExpired = (row) => {
-  if (row.plan === "Standard") return false;
-  const left = trialDaysRemaining(row);
-  return left != null && left <= 0;
+  return isCompanyExpired(row);
 };
 
-export const mapCompany = (row) => ({
-  id: String(row.id),
-  name: row.trade_name || row.legal_name,
-  legalName: row.legal_name,
-  tradeName: row.trade_name,
-  users: row.users,
-  plan: row.plan === "Standard" ? "Standard" : "Free Trial",
-  initials: row.initials || "CO",
-  accent: row.accent || "#0c2340",
-  city: row.city || "",
-  state: row.state || "",
-  establishments: row.establishments,
-  monthlyValue: row.monthly_value == null ? null : Number(row.monthly_value),
-  status: row.status,
-  trialDaysLeft: trialDaysRemaining(row),
-  trialStartedAt: row.trial_started_at ? new Date(row.trial_started_at).toISOString() : null,
-  pan: row.pan,
-  gstin: row.gstin || "",
-  email: row.email,
-  mobile: row.mobile || "",
-  contactName: row.contact_name || "",
-  street: row.street || "",
-  pin: row.pin || "",
-  addressCountryId: row.address_country_id ? String(row.address_country_id) : "",
-  countries: Array.isArray(row.countries) ? row.countries.map((item) => String(item)) : [],
-  countryUsers:
-    row.country_users && typeof row.country_users === "object" && !Array.isArray(row.country_users)
-      ? Object.fromEntries(
-          Object.entries(row.country_users).map(([id, count]) => [String(id), Number(count) || 0]),
-        )
-      : {},
-  billingCountryId: row.billing_country_id ? String(row.billing_country_id) : "",
-  billingCurrencyCode: row.billing_currency_code || "",
-  billingCurrencySymbol: row.billing_currency_symbol || "",
-  onboardAmount: row.onboard_amount == null ? null : Number(row.onboard_amount),
-  uen: row.uen || "",
-  ssm: row.ssm || "",
-  dbd: row.dbd || "",
-  logoUrl: row.logo_url ? `/companies/${row.id}/logo` : null,
-});
+export const mapCompany = (row) => {
+  const expired = isCompanyExpired(row);
+  const status = expired ? "Inactive" : row.status;
+  const expiry = companyExpiryDate(row);
+
+  return {
+    id: String(row.id),
+    name: row.trade_name || row.legal_name,
+    legalName: row.legal_name,
+    tradeName: row.trade_name,
+    users: row.users,
+    plan: row.plan === "Standard" ? "Standard" : "Free Trial",
+    initials: row.initials || "CO",
+    accent: row.accent || "#0c2340",
+    city: row.city || "",
+    state: row.state || "",
+    establishments: row.establishments,
+    monthlyValue: row.monthly_value == null ? null : Number(row.monthly_value),
+    status,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+    expiryDate: expiry ? expiry.toISOString() : null,
+    isExpired: expired,
+    trialDaysLeft: trialDaysRemaining(row),
+    trialStartedAt: row.trial_started_at ? new Date(row.trial_started_at).toISOString() : null,
+    pan: row.pan,
+    gstin: row.gstin || "",
+    email: row.email,
+    mobile: row.mobile || "",
+    contactName: row.contact_name || "",
+    street: row.street || "",
+    pin: row.pin || "",
+    addressCountryId: row.address_country_id ? String(row.address_country_id) : "",
+    countries: Array.isArray(row.countries) ? row.countries.map((item) => String(item)) : [],
+    countryUsers:
+      row.country_users && typeof row.country_users === "object" && !Array.isArray(row.country_users)
+        ? Object.fromEntries(
+            Object.entries(row.country_users).map(([id, count]) => [String(id), Number(count) || 0]),
+          )
+        : {},
+    billingCountryId: row.billing_country_id ? String(row.billing_country_id) : "",
+    billingCurrencyCode: row.billing_currency_code || "",
+    billingCurrencySymbol: row.billing_currency_symbol || "",
+    onboardAmount: row.onboard_amount == null ? null : Number(row.onboard_amount),
+    uen: row.uen || "",
+    ssm: row.ssm || "",
+    dbd: row.dbd || "",
+    logoUrl: row.logo_url ? `/companies/${row.id}/logo` : null,
+  };
+};
