@@ -44,7 +44,9 @@ const ensureTable = () => {
 
 const selectColumns = `
   m.id, m.master_type, m.name, m.related_id, m.start_time, m.end_time, m.total_hours, m.break_time,
-  m.multiplier, m.days, m.code, m.country_id, m.country_name, m.eligible_gender_id, m.min_hours, m.max_hours,
+  m.multiplier, m.days, m.code, m.country_id, m.country_name,
+  m.establishment_id, COALESCE(e.name, m.establishment_name) AS establishment_name,
+  m.eligible_gender_id, m.min_hours, m.max_hours,
   m.carry_forward, m.carry_forward_max, m.sandwich, m.prorate,
   m.created_by_company_id, m.created_at,
   r.name AS related_name,
@@ -60,11 +62,14 @@ const fromJoin = `
     ON g.id = m.eligible_gender_id
    AND g.master_type = 'gender'
    AND g.created_by_company_id = m.created_by_company_id
+  LEFT JOIN public.ca_establishments e
+    ON e.id = m.establishment_id
+   AND e.created_by_company_id = m.created_by_company_id
 `;
 
 const emptySelectRow = `
   SELECT id, master_type, name, related_id, start_time, end_time, total_hours, break_time, multiplier, days, code,
-         country_id, country_name, eligible_gender_id, min_hours, max_hours, carry_forward, carry_forward_max,
+         country_id, country_name, establishment_id, establishment_name, eligible_gender_id, min_hours, max_hours, carry_forward, carry_forward_max,
          created_by_company_id, created_at, NULL::text AS related_name, NULL::text AS eligible_gender_name
   FROM public.ca_hr_masters
 `;
@@ -134,7 +139,7 @@ export const caHrMasterRepository = {
     return rows[0] ? mapCAHrMaster(rows[0]) : null;
   },
 
-  async findDuplicateName(companyId, masterType, name, excludeId = null, relatedId = null, countryId = null) {
+  async findDuplicateName(companyId, masterType, name, excludeId = null, relatedId = null, countryId = null, establishmentId = null) {
     await ensureTable();
     const cid = parseRowId(companyId);
 
@@ -144,7 +149,47 @@ export const caHrMasterRepository = {
 
     const related = relatedId == null ? 0 : parseRowId(relatedId) || 0;
     const country = String(countryId || "all");
-    const params = [cid, masterType, name.toLowerCase(), related, country];
+    const estId = establishmentId == null || String(establishmentId).toLowerCase() === "all" ? 0 : parseRowId(establishmentId) || 0;
+    const params = [cid, masterType, name.toLowerCase(), related, country, estId];
+    let excludeSql = "";
+
+    if (excludeId) {
+      const rowId = parseRowId(excludeId);
+      if (rowId) {
+        excludeSql = " AND id <> $7";
+        params.push(rowId);
+      }
+    }
+
+    const { rows } = await db.query(
+      `
+      ${emptySelectRow}
+      WHERE created_by_company_id = $1
+        AND master_type = $2
+        AND lower(name) = $3
+        AND COALESCE(related_id, 0) = $4
+        AND COALESCE(country_id, 'all') = $5
+        AND COALESCE(establishment_id, 0) = $6
+        ${excludeSql}
+      LIMIT 1
+      `,
+      params
+    );
+
+    return rows[0] ? mapCAHrMaster(rows[0]) : null;
+  },
+
+  async findDuplicateCode(companyId, masterType, code, excludeId = null, countryId = null, establishmentId = null) {
+    await ensureTable();
+    const cid = parseRowId(companyId);
+
+    if (!cid || !code) {
+      return null;
+    }
+
+    const country = String(countryId || "all");
+    const estId = establishmentId == null || String(establishmentId).toLowerCase() === "all" ? 0 : parseRowId(establishmentId) || 0;
+    const params = [cid, masterType, code.toLowerCase(), country, estId];
     let excludeSql = "";
 
     if (excludeId) {
@@ -160,45 +205,9 @@ export const caHrMasterRepository = {
       ${emptySelectRow}
       WHERE created_by_company_id = $1
         AND master_type = $2
-        AND lower(name) = $3
-        AND COALESCE(related_id, 0) = $4
-        AND COALESCE(country_id, 'all') = $5
-        ${excludeSql}
-      LIMIT 1
-      `,
-      params
-    );
-
-    return rows[0] ? mapCAHrMaster(rows[0]) : null;
-  },
-
-  async findDuplicateCode(companyId, masterType, code, excludeId = null, countryId = null) {
-    await ensureTable();
-    const cid = parseRowId(companyId);
-
-    if (!cid || !code) {
-      return null;
-    }
-
-    const country = String(countryId || "all");
-    const params = [cid, masterType, code.toLowerCase(), country];
-    let excludeSql = "";
-
-    if (excludeId) {
-      const rowId = parseRowId(excludeId);
-      if (rowId) {
-        excludeSql = " AND id <> $5";
-        params.push(rowId);
-      }
-    }
-
-    const { rows } = await db.query(
-      `
-      ${emptySelectRow}
-      WHERE created_by_company_id = $1
-        AND master_type = $2
         AND lower(code) = $3
         AND COALESCE(country_id, 'all') = $4
+        AND COALESCE(establishment_id, 0) = $5
         ${excludeSql}
       LIMIT 1
       `,
@@ -219,15 +228,20 @@ export const caHrMasterRepository = {
     const relatedId = payload.relatedId != null ? parseRowId(payload.relatedId) : null;
     const eligibleGenderId =
       payload.eligibleGenderId != null ? parseRowId(payload.eligibleGenderId) : null;
+    const establishmentId =
+      payload.establishmentId != null && String(payload.establishmentId).toLowerCase() !== "all"
+        ? parseRowId(payload.establishmentId)
+        : null;
+    const establishmentName = payload.establishmentName || (establishmentId ? null : "All");
 
     const { rows } = await db.query(
       `
       INSERT INTO public.ca_hr_masters (
         master_type, name, related_id, start_time, end_time, total_hours, break_time, multiplier, days, code,
-        country_id, country_name, eligible_gender_id, min_hours, max_hours, carry_forward, carry_forward_max,
+        country_id, country_name, establishment_id, establishment_name, eligible_gender_id, min_hours, max_hours, carry_forward, carry_forward_max,
         sandwich, prorate, created_by_company_id
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
       RETURNING id
       `,
       [
@@ -243,6 +257,8 @@ export const caHrMasterRepository = {
         payload.code || null,
         payload.countryId || null,
         payload.countryName || null,
+        establishmentId,
+        establishmentName,
         eligibleGenderId,
         payload.minHours || null,
         payload.maxHours || null,
@@ -269,6 +285,11 @@ export const caHrMasterRepository = {
     const relatedId = payload.relatedId != null ? parseRowId(payload.relatedId) : null;
     const eligibleGenderId =
       payload.eligibleGenderId != null ? parseRowId(payload.eligibleGenderId) : null;
+    const establishmentId =
+      payload.establishmentId != null && String(payload.establishmentId).toLowerCase() !== "all"
+        ? parseRowId(payload.establishmentId)
+        : null;
+    const establishmentName = payload.establishmentName || (establishmentId ? null : "All");
 
     const { rowCount } = await db.query(
       `
@@ -285,15 +306,17 @@ export const caHrMasterRepository = {
         code = $9,
         country_id = $10,
         country_name = $11,
-        eligible_gender_id = $12,
-        min_hours = $13,
-        max_hours = $14,
-        carry_forward = $15,
-        carry_forward_max = $16,
-        sandwich = $17,
-        prorate = $18,
+        establishment_id = $12,
+        establishment_name = $13,
+        eligible_gender_id = $14,
+        min_hours = $15,
+        max_hours = $16,
+        carry_forward = $17,
+        carry_forward_max = $18,
+        sandwich = $19,
+        prorate = $20,
         updated_at = NOW()
-      WHERE id = $19 AND created_by_company_id = $20 AND master_type = $21
+      WHERE id = $21 AND created_by_company_id = $22 AND master_type = $23
       `,
       [
         payload.name,
@@ -307,6 +330,8 @@ export const caHrMasterRepository = {
         payload.code || null,
         payload.countryId || null,
         payload.countryName || null,
+        establishmentId,
+        establishmentName,
         eligibleGenderId,
         payload.minHours || null,
         payload.maxHours || null,

@@ -29,6 +29,8 @@ export const validateMasterBody = (masterType, body = {}) => {
     maxHours: null,
     carryForward: null,
     carryForwardMax: null,
+    establishmentId: null,
+    establishmentName: null,
   };
 
   const TYPES_WITH_CODE = ["leave-types", "shift-type", "ot-type"];
@@ -42,21 +44,38 @@ export const validateMasterBody = (masterType, body = {}) => {
     value.code = code;
   }
 
-  const countryId = String(body.countryId ?? body.values?.countryId ?? "").trim();
-  const countryName = normalizeText(body.countryName ?? body.values?.countryName);
-  if (!countryId) {
-    errors.countryId = "Country is required";
-  } else if (countryId.toLowerCase() === "all") {
+  const ESTABLISHMENT_SCOPED_TYPES = ["department", "employment-type", "designation", "shift-type"];
+  if (ESTABLISHMENT_SCOPED_TYPES.includes(masterType)) {
+    const establishmentId = String(body.establishmentId ?? body.values?.establishmentId ?? "").trim();
+    const establishmentName = normalizeText(body.establishmentName ?? body.values?.establishmentName);
+    if (!establishmentId || (masterType === "designation" && establishmentId.toLowerCase() === "all")) {
+      errors.establishmentId = "Establishment is required";
+    } else if (establishmentId.toLowerCase() === "all") {
+      value.establishmentId = null;
+      value.establishmentName = "All";
+    } else {
+      value.establishmentId = establishmentId;
+      value.establishmentName = establishmentName || null;
+    }
     value.countryId = "all";
     value.countryName = "All";
   } else {
-    value.countryId = countryId;
-    value.countryName = countryName || null;
+    const countryId = String(body.countryId ?? body.values?.countryId ?? "").trim();
+    const countryName = normalizeText(body.countryName ?? body.values?.countryName);
+    if (!countryId) {
+      errors.countryId = "Country is required";
+    } else if (countryId.toLowerCase() === "all") {
+      value.countryId = "all";
+      value.countryName = "All";
+    } else {
+      value.countryId = countryId;
+      value.countryName = countryName || null;
+    }
   }
 
   if (masterType === "designation") {
     const departmentId = String(body.departmentId ?? body.values?.departmentId ?? "").trim();
-    if (!departmentId) {
+    if (!departmentId || departmentId.toLowerCase() === "all") {
       errors.departmentId = "Department is required";
     } else {
       value.relatedId = departmentId;
