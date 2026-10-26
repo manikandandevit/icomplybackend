@@ -41,6 +41,27 @@ export const caCandidatesService = {
   },
 
   async create(companyId, payload) {
+    if (payload?.role) {
+      const { rows: approvedReqs } = await db.query(
+        `SELECT id, position FROM public.ca_job_requisitions 
+         WHERE created_by_company_id = $1 
+           AND LOWER(TRIM(approval_status)) = 'approved'`,
+        [companyId]
+      );
+
+      const hasMatchingApproval = approvedReqs.some(
+        (r) => String(r.position || "").trim().toLowerCase() === String(payload.role || "").trim().toLowerCase()
+      );
+
+      if (!hasMatchingApproval) {
+        throw new AppError(
+          `Cannot add candidate: Position "${payload.role}" does not have an approved job requisition. Candidate details can only be uploaded for approved positions.`,
+          400,
+          "REQUISITION_NOT_APPROVED"
+        );
+      }
+    }
+
     const candidate = await caCandidatesRepository.create(companyId, payload);
     if (candidate?.email) {
       void sendCandidateWelcomeEmail({ candidate, companyId }).catch((err) => {
@@ -405,5 +426,9 @@ export const caCandidatesService = {
 
   async updateDocuments(id, companyId, documents) {
     return caCandidatesRepository.updateDocuments(id, companyId, documents);
+  },
+
+  async updateChecklist(id, companyId, checklist) {
+    return caCandidatesRepository.updateChecklist(id, companyId, checklist);
   },
 };

@@ -703,38 +703,6 @@ export const DEFAULT_NOTIFICATION_MODULES = [
         },
       },
       {
-        id: "ONB-007",
-        code: "ONB-007",
-        title: "Employee profile created",
-        description: "The employee profile has been created successfully in iComply.",
-        recipient: "HR / Payroll",
-        defaultEmail: true,
-        defaultWhatsApp: true,
-        emailTemplate: {
-          subject: "Employee Profile Created: {{employee_name}} ({{job_title}})",
-          body: "Hello {{recipient_name}},\n\nThe official employee profile for {{employee_name}} has been created successfully in iComply.\n\nPlease verify payroll, statutory configurations, and attendance enrollment.\n\nRegards,\n{{company_name}}",
-        },
-        whatsAppTemplate: {
-          body: "Profile Created: Profile for *{{employee_name}}* (*{{job_title}}*) is created in iComply. Review profile: {{action_url}}",
-        },
-      },
-      {
-        id: "ONB-008",
-        code: "ONB-008",
-        title: "Employee ID generated",
-        description: "An employee ID has been generated for the new joiner.",
-        recipient: "Employee / HR",
-        defaultEmail: true,
-        defaultWhatsApp: true,
-        emailTemplate: {
-          subject: "Employee ID Generated: Welcome {{employee_name}} (ID: {{employee_id}})",
-          body: "Dear {{employee_name}},\n\nWelcome to {{company_name}}! Your employee ID has been generated: {{employee_id}}.\n\nYou can use this ID for login and employee self-service access.\n\nBest regards,\nHR Operations\n{{company_name}}",
-        },
-        whatsAppTemplate: {
-          body: "Welcome to {{company_name}}, *{{employee_name}}*! Your Employee ID is *{{employee_id}}*. Login portal: {{action_url}}",
-        },
-      },
-      {
         id: "ONB-009",
         code: "ONB-009",
         title: "IT and system access required",

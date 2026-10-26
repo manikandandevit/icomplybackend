@@ -27,6 +27,7 @@ const ensureTable = () => {
       await db.query(`ALTER TABLE public.ca_candidates ADD COLUMN IF NOT EXISTS workflow_stages JSONB DEFAULT '[]'::jsonb;`);
       await db.query(`ALTER TABLE IF EXISTS public.ca_candidates ALTER COLUMN stage TYPE VARCHAR(255);`);
       await db.query(`ALTER TABLE IF EXISTS public.ca_candidates ADD COLUMN IF NOT EXISTS current_round VARCHAR(255);`);
+      await db.query(`ALTER TABLE IF EXISTS public.ca_candidates ADD COLUMN IF NOT EXISTS pre_joining_checklist JSONB DEFAULT '{}'::jsonb;`);
     })();
   }
   return ready;
@@ -1213,5 +1214,22 @@ export const caCandidatesRepository = {
       }
     }
     return null;
-  }
+  },
+
+  async updateChecklist(id, companyId, checklist) {
+    await ensureTable();
+    const checklistJson = JSON.stringify(checklist || {});
+    const numId = Number(id);
+    if (!isNaN(numId) && numId > 0) {
+      const { rows } = await db.query(
+        `UPDATE public.ca_candidates 
+         SET pre_joining_checklist = $2::jsonb, updated_at = NOW() 
+         WHERE id = $1 AND (created_by_company_id = $3 OR $3 IS NULL)
+         RETURNING *`,
+        [numId, checklistJson, companyId]
+      );
+      return rows[0] ? mapCACandidate(rows[0]) : null;
+    }
+    return null;
+  },
 };

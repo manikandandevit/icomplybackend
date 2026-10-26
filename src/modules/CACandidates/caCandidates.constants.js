@@ -35,6 +35,7 @@ export const caCandidatesTableSql = `
   ALTER TABLE IF EXISTS public.ca_candidates ADD COLUMN IF NOT EXISTS current_round VARCHAR(255);
   ALTER TABLE IF EXISTS public.ca_candidates ADD COLUMN IF NOT EXISTS rejection_email_sent_at TIMESTAMP WITH TIME ZONE;
   ALTER TABLE IF EXISTS public.ca_candidates ADD COLUMN IF NOT EXISTS selection_email_sent_at TIMESTAMP WITH TIME ZONE;
+  ALTER TABLE IF EXISTS public.ca_candidates ADD COLUMN IF NOT EXISTS pre_joining_checklist JSONB DEFAULT '{}'::jsonb;
 `;
 
 export const mapCACandidate = (row) => {
@@ -91,6 +92,9 @@ export const mapCACandidate = (row) => {
     resumeName: row.resume_name || "",
     workflowStages: row.workflow_stages || [],
     documents: documents,
+    preJoiningChecklist: row.pre_joining_checklist && typeof row.pre_joining_checklist === "object"
+      ? row.pre_joining_checklist
+      : (typeof row.pre_joining_checklist === "string" ? JSON.parse(row.pre_joining_checklist || "{}") : {}),
     companyId: row.created_by_company_id,
     rejectionEmailSentAt: row.rejection_email_sent_at || null,
     selectionEmailSentAt: row.selection_email_sent_at || null,

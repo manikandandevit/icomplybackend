@@ -20,6 +20,8 @@ router.get("/:id/timeline", caCandidatesController.getTimeline);
 router.get("/:id/documents", caCandidatesController.getDocuments);
 router.patch("/:id/documents", caCandidatesController.updateDocuments);
 router.put("/:id/documents", caCandidatesController.updateDocuments);
+router.patch("/:id/checklist", caCandidatesController.updateChecklist);
+router.put("/:id/checklist", caCandidatesController.updateChecklist);
 router.get("/:id", caCandidatesController.getById);
 router.put("/:id", caCandidatesController.update);
 router.patch("/:id", caCandidatesController.update);

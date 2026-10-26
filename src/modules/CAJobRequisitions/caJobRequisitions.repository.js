@@ -93,6 +93,7 @@ export const caJobRequisitionsRepository = {
   },
 
   async create(companyId, payload) {
+    console.trace('DEBUG_REQUISITION_CREATE called by companyId:', companyId, 'position:', payload?.position);
     await ensureTable();
     const cid = parseRowId(payload.companyId) || parseRowId(companyId);
     if (!cid) return null;

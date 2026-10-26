@@ -2,6 +2,7 @@ import { createApp } from "./app.js";
 import { config } from "./config/index.js";
 import { caLeaveYearBalancesService } from "./modules/CALeaveYearBalances/caLeaveYearBalances.service.js";
 
+// Reloaded server to apply job requisition service updates
 const app = createApp();
 
 const server = app.listen(config.port, "0.0.0.0", () => {

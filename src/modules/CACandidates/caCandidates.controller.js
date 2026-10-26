@@ -181,4 +181,19 @@ export const caCandidatesController = {
       next(err);
     }
   },
+
+  async updateChecklist(req, res, next) {
+    try {
+      const companyId = req.companyId;
+      const { id } = req.params;
+      const { checklist } = req.body;
+      const candidate = await caCandidatesService.updateChecklist(id, companyId, checklist);
+      return success(res, {
+        data: { candidate, checklist: candidate?.preJoiningChecklist || checklist },
+        message: "Checklist updated successfully in database"
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
 };
