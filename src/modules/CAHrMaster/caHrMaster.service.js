@@ -8,6 +8,14 @@ const assertRelated = async (companyId, masterType, payload) => {
     if (!department) {
       throw new AppError("Selected department not found", 422, "DEPARTMENT_NOT_FOUND");
     }
+    if (
+      payload.establishmentId &&
+      department.values?.establishmentId &&
+      department.values.establishmentId !== "all" &&
+      String(department.values.establishmentId) !== String(payload.establishmentId)
+    ) {
+      throw new AppError("Selected department does not belong to the chosen establishment", 422, "DEPARTMENT_ESTABLISHMENT_MISMATCH");
+    }
   }
 
   if (masterType === "leave-types") {
@@ -37,7 +45,8 @@ export const caHrMasterService = {
       payload.name,
       null,
       payload.relatedId,
-      payload.countryId
+      payload.countryId,
+      payload.establishmentId
     );
 
     if (duplicate) {
@@ -50,7 +59,8 @@ export const caHrMasterService = {
         masterType,
         payload.code,
         null,
-        payload.countryId
+        payload.countryId,
+        payload.establishmentId
       );
       if (duplicateCode) {
         throw new AppError(`This code already exists`, 409, "MASTER_CODE_DUPLICATE");
@@ -82,7 +92,8 @@ export const caHrMasterService = {
       payload.name,
       id,
       payload.relatedId,
-      payload.countryId
+      payload.countryId,
+      payload.establishmentId
     );
 
     if (duplicate) {
@@ -95,7 +106,8 @@ export const caHrMasterService = {
         masterType,
         payload.code,
         id,
-        payload.countryId
+        payload.countryId,
+        payload.establishmentId
       );
       if (duplicateCode) {
         throw new AppError(`This code already exists`, 409, "MASTER_CODE_DUPLICATE");

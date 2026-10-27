@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS public.ca_hr_masters (
   code TEXT,
   country_id TEXT,
   country_name TEXT,
+  establishment_id INTEGER,
+  establishment_name TEXT,
   eligible_gender_id INTEGER,
   min_hours TEXT,
   max_hours TEXT,
@@ -65,6 +67,8 @@ ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS code TEXT;
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS break_time TEXT;
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS country_id TEXT;
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS country_name TEXT;
+ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS establishment_id INTEGER;
+ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS establishment_name TEXT;
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS eligible_gender_id INTEGER;
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS min_hours TEXT;
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS max_hours TEXT;
@@ -125,19 +129,24 @@ DROP INDEX IF EXISTS uq_ca_hr_masters_company_type_code;
 DROP INDEX IF EXISTS uq_ca_hr_masters_company_type_country_related_name;
 DROP INDEX IF EXISTS uq_ca_hr_masters_company_type_country_code;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_ca_hr_masters_company_type_country_related_name
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ca_hr_masters_company_type_est_country_related_name
   ON public.ca_hr_masters (
     created_by_company_id,
     master_type,
+    COALESCE(establishment_id, 0),
     COALESCE(country_id, 'all'),
     COALESCE(related_id, 0),
     lower(name)
   );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_ca_hr_masters_company_type_country_code
+DROP INDEX IF EXISTS uq_ca_hr_masters_company_type_country_code;
+DROP INDEX IF EXISTS uq_ca_hr_masters_company_type_est_country_code;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ca_hr_masters_company_type_est_country_code
   ON public.ca_hr_masters (
     created_by_company_id,
     master_type,
+    COALESCE(establishment_id, 0),
     COALESCE(country_id, 'all'),
     lower(code)
   )
@@ -149,6 +158,8 @@ export const mapCAHrMaster = (row) => {
     name: row.name || "",
     countryId: row.country_id || "all",
     countryName: row.country_name || (row.country_id && row.country_id !== "all" ? "" : "All"),
+    establishmentId: row.establishment_id != null ? String(row.establishment_id) : "all",
+    establishmentName: row.establishment_name || (row.establishment_id != null ? "" : "All"),
   };
 
   if (row.master_type === "designation") {

@@ -96,7 +96,7 @@ export const caJobRequisitionsRepository = {
     await ensureTable();
     const cid = parseRowId(payload.companyId) || parseRowId(companyId);
     if (!cid) return null;
-    
+
     // Generate reqId automatically like REQ-001
     const countRes = await db.query('SELECT COUNT(*) FROM public.ca_job_requisitions WHERE created_by_company_id = $1', [cid]);
     const nextNum = parseInt(countRes.rows[0].count, 10) + 1;
