@@ -66,6 +66,8 @@ export const caOffersRepository = {
         c.email,
         c.phone,
         COALESCE(o.location, c.location, jr.location) AS location,
+        COALESCE(c.establishment_id, jr.establishment_id) AS establishment_id,
+        COALESCE(c.establishment_name, jr.establishment_name) AS establishment_name,
         COALESCE(o.hiring_manager, jr.hiring_manager) AS hiring_manager,
         c.experience,
         c.skills,

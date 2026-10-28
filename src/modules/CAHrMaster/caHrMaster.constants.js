@@ -117,6 +117,42 @@ SET carry_forward = 'no',
     updated_at = NOW()
 WHERE master_type = 'leave-types'
   AND (carry_forward IS NULL OR btrim(carry_forward) = '');
+
+UPDATE public.ca_hr_masters
+SET establishment_name = 'All',
+    country_id = 'all',
+    country_name = 'All',
+    updated_at = NOW()
+WHERE master_type = 'gender'
+  AND establishment_id IS NULL
+  AND (establishment_name IS NULL OR establishment_name = '');
+
+UPDATE public.ca_hr_masters
+SET establishment_name = 'All',
+    country_id = 'all',
+    country_name = 'All',
+    updated_at = NOW()
+WHERE master_type = 'marital-status'
+  AND establishment_id IS NULL
+  AND (establishment_name IS NULL OR establishment_name = '');
+
+UPDATE public.ca_hr_masters
+SET establishment_name = 'All',
+    country_id = 'all',
+    country_name = 'All',
+    updated_at = NOW()
+WHERE master_type = 'employment-type'
+  AND establishment_id IS NULL
+  AND (establishment_name IS NULL OR establishment_name = '');
+
+UPDATE public.ca_hr_masters
+SET establishment_name = 'All',
+    country_id = 'all',
+    country_name = 'All',
+    updated_at = NOW()
+WHERE master_type IN ('payment-method', 'ot-type', 'bank-account-type')
+  AND establishment_id IS NULL
+  AND (establishment_name IS NULL OR establishment_name = '');
 `;
 
 export const caHrMastersIndexSql = `

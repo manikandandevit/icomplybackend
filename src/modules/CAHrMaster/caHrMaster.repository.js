@@ -96,9 +96,88 @@ export const caHrMasterRepository = {
     if (rows.length === 0 && masterType === "gender") {
       for (const name of ["Male", "Female", "Other"]) {
         await db.query(
-          `INSERT INTO public.ca_hr_masters (master_type, name, country_id, country_name, created_by_company_id)
-           VALUES ('gender', $1, 'all', 'All', $2)
-           ON CONFLICT DO NOTHING`,
+          `INSERT INTO public.ca_hr_masters (master_type, name, country_id, country_name, establishment_id, establishment_name, created_by_company_id)
+           VALUES ('gender', $1, 'all', 'All', NULL, 'All', $2)`,
+          [name, cid]
+        );
+      }
+      const recheck = await db.query(
+        `
+        SELECT ${selectColumns}
+        ${fromJoin}
+        WHERE m.created_by_company_id = $1 AND m.master_type = $2
+        ORDER BY m.id ASC
+        `,
+        [cid, masterType]
+      );
+      rows = recheck.rows;
+    }
+
+    if (rows.length === 0 && masterType === "marital-status") {
+      for (const name of ["Single", "Married", "Divorced", "Widowed"]) {
+        await db.query(
+          `INSERT INTO public.ca_hr_masters (master_type, name, country_id, country_name, establishment_id, establishment_name, created_by_company_id)
+           VALUES ('marital-status', $1, 'all', 'All', NULL, 'All', $2)`,
+          [name, cid]
+        );
+      }
+      const recheck = await db.query(
+        `
+        SELECT ${selectColumns}
+        ${fromJoin}
+        WHERE m.created_by_company_id = $1 AND m.master_type = $2
+        ORDER BY m.id ASC
+        `,
+        [cid, masterType]
+      );
+      rows = recheck.rows;
+    }
+
+    if (rows.length === 0 && masterType === "employment-type") {
+      for (const name of ["Full Time", "Part Time", "Contract", "Intern", "Probation"]) {
+        await db.query(
+          `INSERT INTO public.ca_hr_masters (master_type, name, country_id, country_name, establishment_id, establishment_name, created_by_company_id)
+           VALUES ('employment-type', $1, 'all', 'All', NULL, 'All', $2)`,
+          [name, cid]
+        );
+      }
+      const recheck = await db.query(
+        `
+        SELECT ${selectColumns}
+        ${fromJoin}
+        WHERE m.created_by_company_id = $1 AND m.master_type = $2
+        ORDER BY m.id ASC
+        `,
+        [cid, masterType]
+      );
+      rows = recheck.rows;
+    }
+
+    if (rows.length === 0 && masterType === "payment-method") {
+      for (const name of ["Bank Transfer", "Cash", "Cheque"]) {
+        await db.query(
+          `INSERT INTO public.ca_hr_masters (master_type, name, country_id, country_name, establishment_id, establishment_name, created_by_company_id)
+           VALUES ('payment-method', $1, 'all', 'All', NULL, 'All', $2)`,
+          [name, cid]
+        );
+      }
+      const recheck = await db.query(
+        `
+        SELECT ${selectColumns}
+        ${fromJoin}
+        WHERE m.created_by_company_id = $1 AND m.master_type = $2
+        ORDER BY m.id ASC
+        `,
+        [cid, masterType]
+      );
+      rows = recheck.rows;
+    }
+
+    if (rows.length === 0 && masterType === "bank-account-type") {
+      for (const name of ["Savings Account", "Current Account", "Salary Account"]) {
+        await db.query(
+          `INSERT INTO public.ca_hr_masters (master_type, name, country_id, country_name, establishment_id, establishment_name, created_by_company_id)
+           VALUES ('bank-account-type', $1, 'all', 'All', NULL, 'All', $2)`,
           [name, cid]
         );
       }

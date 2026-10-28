@@ -74,12 +74,13 @@ export const caEmployeesService = {
     return rows.filter((row) => inEmployeeScope(companyAccess, row));
   },
 
-  async get(id, companyId, companyAccess) {
+  async get(id, companyId, companyAccess, requesterEmployeeId = null) {
     const employee = await caEmployeesRepository.findById(id, companyId);
     if (!employee) {
       throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");
     }
-    if (!inEmployeeScope(companyAccess, employee)) {
+    const isSelf = requesterEmployeeId && String(requesterEmployeeId) === String(id);
+    if (!isSelf && !inEmployeeScope(companyAccess, employee)) {
       throw new AppError("You can only access your assigned company data", 403, "FORBIDDEN");
     }
     return employee;
@@ -140,12 +141,13 @@ export const caEmployeesService = {
     return updated;
   },
 
-  async update(id, companyId, payload, companyAccess) {
+  async update(id, companyId, payload, companyAccess, requesterEmployeeId = null) {
     const existing = await caEmployeesRepository.findById(id, companyId);
     if (!existing) {
       throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");
     }
-    if (!inEmployeeScope(companyAccess, existing) || !inEmployeeScope(companyAccess, payload)) {
+    const isSelf = requesterEmployeeId && String(requesterEmployeeId) === String(id);
+    if (!isSelf && (!inEmployeeScope(companyAccess, existing) || !inEmployeeScope(companyAccess, payload))) {
       throw new AppError("You can only access your assigned company data", 403, "FORBIDDEN");
     }
 

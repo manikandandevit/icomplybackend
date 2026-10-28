@@ -9,6 +9,17 @@ caEmployeesRouter.get("/counts", authenticateToken, requireCompanyAdmin, caEmplo
 caEmployeesRouter.get("/", authenticateToken, requireCompanyAdmin, caEmployeesController.list);
 caEmployeesRouter.get("/:id", authenticateToken, requireCompanyAdmin, caEmployeesController.get);
 caEmployeesRouter.post("/", authenticateToken, requireCompanyAdmin, requireNavPermission("employee-master"), caEmployeesController.create);
-caEmployeesRouter.put("/:id", authenticateToken, requireCompanyAdmin, requireNavPermission("employee-master"), caEmployeesController.update);
+caEmployeesRouter.put(
+  "/:id",
+  authenticateToken,
+  requireCompanyAdmin,
+  (req, res, next) => {
+    if (req.employeeId && String(req.employeeId) === String(req.params.id)) {
+      return next();
+    }
+    return requireNavPermission("employee-master")(req, res, next);
+  },
+  caEmployeesController.update
+);
 caEmployeesRouter.patch("/:id/status", authenticateToken, requireCompanyAdmin, requireNavPermission("employee-master"), caEmployeesController.updateStatus);
 caEmployeesRouter.delete("/:id", authenticateToken, requireCompanyAdmin, requireNavPermission("employee-master"), caEmployeesController.delete);

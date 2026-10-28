@@ -44,7 +44,17 @@ export const validateMasterBody = (masterType, body = {}) => {
     value.code = code;
   }
 
-  const ESTABLISHMENT_SCOPED_TYPES = ["department", "employment-type", "designation", "shift-type"];
+  const ESTABLISHMENT_SCOPED_TYPES = [
+    "department",
+    "employment-type",
+    "designation",
+    "shift-type",
+    "gender",
+    "marital-status",
+    "payment-method",
+    "ot-type",
+    "bank-account-type",
+  ];
   if (ESTABLISHMENT_SCOPED_TYPES.includes(masterType)) {
     const establishmentId = String(body.establishmentId ?? body.values?.establishmentId ?? "").trim();
     const establishmentName = normalizeText(body.establishmentName ?? body.values?.establishmentName);

@@ -82,14 +82,24 @@ const dateFrom = (value) => {
 const mapBanks = (raw) => {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map((item, index) => ({
-      id: String(item?.id || `bank-${index + 1}`),
-      bankAccountTypeId: String(item?.bankAccountTypeId || "").trim(),
-      bankAccountTypeName: String(item?.bankAccountTypeName || "").trim(),
-      accountNumber: String(item?.accountNumber || "").trim(),
-      ifscCode: String(item?.ifscCode || "").trim(),
-      bankNameBranch: String(item?.bankNameBranch || "").trim(),
-    }))
+    .map((item, index) => {
+      const bankName = String(item?.bankName || item?.bankNameBranch?.split("-")[0] || "").trim();
+      const branchName = String(item?.branchName || item?.bankNameBranch?.split("-")[1] || "").trim();
+      return {
+        id: String(item?.id || `bank-${index + 1}`),
+        bankName,
+        branchName,
+        bankAccountTypeId: String(item?.bankAccountTypeId || "").trim(),
+        bankAccountTypeName: String(item?.bankAccountTypeName || "").trim(),
+        accountNumber: String(item?.accountNumber || "").trim(),
+        ifscCode: String(item?.ifscCode || "").trim(),
+        bankNameBranch: String(
+          item?.bankNameBranch ||
+          (bankName ? `${bankName}${branchName ? ` - ${branchName}` : ""}` : "") ||
+          ""
+        ).trim(),
+      };
+    })
     .filter((item) => item.accountNumber || item.ifscCode || item.bankNameBranch);
 };
 
@@ -166,6 +176,7 @@ export const mapCAEmployee = (row) => {
     otApplicable: Boolean(row.ot_applicable),
     otTypeId: row.ot_type_id != null ? String(row.ot_type_id) : "",
     otTypeName: row.ot_type_name || "",
+    statutoryApplicable: Boolean(row.statutory_applicable ?? details.statutoryApplicable ?? false),
     genderId: row.gender_id != null ? String(row.gender_id) : "",
     genderName: row.gender_name || "",
     maritalStatusId: row.marital_status_id != null ? String(row.marital_status_id) : "",

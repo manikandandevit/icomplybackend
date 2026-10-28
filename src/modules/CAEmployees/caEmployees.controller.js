@@ -34,7 +34,7 @@ export const caEmployeesController = {
 
   get: asyncHandler(async (req, res) => {
     try {
-      const employee = await caEmployeesService.get(req.params.id, req.companyId, req.companyAccess);
+      const employee = await caEmployeesService.get(req.params.id, req.companyId, req.companyAccess, req.employeeId);
       return success(res, {
         message: "Employee loaded",
         data: { employee },
@@ -108,7 +108,7 @@ export const caEmployeesController = {
     }
 
     try {
-      const employee = await caEmployeesService.update(req.params.id, req.companyId, value, req.companyAccess);
+      const employee = await caEmployeesService.update(req.params.id, req.companyId, value, req.companyAccess, req.employeeId);
       return success(res, {
         message: "Employee updated successfully",
         data: { employee },

@@ -677,7 +677,7 @@ export const caOffersService = {
 
     // Step 6: If accepted, sync candidate stage to 'Onboarding' (or specified stage) & create onboarding record with manager, company, establishment
     if (status === 'Accepted') {
-      const nextStage = targetStage || 'Onboarding';
+      const nextStage = targetStage || 'Offer Acceptance';
       const joiningDate = payload.joiningDate || updated.joiningDate;
 
       if (payload.joiningDate) {
@@ -731,7 +731,7 @@ export const caOffersService = {
     let updatedCandidate = null;
     if (offer.candidateId) {
       try {
-        updatedCandidate = await caCandidatesService.updateStage(offer.candidateId, companyId, "Onboarding");
+        updatedCandidate = await caCandidatesService.updateStage(offer.candidateId, companyId, "Offer Acceptance");
         await caCandidatesService.updateWorkflowStep(offer.candidateId, companyId, {
           stageKey: "offer_acceptance",
           status: "Completed",

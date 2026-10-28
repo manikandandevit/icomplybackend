@@ -250,6 +250,21 @@ export const caInterviewsRepository = {
           );
         }
         if (updated.candidateId) {
+          let estEmpName = "";
+          try {
+            const cRes = await db.query(`SELECT establishment_id FROM public.ca_candidates WHERE id = $1`, [updated.candidateId]);
+            const estId = cRes.rows[0]?.establishment_id;
+            const empRes = await db.query(
+              `SELECT name FROM public.ca_employees 
+               WHERE (establishment_id = $1::integer OR $1 IS NULL) 
+                 AND (company_id = $2 OR $2 IS NULL) 
+                 AND (status IS NULL OR status != 'Inactive') 
+               ORDER BY id ASC LIMIT 1`,
+              [estId ? Number(estId) : null, companyId ? Number(companyId) : null]
+            );
+            if (empRes.rows[0]) estEmpName = empRes.rows[0].name;
+          } catch (e) {}
+
           await db.query(`
             UPDATE public.ca_candidates
             SET workflow_stages = COALESCE(
@@ -258,11 +273,11 @@ export const caInterviewsRepository = {
             ), updated_at = NOW()
             WHERE id = $2
           `, [JSON.stringify([
-            { id: "workflow-doc-collection", type: "workflow", stageKey: "document_collection", title: "Document collection", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: true },
-            { id: "workflow-offer-gen", type: "workflow", stageKey: "offer_generated", title: "Offer generated", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: false },
-            { id: "workflow-offer-approval", type: "workflow", stageKey: "offer_approval", title: "Offer approval", status: "Pending", assignedTo: "Kavitha S (Finance Head)", canMarkDone: false },
-            { id: "workflow-offer-release", type: "workflow", stageKey: "offer_release", title: "Offer release", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: false },
-            { id: "workflow-offer-acceptance", type: "workflow", stageKey: "offer_acceptance", title: "Offer acceptance", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: false }
+            { id: "workflow-doc-collection", type: "workflow", stageKey: "document_collection", title: "Document collection", status: "Pending", assignedTo: estEmpName, canMarkDone: true },
+            { id: "workflow-offer-gen", type: "workflow", stageKey: "offer_generated", title: "Offer generated", status: "Pending", assignedTo: estEmpName, canMarkDone: false },
+            { id: "workflow-offer-approval", type: "workflow", stageKey: "offer_approval", title: "Offer approval", status: "Pending", assignedTo: estEmpName, canMarkDone: false },
+            { id: "workflow-offer-release", type: "workflow", stageKey: "offer_release", title: "Offer release", status: "Pending", assignedTo: estEmpName, canMarkDone: false },
+            { id: "workflow-offer-acceptance", type: "workflow", stageKey: "offer_acceptance", title: "Offer acceptance", status: "Pending", assignedTo: estEmpName, canMarkDone: false }
           ]), updated.candidateId]);
         }
 
@@ -356,6 +371,21 @@ export const caInterviewsRepository = {
 
     // Initialize workflow stages on candidate if not set
     if (candId) {
+      let estEmpName = "";
+      try {
+        const cRes = await db.query(`SELECT establishment_id FROM public.ca_candidates WHERE id = $1`, [candId]);
+        const estId = cRes.rows[0]?.establishment_id;
+        const empRes = await db.query(
+          `SELECT name FROM public.ca_employees 
+           WHERE (establishment_id = $1::integer OR $1 IS NULL) 
+             AND (company_id = $2 OR $2 IS NULL) 
+             AND (status IS NULL OR status != 'Inactive') 
+           ORDER BY id ASC LIMIT 1`,
+          [estId ? Number(estId) : null, companyId ? Number(companyId) : null]
+        );
+        if (empRes.rows[0]) estEmpName = empRes.rows[0].name;
+      } catch (e) {}
+
       await db.query(`
         UPDATE public.ca_candidates
         SET workflow_stages = COALESCE(
@@ -364,11 +394,11 @@ export const caInterviewsRepository = {
         ), updated_at = NOW()
         WHERE id = $2
       `, [JSON.stringify([
-        { id: "workflow-doc-collection", type: "workflow", stageKey: "document_collection", title: "Document collection", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: true },
-        { id: "workflow-offer-gen", type: "workflow", stageKey: "offer_generated", title: "Offer generated", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: false },
-        { id: "workflow-offer-approval", type: "workflow", stageKey: "offer_approval", title: "Offer approval", status: "Pending", assignedTo: "Kavitha S (Finance Head)", canMarkDone: false },
-        { id: "workflow-offer-release", type: "workflow", stageKey: "offer_release", title: "Offer release", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: false },
-        { id: "workflow-offer-acceptance", type: "workflow", stageKey: "offer_acceptance", title: "Offer acceptance", status: "Pending", assignedTo: "Priya Menon (HR Manager)", canMarkDone: false }
+        { id: "workflow-doc-collection", type: "workflow", stageKey: "document_collection", title: "Document collection", status: "Pending", assignedTo: estEmpName, canMarkDone: true },
+        { id: "workflow-offer-gen", type: "workflow", stageKey: "offer_generated", title: "Offer generated", status: "Pending", assignedTo: estEmpName, canMarkDone: false },
+        { id: "workflow-offer-approval", type: "workflow", stageKey: "offer_approval", title: "Offer approval", status: "Pending", assignedTo: estEmpName, canMarkDone: false },
+        { id: "workflow-offer-release", type: "workflow", stageKey: "offer_release", title: "Offer release", status: "Pending", assignedTo: estEmpName, canMarkDone: false },
+        { id: "workflow-offer-acceptance", type: "workflow", stageKey: "offer_acceptance", title: "Offer acceptance", status: "Pending", assignedTo: estEmpName, canMarkDone: false }
       ]), candId]);
     }
 

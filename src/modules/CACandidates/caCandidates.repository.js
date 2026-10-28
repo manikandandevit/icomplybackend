@@ -528,12 +528,28 @@ export const caCandidatesRepository = {
           );
 
           const todayStr = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+          let defaultAssignee = "";
+          try {
+            const candEstId = candidate.establishmentId || candidate.establishment_id;
+            const empRes = await db.query(
+              `SELECT name FROM public.ca_employees 
+               WHERE (establishment_id = $1::integer OR $1 IS NULL) 
+                 AND (company_id = $2 OR $2 IS NULL) 
+                 AND (status IS NULL OR status != 'Inactive') 
+               ORDER BY id ASC LIMIT 1`,
+              [candEstId ? Number(candEstId) : null, companyId ? Number(companyId) : null]
+            );
+            if (empRes.rows[0]) {
+              defaultAssignee = empRes.rows[0].name;
+            }
+          } catch (e) {}
+
           const allCompletedStages = [
-            { id: "workflow-doc-collection", type: "workflow", stageKey: "document_collection", title: "Document collection", status: "Completed", date: todayStr, assignedTo: "Priya Menon (HR Manager)", canMarkDone: false },
-            { id: "workflow-offer-gen", type: "workflow", stageKey: "offer_generated", title: "Offer generated", status: "Completed", date: todayStr, assignedTo: "Priya Menon (HR Manager)", canMarkDone: false },
-            { id: "workflow-offer-approval", type: "workflow", stageKey: "offer_approval", title: "Offer approval", status: "Completed", date: todayStr, assignedTo: "Kavitha S (Finance Head)", canMarkDone: false },
-            { id: "workflow-offer-release", type: "workflow", stageKey: "offer_release", title: "Offer release", status: "Completed", date: todayStr, assignedTo: "Priya Menon (HR Manager)", canMarkDone: false },
-            { id: "workflow-offer-acceptance", type: "workflow", stageKey: "offer_acceptance", title: "Offer acceptance", status: "Completed", date: todayStr, assignedTo: "Priya Menon (HR Manager)", canMarkDone: false }
+            { id: "workflow-doc-collection", type: "workflow", stageKey: "document_collection", title: "Document collection", status: "Completed", date: todayStr, assignedTo: defaultAssignee, canMarkDone: false },
+            { id: "workflow-offer-gen", type: "workflow", stageKey: "offer_generated", title: "Offer generated", status: "Completed", date: todayStr, assignedTo: defaultAssignee, canMarkDone: false },
+            { id: "workflow-offer-approval", type: "workflow", stageKey: "offer_approval", title: "Offer approval", status: "Completed", date: todayStr, assignedTo: defaultAssignee, canMarkDone: false },
+            { id: "workflow-offer-release", type: "workflow", stageKey: "offer_release", title: "Offer release", status: "Completed", date: todayStr, assignedTo: defaultAssignee, canMarkDone: false },
+            { id: "workflow-offer-acceptance", type: "workflow", stageKey: "offer_acceptance", title: "Offer acceptance", status: "Completed", date: todayStr, assignedTo: defaultAssignee, canMarkDone: false }
           ];
           await db.query(
             `UPDATE public.ca_candidates SET workflow_stages = $2, updated_at = NOW() WHERE id = $1`,
@@ -834,6 +850,36 @@ export const caCandidatesRepository = {
       (r) => r.status === "Completed" || (r.feedback && String(r.feedback).trim().length > 0)
     );
 
+    const isDummyAssignee = (name) => {
+      if (!name || typeof name !== "string") return false;
+      const n = name.toLowerCase().trim();
+      return (
+        n.includes("priya menon") ||
+        n.includes("kavitha s") ||
+        n.includes("meera") ||
+        n.includes("rajesh kumar") ||
+        n.includes("anita singh") ||
+        n.includes("suresh reddy") ||
+        n.includes("deepika sen")
+      );
+    };
+
+    let estEmployeeName = "";
+    try {
+      const candEstId = candidate.establishmentId || candidate.establishment_id;
+      const empRes = await db.query(
+        `SELECT name FROM public.ca_employees 
+         WHERE (establishment_id = $1::integer OR $1 IS NULL) 
+           AND (company_id = $2 OR $2 IS NULL) 
+           AND (status IS NULL OR status != 'Inactive') 
+         ORDER BY id ASC LIMIT 1`,
+        [candEstId ? Number(candEstId) : null, companyId ? Number(companyId) : null]
+      );
+      if (empRes.rows[0]) {
+        estEmployeeName = empRes.rows[0].name;
+      }
+    } catch (e) {}
+
     const defaultWorkflowStages = [
       {
         id: "workflow-doc-collection",
@@ -841,7 +887,7 @@ export const caCandidatesRepository = {
         stageKey: "document_collection",
         title: "Document collection",
         status: "Pending",
-        assignedTo: "Priya Menon (HR Manager)",
+        assignedTo: estEmployeeName,
         canMarkDone: true,
       },
       {
@@ -850,7 +896,7 @@ export const caCandidatesRepository = {
         stageKey: "offer_generated",
         title: "Offer generated",
         status: "Pending",
-        assignedTo: "Priya Menon (HR Manager)",
+        assignedTo: estEmployeeName,
         canMarkDone: false,
       },
       {
@@ -859,7 +905,7 @@ export const caCandidatesRepository = {
         stageKey: "offer_approval",
         title: "Offer approval",
         status: "Pending",
-        assignedTo: "Kavitha S (Finance Head)",
+        assignedTo: estEmployeeName,
         canMarkDone: false,
       },
       {
@@ -868,7 +914,7 @@ export const caCandidatesRepository = {
         stageKey: "offer_release",
         title: "Offer release",
         status: "Pending",
-        assignedTo: "Priya Menon (HR Manager)",
+        assignedTo: estEmployeeName,
         canMarkDone: false,
       },
       {
@@ -877,7 +923,7 @@ export const caCandidatesRepository = {
         stageKey: "offer_acceptance",
         title: "Offer acceptance",
         status: "Pending",
-        assignedTo: "Priya Menon (HR Manager)",
+        assignedTo: estEmployeeName,
         canMarkDone: false,
       },
     ];
@@ -911,12 +957,19 @@ export const caCandidatesRepository = {
           savedStages = null;
         }
       }
-      // Merge saved stages with default workflow stages
+      // Merge saved stages with default workflow stages & clean dummy assignees
       let stagesToAppend = defaultWorkflowStages.map((def) => {
         const found = savedStages && Array.isArray(savedStages)
           ? savedStages.find((s) => s.stageKey === def.stageKey)
           : null;
-        return found ? { ...def, ...found } : { ...def };
+        if (found) {
+          const item = { ...def, ...found };
+          if (!item.assignedTo || isDummyAssignee(item.assignedTo)) {
+            item.assignedTo = estEmployeeName;
+          }
+          return item;
+        }
+        return { ...def };
       });
 
       const isOfferAccepted = candidate.stage === 'Offer Acceptance' || candidate.stage === 'Hired';
@@ -973,6 +1026,36 @@ export const caCandidatesRepository = {
     let candidate = await this.findById(id, companyId);
     const numId = Number(id);
 
+    let estEmployeeName = "";
+    try {
+      const candEstId = candidate?.establishmentId || candidate?.establishment_id;
+      const empRes = await db.query(
+        `SELECT name FROM public.ca_employees 
+         WHERE (establishment_id = $1::integer OR $1 IS NULL) 
+           AND (company_id = $2 OR $2 IS NULL) 
+           AND (status IS NULL OR status != 'Inactive') 
+         ORDER BY id ASC LIMIT 1`,
+        [candEstId ? Number(candEstId) : null, companyId ? Number(companyId) : null]
+      );
+      if (empRes.rows[0]) {
+        estEmployeeName = empRes.rows[0].name;
+      }
+    } catch (e) {}
+
+    const isDummyAssignee = (name) => {
+      if (!name || typeof name !== "string") return false;
+      const n = name.toLowerCase().trim();
+      return (
+        n.includes("priya menon") ||
+        n.includes("kavitha s") ||
+        n.includes("meera") ||
+        n.includes("rajesh kumar") ||
+        n.includes("anita singh") ||
+        n.includes("suresh reddy") ||
+        n.includes("deepika sen")
+      );
+    };
+
     const defaultWorkflowStages = [
       {
         id: "workflow-doc-collection",
@@ -980,7 +1063,7 @@ export const caCandidatesRepository = {
         stageKey: "document_collection",
         title: "Document collection",
         status: "Pending",
-        assignedTo: "Priya Menon (HR Manager)",
+        assignedTo: estEmployeeName,
         canMarkDone: true,
       },
       {
@@ -989,7 +1072,7 @@ export const caCandidatesRepository = {
         stageKey: "offer_generated",
         title: "Offer generated",
         status: "Pending",
-        assignedTo: "Priya Menon (HR Manager)",
+        assignedTo: estEmployeeName,
         canMarkDone: false,
       },
       {
@@ -998,7 +1081,7 @@ export const caCandidatesRepository = {
         stageKey: "offer_approval",
         title: "Offer approval",
         status: "Pending",
-        assignedTo: "Kavitha S (Finance Head)",
+        assignedTo: estEmployeeName,
         canMarkDone: false,
       },
       {
@@ -1007,7 +1090,7 @@ export const caCandidatesRepository = {
         stageKey: "offer_release",
         title: "Offer release",
         status: "Pending",
-        assignedTo: "Priya Menon (HR Manager)",
+        assignedTo: estEmployeeName,
         canMarkDone: false,
       },
       {
@@ -1016,13 +1099,16 @@ export const caCandidatesRepository = {
         stageKey: "offer_acceptance",
         title: "Offer acceptance",
         status: "Pending",
-        assignedTo: "Priya Menon (HR Manager)",
+        assignedTo: estEmployeeName,
         canMarkDone: false,
       },
     ];
 
     const currentStages = (candidate?.workflowStages && candidate.workflowStages.length > 0)
-      ? [...candidate.workflowStages]
+      ? candidate.workflowStages.map((s) => ({
+          ...s,
+          assignedTo: (!s.assignedTo || isDummyAssignee(s.assignedTo)) ? estEmployeeName : s.assignedTo,
+        }))
       : [...defaultWorkflowStages];
 
     const idx = currentStages.findIndex((s) => s.stageKey === stageKey || s.title?.toLowerCase() === stageKey?.toLowerCase());

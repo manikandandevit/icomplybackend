@@ -6,19 +6,19 @@ export const caOnboardingRouter = Router();
 
 caOnboardingRouter.use(authenticateToken, requireCompanyAdmin);
 
-// Onboarding CRUD
-caOnboardingRouter.get("/", caOnboardingController.list);
-caOnboardingRouter.get("/:id", caOnboardingController.getById);
-caOnboardingRouter.patch("/:id/status", caOnboardingController.updateStatus);
+// Templates (must be before /:id)
+caOnboardingRouter.get("/templates", caOnboardingController.getTemplates);
+caOnboardingRouter.post("/templates", caOnboardingController.saveTemplates);
+
+// Progress (must be before /:id)
+caOnboardingRouter.get("/progress", caOnboardingController.getProgress);
+caOnboardingRouter.post("/progress", caOnboardingController.saveProgress);
 
 // Task notifications
 caOnboardingRouter.post("/notify-task", caOnboardingController.notifyTask);
 caOnboardingRouter.post("/notify-batch", caOnboardingController.notifyBatch);
 
-// Templates
-caOnboardingRouter.get("/templates", caOnboardingController.getTemplates);
-caOnboardingRouter.post("/templates", caOnboardingController.saveTemplates);
-
-// Progress
-caOnboardingRouter.get("/progress", caOnboardingController.getProgress);
-caOnboardingRouter.post("/progress", caOnboardingController.saveProgress);
+// Onboarding CRUD
+caOnboardingRouter.get("/", caOnboardingController.list);
+caOnboardingRouter.get("/:id", caOnboardingController.getById);
+caOnboardingRouter.patch("/:id/status", caOnboardingController.updateStatus);

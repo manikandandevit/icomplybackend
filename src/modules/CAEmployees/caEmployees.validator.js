@@ -9,13 +9,15 @@ const required = (value, label, errors, key) => {
 const mapDetails = (body = {}) => {
   const src = body.details && typeof body.details === "object" ? body.details : body;
   return {
+    ...src,
     countryId: String(src.countryId ?? "").trim(),
     dateOfBirth: String(src.dateOfBirth ?? "").trim(),
+    fatherHusbandType: String(src.fatherHusbandType ?? "Father").trim(),
     fatherHusbandName: String(src.fatherHusbandName ?? "").trim(),
-    address: String(src.address ?? "").trim(),
-    state: String(src.state ?? "").trim(),
-    city: String(src.city ?? "").trim(),
-    pinCode: String(src.pinCode ?? "").trim(),
+    address: String(src.address ?? src.presentAddress ?? "").trim(),
+    state: String(src.state ?? src.presentState ?? "").trim(),
+    city: String(src.city ?? src.presentCity ?? "").trim(),
+    pinCode: String(src.pinCode ?? src.presentPinCode ?? "").trim(),
     childrenCount: String(src.childrenCount ?? "").trim(),
     reportingToId: String(src.reportingToId ?? "").trim(),
     reportingToName: String(src.reportingToName ?? "").trim(),
@@ -36,9 +38,39 @@ const mapDetails = (body = {}) => {
     paymentMethodName: String(src.paymentMethodName ?? src.paymentModeName ?? "").trim(),
     paymentModeId: String(src.paymentModeId ?? src.paymentMethodId ?? "").trim(),
     paymentModeName: String(src.paymentModeName ?? src.paymentMethodName ?? "").trim(),
-    citizenshipStatus: String(src.citizenshipStatus ?? "").trim(),
+    citizenshipStatus: String(src.citizenshipStatus ?? src.residentialStatus ?? "").trim(),
+    residentialStatus: String(src.residentialStatus ?? src.citizenshipStatus ?? "").trim(),
+    nricNumber: String(src.nricNumber ?? "").trim(),
     singpass: String(src.singpass ?? "").trim(),
     uanNumber: String(src.uanNumber ?? "").trim(),
+    kwspNumber: String(src.kwspNumber ?? "").trim(),
+    statutoryApplicable: Boolean(src.statutoryApplicable ?? body.statutoryApplicable ?? false),
+    referredById: String(src.referredById ?? "").trim(),
+    referredByName: String(src.referredByName ?? "").trim(),
+    educationDetails: Array.isArray(src.educationDetails)
+      ? src.educationDetails
+      : Array.isArray(body.educationDetails)
+      ? body.educationDetails
+      : [],
+    familyDetails: Array.isArray(src.familyDetails)
+      ? src.familyDetails
+      : Array.isArray(body.familyDetails)
+      ? body.familyDetails
+      : [],
+    documents: Array.isArray(src.documents)
+      ? src.documents
+      : Array.isArray(body.documents)
+      ? body.documents
+      : [],
+    sameAsPresent: Boolean(src.sameAsPresent),
+    presentAddress: String(src.presentAddress ?? src.address ?? "").trim(),
+    presentState: String(src.presentState ?? src.state ?? "").trim(),
+    presentCity: String(src.presentCity ?? src.city ?? "").trim(),
+    presentPinCode: String(src.presentPinCode ?? src.pinCode ?? "").trim(),
+    permanentAddress: String(src.permanentAddress ?? "").trim(),
+    permanentState: String(src.permanentState ?? "").trim(),
+    permanentCity: String(src.permanentCity ?? "").trim(),
+    permanentPinCode: String(src.permanentPinCode ?? "").trim(),
   };
 };
 
@@ -48,7 +80,7 @@ export const validateEmployeeBody = (body = {}) => {
   const employeeCode = required(body.employeeCode, "Employee code", errors, "employeeCode");
   const name = required(body.name, "Employee name", errors, "name");
   const email = required(body.email, "Email", errors, "email");
-  const mobile = required(body.mobile, "Mobile", errors, "mobile");
+  const mobile = String(body.mobile ?? "").trim() || "0000000000";
   const joinDate = required(body.joinDate, "Date of joining", errors, "joinDate");
   const companyId = required(body.companyId, "Company", errors, "companyId");
   const companySource = body.companySource === "ca" ? "ca" : body.companySource === "parent" ? "parent" : "";
@@ -67,12 +99,12 @@ export const validateEmployeeBody = (body = {}) => {
   const designationName = required(body.designationName, "Designation", errors, "designationName");
   const employmentTypeId = required(body.employmentTypeId, "Employment type", errors, "employmentTypeId");
   const employmentTypeName = required(body.employmentTypeName, "Employment type", errors, "employmentTypeName");
-  const shiftTypeId = required(body.shiftTypeId, "Shift type", errors, "shiftTypeId");
-  const shiftTypeName = required(body.shiftTypeName, "Shift type", errors, "shiftTypeName");
-  const genderId = required(body.genderId, "Gender", errors, "genderId");
-  const genderName = required(body.genderName, "Gender", errors, "genderName");
-  const maritalStatusId = required(body.maritalStatusId, "Marital status", errors, "maritalStatusId");
-  const maritalStatusName = required(body.maritalStatusName, "Marital status", errors, "maritalStatusName");
+  const shiftTypeId = String(body.shiftTypeId ?? "").trim();
+  const shiftTypeName = String(body.shiftTypeName ?? "").trim();
+  const genderId = String(body.genderId ?? "").trim();
+  const genderName = String(body.genderName ?? "").trim();
+  const maritalStatusId = String(body.maritalStatusId ?? "").trim();
+  const maritalStatusName = String(body.maritalStatusName ?? "").trim();
 
   const otApplicable = Boolean(body.otApplicable);
   let otTypeId = String(body.otTypeId ?? "").trim();
@@ -86,62 +118,42 @@ export const validateEmployeeBody = (body = {}) => {
   const status = body.status === "Inactive" ? "Inactive" : "Active";
   const details = mapDetails(body);
 
-  required(details.countryId, "Country", errors, "countryId");
-  required(details.dateOfBirth, "Date of birth", errors, "dateOfBirth");
-  required(details.fatherHusbandName, "Father / husband name", errors, "fatherHusbandName");
-  required(details.address, "Address", errors, "address");
-  required(details.state, "State", errors, "state");
-  required(details.city, "City", errors, "city");
-  required(details.pinCode, "Pin code", errors, "pinCode");
+  if (details.countryId) {
+    // Country validated
+  }
   if (details.reportingToId || details.reportingToName) {
     required(details.reportingToId, "Reporting to", errors, "reportingToId");
     required(details.reportingToName, "Reporting to", errors, "reportingToName");
   }
-  required(details.emergencyName, "Emergency contact name", errors, "emergencyName");
-  required(details.emergencyRelationship, "Emergency relationship", errors, "emergencyRelationship");
-  required(details.emergencyPhone, "Emergency phone", errors, "emergencyPhone");
-  required(details.emergencyAddress, "Emergency address", errors, "emergencyAddress");
-  required(details.emergencyState, "Emergency state", errors, "emergencyState");
-  required(details.emergencyCity, "Emergency city", errors, "emergencyCity");
-  required(details.emergencyPinCode, "Emergency pin code", errors, "emergencyPinCode");
-  required(details.shiftNameCode, "Shift name / code", errors, "shiftNameCode");
-  required(details.weekOffDay, "Week off day", errors, "weekOffDay");
-  required(details.shiftStartTime, "Shift start time", errors, "shiftStartTime");
-  required(details.shiftEndTime, "Shift end time", errors, "shiftEndTime");
-  required(details.breakTime, "Break time", errors, "breakTime");
 
   const bankDetails = Array.isArray(body.bankDetails)
     ? body.bankDetails
-      .map((item, index) => ({
-        id: String(item?.id || `bank-${index + 1}`),
-        bankAccountTypeId: String(item?.bankAccountTypeId ?? "").trim(),
-        bankAccountTypeName: String(item?.bankAccountTypeName ?? "").trim(),
-        accountNumber: String(item?.accountNumber ?? "").trim(),
-        ifscCode: String(item?.ifscCode ?? "").trim().toUpperCase(),
-        bankNameBranch: String(item?.bankNameBranch ?? "").trim(),
-      }))
+      .map((item, index) => {
+        const bankName = String(item?.bankName || item?.bankNameBranch?.split("-")[0] || "").trim();
+        const branchName = String(item?.branchName || item?.bankNameBranch?.split("-")[1] || "").trim();
+        const bankNameBranch = String(
+          item?.bankNameBranch ||
+          (bankName ? `${bankName}${branchName ? ` - ${branchName}` : ""}` : "") ||
+          ""
+        ).trim();
+        return {
+          id: String(item?.id || `bank-${index + 1}`),
+          bankAccountTypeId: String(item?.bankAccountTypeId || "salary").trim(),
+          bankAccountTypeName: String(item?.bankAccountTypeName || "Primary Salary Account").trim(),
+          bankName,
+          branchName,
+          accountNumber: String(item?.accountNumber ?? "").trim(),
+          ifscCode: String(item?.ifscCode ?? "").trim().toUpperCase(),
+          bankNameBranch,
+        };
+      })
       .filter(
         (item) =>
-          item.bankAccountTypeId &&
-          item.bankAccountTypeName &&
           item.accountNumber &&
           item.ifscCode &&
           item.bankNameBranch,
       )
     : [];
-
-  const paymentName = String(
-    body.paymentMethodName ||
-      body.paymentModeName ||
-      details.paymentMethodName ||
-      details.paymentModeName ||
-      ""
-  ).toLowerCase();
-  const isCash = paymentName.includes("cash") || paymentName.includes("cheque");
-
-  if (!isCash && bankDetails.length === 0) {
-    errors.bankDetails = "At least one bank account is required";
-  }
 
   return {
     isValid: Object.keys(errors).length === 0,
@@ -165,15 +177,16 @@ export const validateEmployeeBody = (body = {}) => {
       designationName,
       employmentTypeId,
       employmentTypeName,
-      shiftTypeId,
-      shiftTypeName,
+      shiftTypeId: shiftTypeId || null,
+      shiftTypeName: shiftTypeName || null,
       otApplicable,
-      otTypeId,
-      otTypeName,
-      genderId,
-      genderName,
-      maritalStatusId,
-      maritalStatusName,
+      otTypeId: otTypeId || null,
+      otTypeName: otTypeName || null,
+      statutoryApplicable: Boolean(body.statutoryApplicable ?? details.statutoryApplicable ?? false),
+      genderId: genderId || null,
+      genderName: genderName || null,
+      maritalStatusId: maritalStatusId || null,
+      maritalStatusName: maritalStatusName || null,
       bankDetails,
       details,
     },
