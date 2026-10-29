@@ -72,6 +72,28 @@ export const loginRepository = {
     );
   },
 
+  async updateCompanyPassword(id, passwordHash) {
+    await db.query(
+      `
+      UPDATE public.companies
+      SET password_hash = $1, updated_at = NOW()
+      WHERE id = $2
+      `,
+      [passwordHash, id],
+    );
+  },
+
+  async updateSuperAdminPassword(id, passwordHash) {
+    await db.query(
+      `
+      UPDATE public."super_Admin"
+      SET "Password" = $1
+      WHERE id = $2
+      `,
+      [passwordHash, id],
+    );
+  },
+
   async findCAUserByEmail(email) {
     const { rows } = await db.query(
       `

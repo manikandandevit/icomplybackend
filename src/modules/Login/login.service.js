@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { config } from "../../config/index.js";
 import { AppError } from "../../core/errors/AppError.js";
+import { sendMail } from "../../core/mail/mailer.js";
 import { FREE_TRIAL_DAYS, isCompanyExpired } from "../Companies/companies.constants.js";
 import { loginRepository } from "./login.repository.js";
 import { caUsersRepository } from "../CAUsers/caUsers.repository.js";
@@ -445,6 +446,168 @@ export const loginService = {
         mustResetPassword: false,
       },
     );
+  },
+
+  async requestPasswordReset({ email, origin }) {
+    const targetEmail = String(email || "").trim().toLowerCase();
+    if (!targetEmail) {
+      throw new AppError("Email address is required", 400, "EMAIL_REQUIRED");
+    }
+
+    let userType = null;
+    let userId = null;
+    let userName = "";
+
+    // 1. Check employee
+    const employee = await loginRepository.findEmployeeByEmail(targetEmail);
+    if (employee) {
+      if (employee.status === "Inactive") {
+        throw new AppError("Account is inactive. Please contact your company administrator.", 403, "ACCOUNT_INACTIVE");
+      }
+      userType = "employee";
+      userId = String(employee.id);
+      userName = employee.name || "Employee";
+    }
+
+    // 2. Check CA User
+    if (!userType) {
+      const caUser = await loginRepository.findCAUserByEmail(targetEmail);
+      if (caUser) {
+        if (caUser.status === "Inactive") {
+          throw new AppError("Account is inactive. Please contact your administrator.", 403, "ACCOUNT_INACTIVE");
+        }
+        userType = "ca_user";
+        userId = String(caUser.id);
+        userName = caUser.name || "User";
+      }
+    }
+
+    // 3. Check Company Admin
+    if (!userType) {
+      const company = await loginRepository.findCompanyByEmail(targetEmail);
+      if (company) {
+        if (company.status === "Inactive") {
+          throw new AppError("Company account is inactive.", 403, "ACCOUNT_INACTIVE");
+        }
+        userType = "company";
+        userId = String(company.id);
+        userName = company.legal_name || company.trade_name || "Company Admin";
+      }
+    }
+
+    // 4. Check Super Admin
+    if (!userType) {
+      const superAdmin = await loginRepository.findSuperAdminByEmail(targetEmail);
+      if (superAdmin) {
+        userType = "super_admin";
+        userId = String(superAdmin.id);
+        userName = superAdmin.User_Name || "Super Admin";
+      }
+    }
+
+    if (!userType) {
+      throw new AppError("No registered account found with this email address", 404, "USER_NOT_FOUND");
+    }
+
+    const resetToken = jwt.sign(
+      {
+        sub: `reset:${userType}:${userId}`,
+        id: userId,
+        userType,
+        email: targetEmail,
+        purpose: "reset_password",
+      },
+      config.jwt.secret,
+      { expiresIn: "1h" }
+    );
+
+    let clientOrigin = origin ? String(origin).trim().replace(/\/$/, "") : "";
+    if (!clientOrigin) {
+      if (process.env.FRONTEND_URL) {
+        clientOrigin = process.env.FRONTEND_URL.trim().replace(/\/$/, "");
+      } else if (config.env === "production") {
+        const liveOrigin = (config.clientOrigins || []).find((o) => o && !o.includes("localhost"));
+        clientOrigin = liveOrigin ? liveOrigin.replace(/\/$/, "") : "https://icomplyone.com";
+      } else {
+        clientOrigin = (config.clientOrigins[0] || "http://localhost:5173").replace(/\/$/, "");
+      }
+    }
+
+    const resetUrl = `${clientOrigin}/reset-password?token=${encodeURIComponent(resetToken)}`;
+
+    await sendMail({
+      to: targetEmail,
+      subject: "Reset Your iComply Password",
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+          <div style="margin-bottom: 24px;">
+            <span style="font-size: 22px; font-weight: 700; color: #0c2340; letter-spacing: -0.5px;">iComply</span>
+          </div>
+          <h2 style="color: #0c2340; font-size: 20px; font-weight: 700; margin: 0 0 12px 0;">Reset Your Password</h2>
+          <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0;">
+            Hello ${userName},<br/>
+            We received a request to reset the password for your iComply account (${targetEmail}). Click the button below to choose a new password:
+          </p>
+          <div style="margin: 28px 0;">
+            <a href="${resetUrl}" style="background-color: #0c2340; color: #ffffff; padding: 12px 28px; font-size: 14px; font-weight: 600; text-decoration: none; border-radius: 8px; display: inline-block;">
+              Reset Password
+            </a>
+          </div>
+          <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin: 0 0 16px 0;">
+            If the button doesn't work, copy and paste this link into your browser:<br/>
+            <a href="${resetUrl}" style="color: #f97316; word-break: break-all;">${resetUrl}</a>
+          </p>
+          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+          <p style="color: #94a3b8; font-size: 11px; margin: 0;">
+            This password reset link will expire in 1 hour. If you did not make this request, you can safely ignore this email.
+          </p>
+        </div>
+      `,
+      text: `Hello ${userName},\n\nReset your iComply password by clicking the link below:\n${resetUrl}\n\nThis link expires in 1 hour.`,
+    });
+
+    return {
+      message: "Password reset link has been sent to your email address.",
+    };
+  },
+
+  async resetPasswordWithToken({ token, password }) {
+    if (!token) {
+      throw new AppError("Reset token is required", 400, "TOKEN_REQUIRED");
+    }
+    const cleanPassword = String(password ?? "").trim();
+    if (!cleanPassword || cleanPassword.length < 6) {
+      throw new AppError("Password must be at least 6 characters", 422, "VALIDATION_ERROR");
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, config.jwt.secret);
+    } catch {
+      throw new AppError("Invalid or expired password reset link. Please request a new one.", 400, "TOKEN_EXPIRED");
+    }
+
+    if (decoded.purpose !== "reset_password" || !decoded.userType || !decoded.id) {
+      throw new AppError("Invalid reset token", 400, "INVALID_TOKEN");
+    }
+
+    const passwordHash = await bcrypt.hash(cleanPassword, 10);
+
+    if (decoded.userType === "employee") {
+      await loginRepository.updateEmployeePassword(decoded.id, passwordHash);
+    } else if (decoded.userType === "ca_user") {
+      await loginRepository.updateCAUserPassword(decoded.id, passwordHash);
+    } else if (decoded.userType === "company") {
+      await loginRepository.updateCompanyPassword(decoded.id, passwordHash);
+    } else if (decoded.userType === "super_admin") {
+      await loginRepository.updateSuperAdminPassword(decoded.id, passwordHash);
+    } else {
+      throw new AppError("Invalid user type", 400, "INVALID_USER_TYPE");
+    }
+
+    return {
+      message: "Password has been reset successfully. You can now log in with your new password.",
+    };
   },
 };
 

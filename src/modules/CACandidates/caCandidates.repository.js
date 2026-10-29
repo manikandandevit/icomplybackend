@@ -457,6 +457,13 @@ export const caCandidatesRepository = {
            WHERE candidate_id = $1 AND (created_by_company_id = $2 OR created_by_company_id IS NULL)`,
           [id, companyId, updated.name, updated.role]
         );
+        await db.query(
+          `UPDATE public.ca_onboarding 
+           SET candidate_name = COALESCE($3, candidate_name),
+               role = COALESCE($4, role)
+           WHERE (candidate_id = $1 OR candidate_id = $1::text) AND (created_by_company_id = $2 OR created_by_company_id IS NULL)`,
+          [id, companyId, updated.name, updated.role]
+        ).catch(() => {});
       } catch (err) {
         console.warn("Could not sync updated candidate to interviews/offers:", err.message);
       }

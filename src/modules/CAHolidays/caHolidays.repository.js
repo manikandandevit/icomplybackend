@@ -24,7 +24,8 @@ const ensureTable = () => {
 };
 
 const selectColumns = `
-  id, name, holiday_date, end_date, holiday_type_id, holiday_type_name, country_id, country_name,
+  id, name, holiday_date, end_date, holiday_type_id, holiday_type_name,
+  establishment_id, establishment_name, country_id, country_name,
   created_by_company_id, created_at
 `;
 
@@ -42,26 +43,29 @@ export const caHolidaysRepository = {
     const params = [cid];
 
     if (filter.isEmployee) {
-      const countryId = filter.countryId ? String(filter.countryId).trim() : null;
-      const countryName = filter.countryName ? String(filter.countryName).trim() : null;
+      const establishmentId = filter.establishmentId ? String(filter.establishmentId).trim() : null;
+      const establishmentName = filter.establishmentName ? String(filter.establishmentName).trim() : null;
 
-      if (countryId || countryName) {
-        const conditions = ["lower(country_id) = 'all'", "lower(country_name) = 'all'"];
-        if (countryId) {
-          params.push(countryId);
-          conditions.push(`country_id = $${params.length}`);
+      if (establishmentId || establishmentName) {
+        const conditions = [
+          "establishment_id IS NULL",
+          "lower(establishment_name) = 'all'",
+        ];
+        if (establishmentId && establishmentId !== "all") {
+          params.push(parseRowId(establishmentId) || 0);
+          conditions.push(`establishment_id = $${params.length}`);
         }
-        if (countryName) {
-          params.push(countryName);
-          conditions.push(`lower(country_name) = lower($${params.length})`);
+        if (establishmentName && establishmentName.toLowerCase() !== "all") {
+          params.push(establishmentName);
+          conditions.push(`lower(establishment_name) = lower($${params.length})`);
         }
         sql += ` AND (${conditions.join(" OR ")})`;
       } else {
-        sql += ` AND (lower(country_id) = 'all' OR lower(country_name) = 'all')`;
+        sql += ` AND (establishment_id IS NULL OR lower(establishment_name) = 'all')`;
       }
-    } else if (filter.countryId && filter.countryId !== "all") {
-      params.push(String(filter.countryId).trim());
-      sql += ` AND (lower(country_id) = 'all' OR country_id = $${params.length})`;
+    } else if (filter.establishmentId && filter.establishmentId !== "all") {
+      params.push(parseRowId(filter.establishmentId) || 0);
+      sql += ` AND (establishment_id IS NULL OR establishment_id = $${params.length} OR lower(establishment_name) = 'all')`;
     }
 
     sql += ` ORDER BY holiday_date DESC, id DESC`;
@@ -90,12 +94,20 @@ export const caHolidaysRepository = {
     await ensureTable();
     const cid = parseRowId(companyId);
     if (!cid) return null;
+
+    const estId =
+      payload.establishmentId === "all" || !payload.establishmentId
+        ? null
+        : parseRowId(payload.establishmentId);
+    const estName = payload.establishmentName || (estId ? "" : "All");
+
     const { rows } = await db.query(
       `
       INSERT INTO public.ca_holidays (
-        name, holiday_date, end_date, holiday_type_id, holiday_type_name, country_id, country_name, created_by_company_id
+        name, holiday_date, end_date, holiday_type_id, holiday_type_name,
+        establishment_id, establishment_name, country_id, country_name, created_by_company_id
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
       RETURNING id
       `,
       [
@@ -104,6 +116,8 @@ export const caHolidaysRepository = {
         payload.endDate || payload.startDate || payload.date,
         parseRowId(payload.holidayTypeId),
         payload.holidayTypeName,
+        estId,
+        estName,
         payload.countryId || "all",
         payload.countryName || "All",
         cid,
@@ -117,11 +131,18 @@ export const caHolidaysRepository = {
     const rowId = parseRowId(id);
     const cid = parseRowId(companyId);
     if (!rowId || !cid) return null;
+
+    const estId =
+      payload.establishmentId === "all" || !payload.establishmentId
+        ? null
+        : parseRowId(payload.establishmentId);
+    const estName = payload.establishmentName || (estId ? "" : "All");
+
     const { rows } = await db.query(
       `
       UPDATE public.ca_holidays
       SET name = $3, holiday_date = $4, end_date = $5, holiday_type_id = $6, holiday_type_name = $7,
-          country_id = $8, country_name = $9, updated_at = NOW()
+          establishment_id = $8, establishment_name = $9, country_id = $10, country_name = $11, updated_at = NOW()
       WHERE id = $1 AND created_by_company_id = $2
       RETURNING id
       `,
@@ -133,6 +154,8 @@ export const caHolidaysRepository = {
         payload.endDate || payload.startDate || payload.date,
         parseRowId(payload.holidayTypeId),
         payload.holidayTypeName,
+        estId,
+        estName,
         payload.countryId || "all",
         payload.countryName || "All",
       ],

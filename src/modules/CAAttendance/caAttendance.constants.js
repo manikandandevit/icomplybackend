@@ -97,6 +97,7 @@ export const mapCAAttendance = (row) => {
     regularizationStatus: row.regularization_status,
     regularizationReason: row.regularization_reason,
     regularizationReviewedBy: row.regularization_reviewed_by,
+    adminReply: row.admin_reply || null,
     shiftStartTime: shiftStartTime || null,
     shiftEndTime: shiftEndTime || null,
     otApplicable: row.ot_applicable !== undefined && row.ot_applicable !== null ? Boolean(row.ot_applicable) : true,

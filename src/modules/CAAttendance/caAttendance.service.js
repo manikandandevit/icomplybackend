@@ -4,6 +4,7 @@ import { notifyRegularizationStatus, notifyRegularizationSubmitted } from "../..
 import { caEmployeesRepository } from "../CAEmployees/caEmployees.repository.js";
 import { caAttendanceRepository } from "./caAttendance.repository.js";
 import { syncOtRequest } from "./caAttendanceOtSync.js";
+import { caFcmService } from "../CANotifications/caFcm.service.js";
 
 const todayIso = () => {
   const now = new Date();
@@ -209,11 +210,18 @@ export const caAttendanceService = {
       throw new AppError("Unable to submit regularization request", 500, "REGULARIZE_FAILED");
     }
 
-    void notifyRegularizationSubmitted({ companyId, employee, record: saved });
+    setImmediate(async () => {
+      try {
+        void notifyRegularizationSubmitted({ companyId, employee, record: saved });
+        void caFcmService.notifyAdminsOfRegularizationRequest({ companyId, employee, record: saved });
+      } catch (err) {
+        console.error("Regularization apply notification error:", err);
+      }
+    });
     return saved;
   },
 
-  async regularize(id, companyId, { status }, actor = {}) {
+  async regularize(id, companyId, { status, reason, adminReply } = {}, actor = {}) {
     if (!isPrivileged(actor)) {
       throw new AppError("Only company admin can review regularization", 403, "FORBIDDEN");
     }
@@ -229,10 +237,14 @@ export const caAttendanceService = {
       throw new AppError("Only pending requests can be reviewed", 422, "NOT_PENDING");
     }
 
+    const reply = String(adminReply || reason || "").trim();
     const patch = {
       regularizationStatus: status,
       regularizationReviewedBy: actor.actorName || "Company Admin",
     };
+    if (reply) {
+      patch.adminReply = reply;
+    }
 
     if (status === "Approved") {
       if (!existing.requestedCheckIn) {
@@ -248,21 +260,37 @@ export const caAttendanceService = {
       throw new AppError("Unable to update regularization", 500, "REGULARIZE_FAILED");
     }
 
-    const employee = await caEmployeesRepository.findById(existing.employeeId, companyId);
-    if (employee) {
-      void notifyRegularizationStatus({
-        companyId,
-        employee,
-        record: {
-          ...updated,
-          checkIn: existing.checkIn,
-          checkOut: existing.checkOut,
-        },
-        action: status === "Approved" ? "approved" : "rejected",
-        reviewedByName: actor.actorName || "Company Admin",
-      });
-    }
+    setImmediate(async () => {
+      try {
+        const employee = await caEmployeesRepository.findById(existing.employeeId, companyId);
+        if (employee) {
+          void notifyRegularizationStatus({
+            companyId,
+            employee,
+            record: {
+              ...updated,
+              checkIn: existing.checkIn,
+              checkOut: existing.checkOut,
+            },
+            action: status === "Approved" ? "approved" : "rejected",
+            reviewedByName: actor.actorName || "Company Admin",
+          });
+        }
+
+        void caFcmService.notifyEmployeeOfRegularizationStatus({
+          companyId,
+          employeeId: existing.employeeId,
+          status,
+          date: existing.date,
+          reviewerName: actor.actorName || "Company Admin",
+          adminReply: reply,
+        });
+      } catch (err) {
+        console.error("Regularization post-review notification error:", err);
+      }
+    });
 
     return updated;
   },
 };
+

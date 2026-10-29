@@ -27,6 +27,9 @@ export const validateHolidayBody = (body = {}) => {
   const startDate = toIsoDate(required(body.startDate || body.date, "Start date", errors, "startDate"));
   const endDate = toIsoDate(required(body.endDate || body.startDate || body.date, "End date", errors, "endDate"));
   const holidayTypeId = required(body.holidayTypeId, "Holiday type", errors, "holidayTypeId");
+  const establishmentIdRaw = String(body.establishmentId ?? "all").trim();
+  const establishmentId = establishmentIdRaw.toLowerCase() === "all" || !establishmentIdRaw ? "all" : establishmentIdRaw;
+  const establishmentName = String(body.establishmentName ?? "").trim() || (establishmentId === "all" ? "All" : "");
   const countryId = String(body.countryId ?? "all").trim() || "all";
   const countryName = String(body.countryName ?? "").trim() || (countryId === "all" ? "All" : "");
 
@@ -42,6 +45,17 @@ export const validateHolidayBody = (body = {}) => {
   return {
     isValid: Object.keys(errors).length === 0,
     errors,
-    value: { name, startDate, endDate, date: startDate, days, holidayTypeId, countryId, countryName },
+    value: {
+      name,
+      startDate,
+      endDate,
+      date: startDate,
+      days,
+      holidayTypeId,
+      establishmentId,
+      establishmentName,
+      countryId,
+      countryName,
+    },
   };
 };

@@ -1,10 +1,11 @@
 import { AppError } from "../../core/errors/AppError.js";
+import { db } from "../../core/db/pool.js";
 import { caHrMasterRepository } from "../CAHrMaster/caHrMaster.repository.js";
 import { caHolidaysRepository } from "./caHolidays.repository.js";
 
 const uniqueError = (error) => {
   if (error?.code === "23505") {
-    throw new AppError("This holiday already exists for the selected date and country", 409, "HOLIDAY_EXISTS");
+    throw new AppError("This holiday already exists for the selected date and establishment", 409, "HOLIDAY_EXISTS");
   }
   throw error;
 };
@@ -14,10 +15,26 @@ const withHolidayType = async (companyId, payload) => {
   if (!holidayType) {
     throw new AppError("Holiday type not found", 404, "HOLIDAY_TYPE_NOT_FOUND");
   }
+
+  const estIdRaw = String(payload.establishmentId ?? "all").trim();
+  const establishmentId = estIdRaw.toLowerCase() === "all" || !estIdRaw ? "all" : estIdRaw;
+  let establishmentName = String(payload.establishmentName ?? "").trim();
+  if (establishmentId === "all") {
+    establishmentName = "All";
+  } else if (!establishmentName) {
+    const { rows } = await db.query(
+      `SELECT name FROM public.ca_establishments WHERE id = $1 AND created_by_company_id = $2 LIMIT 1`,
+      [Number(establishmentId), Number(companyId)],
+    );
+    establishmentName = rows[0]?.name || "";
+  }
+
   const countryId = payload.countryId === "all" || !payload.countryId ? "all" : payload.countryId;
   return {
     ...payload,
     name: String(payload.name || "").trim(),
+    establishmentId,
+    establishmentName,
     countryId,
     countryName: countryId === "all" ? "All" : payload.countryName || "",
     holidayTypeName: holidayType.values?.name || "Holiday",

@@ -54,4 +54,74 @@ export const loginController = {
       throw error;
     }
   }),
+
+  forgotPassword: asyncHandler(async (req, res) => {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!email) {
+      return fail(res, { status: 422, message: "Email is required", code: "VALIDATION_ERROR" });
+    }
+
+    try {
+      let origin = String(req.body?.origin || req.headers.origin || "").trim();
+      if (!origin && req.headers.referer) {
+        try {
+          origin = new URL(req.headers.referer).origin;
+        } catch {
+          // ignore invalid referer url
+        }
+      }
+      const result = await loginService.requestPasswordReset({ email, origin });
+      return success(res, {
+        message: result.message || "Password reset link sent to your email",
+        data: { sent: true },
+        toast: createToast({ type: "success", message: result.message }),
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return fail(res, {
+          status: error.statusCode,
+          message: error.message,
+          code: error.code,
+        });
+      }
+      throw error;
+    }
+  }),
+
+  resetPasswordWithToken: asyncHandler(async (req, res) => {
+    const token = String(req.body?.token || req.query?.token || "").trim();
+    const password = String(req.body?.password || req.body?.newPassword || "").trim();
+    const confirmPassword = String(req.body?.confirmPassword || "").trim();
+
+    if (!token) {
+      return fail(res, { status: 400, message: "Reset token is required", code: "TOKEN_REQUIRED" });
+    }
+    if (!password) {
+      return fail(res, { status: 422, message: "New password is required", code: "VALIDATION_ERROR" });
+    }
+    if (password.length < 6) {
+      return fail(res, { status: 422, message: "Password must be at least 6 characters", code: "VALIDATION_ERROR" });
+    }
+    if (confirmPassword && password !== confirmPassword) {
+      return fail(res, { status: 422, message: "Passwords do not match", code: "VALIDATION_ERROR" });
+    }
+
+    try {
+      const result = await loginService.resetPasswordWithToken({ token, password });
+      return success(res, {
+        message: result.message || "Password updated successfully",
+        data: { success: true },
+        toast: createToast({ type: "success", message: result.message }),
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return fail(res, {
+          status: error.statusCode,
+          message: error.message,
+          code: error.code,
+        });
+      }
+      throw error;
+    }
+  }),
 };

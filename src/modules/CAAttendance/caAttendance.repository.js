@@ -26,7 +26,7 @@ const selectColumns = `
   COALESCE(NULLIF(TRIM(e.name), ''), a.employee_name) AS employee_name,
   COALESCE(NULLIF(TRIM(e.employee_code), ''), a.employee_code) AS employee_code,
   a.date, a.check_in, a.check_out, a.status, a.requested_check_in, a.requested_check_out,
-  a.regularization_status, a.regularization_reason, a.regularization_reviewed_by,
+  a.regularization_status, a.regularization_reason, a.regularization_reviewed_by, a.admin_reply,
   a.created_by_company_id, a.created_at, a.updated_at,
   NULLIF(TRIM(e.details->>'shiftStartTime'), '') AS shift_start_time,
   NULLIF(TRIM(e.details->>'shiftEndTime'), '') AS shift_end_time,
@@ -157,6 +157,10 @@ export const caAttendanceRepository = {
     if (data.regularizationReviewedBy !== undefined) {
       updates.push(`regularization_reviewed_by = $${idx++}`);
       values.push(data.regularizationReviewedBy);
+    }
+    if (data.adminReply !== undefined) {
+      updates.push(`admin_reply = $${idx++}`);
+      values.push(data.adminReply);
     }
 
     if (updates.length === 0) return this.getById(id, companyId);

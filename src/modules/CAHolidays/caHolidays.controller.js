@@ -35,6 +35,8 @@ export const caHolidaysController = {
     const isEmployee = Boolean(req.employeeId && !req.isCompanyOwner && !req.caUserId);
     const holidays = await caHolidaysService.list(req.companyId, {
       isEmployee,
+      establishmentId: isEmployee ? req.establishmentId : (req.query?.establishmentId || null),
+      establishmentName: isEmployee ? req.establishmentName : (req.query?.establishmentName || null),
       countryId: isEmployee ? req.countryId : (req.query?.countryId || null),
       countryName: isEmployee ? req.countryName : (req.query?.countryName || null),
     });
