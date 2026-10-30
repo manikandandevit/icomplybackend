@@ -102,11 +102,16 @@ export const validateMasterBody = (masterType, body = {}) => {
     }
     value.days = days;
 
+    const leaveCategoryName = normalizeText(
+      body.leaveCategoryName ?? body.values?.leaveCategoryName ?? body.leaveCategory ?? body.values?.leaveCategory
+    );
     const leaveCategoryId = String(body.leaveCategoryId ?? body.values?.leaveCategoryId ?? "").trim();
-    if (!leaveCategoryId) {
-      errors.leaveCategoryId = "Leave category is required";
-    } else {
+    if (leaveCategoryName) {
+      value.leaveCategoryName = leaveCategoryName;
+    } else if (leaveCategoryId) {
       value.relatedId = leaveCategoryId;
+    } else {
+      errors.leaveCategoryId = "Leave category is required";
     }
 
     const eligibleGenderId = String(body.eligibleGenderId ?? body.values?.eligibleGenderId ?? "").trim();

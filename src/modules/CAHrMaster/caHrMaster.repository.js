@@ -218,6 +218,41 @@ export const caHrMasterRepository = {
     return rows[0] ? mapCAHrMaster(rows[0]) : null;
   },
 
+  async findOrCreateLeaveCategoryByName(companyId, categoryName) {
+    await ensureTable();
+    const cid = parseRowId(companyId);
+    const trimmed = String(categoryName || "").trim();
+    if (!cid || !trimmed) return null;
+
+    const existing = await db.query(
+      `
+      ${emptySelectRow}
+      WHERE created_by_company_id = $1
+        AND master_type = 'leave-category'
+        AND lower(name) = lower($2)
+      LIMIT 1
+      `,
+      [cid, trimmed]
+    );
+
+    if (existing.rows.length) {
+      return mapCAHrMaster(existing.rows[0]);
+    }
+
+    const inserted = await db.query(
+      `
+      INSERT INTO public.ca_hr_masters (
+        master_type, name, created_by_company_id, country_id, country_name
+      )
+      VALUES ('leave-category', $1, $2, 'all', 'All')
+      RETURNING id
+      `,
+      [trimmed, cid]
+    );
+
+    return this.findById(inserted.rows[0].id, companyId, "leave-category");
+  },
+
   async findDuplicateName(companyId, masterType, name, excludeId = null, relatedId = null, countryId = null, establishmentId = null) {
     await ensureTable();
     const cid = parseRowId(companyId);
