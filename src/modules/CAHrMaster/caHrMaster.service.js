@@ -19,9 +19,21 @@ const assertRelated = async (companyId, masterType, payload) => {
   }
 
   if (masterType === "leave-types") {
-    const category = await caHrMasterRepository.findById(payload.relatedId, companyId, "leave-category");
-    if (!category) {
-      throw new AppError("Selected leave category not found", 422, "LEAVE_CATEGORY_NOT_FOUND");
+    if (payload.leaveCategoryName) {
+      const category = await caHrMasterRepository.findOrCreateLeaveCategoryByName(
+        companyId,
+        payload.leaveCategoryName
+      );
+      if (category?.id) {
+        payload.relatedId = category.id;
+      }
+    } else if (payload.relatedId) {
+      const category = await caHrMasterRepository.findById(payload.relatedId, companyId, "leave-category");
+      if (!category) {
+        throw new AppError("Selected leave category not found", 422, "LEAVE_CATEGORY_NOT_FOUND");
+      }
+    } else {
+      throw new AppError("Leave category is required", 422, "LEAVE_CATEGORY_REQUIRED");
     }
     if (payload.eligibleGenderId) {
       const gender = await caHrMasterRepository.findById(payload.eligibleGenderId, companyId, "gender");
