@@ -153,6 +153,13 @@ SET establishment_name = 'All',
 WHERE master_type IN ('payment-method', 'ot-type', 'bank-account-type')
   AND establishment_id IS NULL
   AND (establishment_name IS NULL OR establishment_name = '');
+
+UPDATE public.ca_hr_masters
+SET establishment_name = 'All',
+    updated_at = NOW()
+WHERE master_type = 'leave-types'
+  AND establishment_id IS NULL
+  AND (establishment_name IS NULL OR establishment_name = '');
 `;
 
 export const caHrMastersIndexSql = `

@@ -17,7 +17,7 @@ const ensureTable = async () => {
 
 const selectColumns = `
   id, establishment_id, establishment_name, employee_id, employee_name, employee_code,
-  date, work_date, total_working_hours, ot_hours, ot_minutes, hours, work_hours,
+  date, work_date, total_working_hours, ot_hours, ot_minutes, hours, worked_ot_hours, work_hours,
   reason, reject_reason, type, status, reporting_to_id, approver_name,
   reviewed_by_name, reviewed_at, attendance_id, source,
   created_by_company_id, created_at, updated_at
@@ -97,14 +97,14 @@ export const caOtRequestsRepository = {
       `
       INSERT INTO public.ca_ot_requests (
         establishment_id, establishment_name, employee_id, employee_name, employee_code,
-        date, work_date, total_working_hours, ot_hours, ot_minutes, hours, work_hours,
+        date, work_date, total_working_hours, ot_hours, ot_minutes, hours, worked_ot_hours, work_hours,
         reason, type, status, reporting_to_id, approver_name, attendance_id, source,
         created_by_company_id
       ) VALUES (
         $1, $2, $3, $4, $5,
-        $6, $7, $8, $9, $10, $11, $12,
-        $13, $14, $15, $16, $17, $18, $19,
-        $20
+        $6, $7, $8, $9, $10, $11, $12, $13,
+        $14, $15, $16, $17, $18, $19, $20,
+        $21
       )
       RETURNING ${selectColumns}
       `,
@@ -120,6 +120,7 @@ export const caOtRequestsRepository = {
         String(hoursVal),
         otMinutesVal,
         hoursVal,
+        data.workedOtHours != null ? Number(data.workedOtHours) : hoursVal,
         Number(data.workHours) || 8.0,
         data.reason || "",
         data.type || "Weekday Ot",
@@ -172,6 +173,10 @@ export const caOtRequestsRepository = {
       values.push(String(data.hours));
       updates.push(`ot_minutes = $${idx++}`);
       values.push(Math.round(Number(data.hours) * 60));
+    }
+    if (data.workedOtHours !== undefined) {
+      updates.push(`worked_ot_hours = $${idx++}`);
+      values.push(Number(data.workedOtHours));
     }
     if (data.reason !== undefined) {
       updates.push(`reason = $${idx++}`);

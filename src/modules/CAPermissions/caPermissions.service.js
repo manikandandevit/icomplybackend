@@ -5,11 +5,12 @@ import { caPermissionsRepository } from "./caPermissions.repository.js";
 const asMap = (rows) => {
   const map = {};
   for (const row of rows) {
-    const current = map[row.navId] || { view: false, add: false, edit: false };
+    const current = map[row.navId] || { view: false, add: false, edit: false, scope: "self" };
     map[row.navId] = {
       view: current.view || Boolean(row.view),
       add: current.add || Boolean(row.add),
       edit: current.edit || Boolean(row.edit),
+      scope: row.scope || current.scope || "self",
     };
   }
   return map;
@@ -26,12 +27,13 @@ const permissionsFor = async (companyId, { designationId, designationName }) => 
 export const caPermissionsService = {
   list: (companyId) => caPermissionsRepository.listByCompany(companyId),
 
-  async mine(companyId, { isOwner, designationId, designationName, allowedModules }) {
+  async mine(companyId, { isOwner, designationId, designationName, allowedModules, departmentId }) {
     if (isOwner || allowedModules?.includes("all")) {
       return {
         isOwner: true,
         allowedModules: ["all"],
         designationId: null,
+        departmentId: null,
         permissions: {},
       };
     }
@@ -41,21 +43,23 @@ export const caPermissionsService = {
       for (const mod of allowedModules) {
         const navList = MODULE_NAV_MAP[mod] || [];
         for (const navId of navList) {
-          modulePerms[navId] = { view: true, add: true, edit: true };
+          modulePerms[navId] = { view: true, add: true, edit: true, scope: "all" };
         }
       }
       return {
         isOwner: false,
         allowedModules,
         designationId: designationId ? String(designationId) : null,
+        departmentId: departmentId ? String(departmentId) : null,
         permissions: modulePerms,
       };
     }
 
     return {
       isOwner: false,
-      allowedModules: ["all"],
+      allowedModules: [],
       designationId: designationId ? String(designationId) : null,
+      departmentId: departmentId ? String(departmentId) : null,
       permissions: await permissionsFor(companyId, { designationId, designationName }),
     };
   },
@@ -65,40 +69,73 @@ export const caPermissionsService = {
     return caPermissionsRepository.replaceAll(companyId, rows, designationId);
   },
 
+  async getScope(companyId, actor = {}, navId) {
+    if (actor.isOwner || actor.allowedModules?.includes("all")) {
+      return "all";
+    }
+    const map = await permissionsFor(companyId, {
+      designationId: actor.designationId,
+      designationName: actor.designationName,
+    });
+    const perm = map[navId];
+    return perm?.scope || "self";
+  },
+
+  async can(companyId, actor = {}, navId, action = "access") {
+    if (actor.isOwner || actor.allowedModules?.includes("all")) {
+      return true;
+    }
+    const map = await permissionsFor(companyId, {
+      designationId: actor.designationId,
+      designationName: actor.designationName,
+    });
+    const perm = map[navId];
+    if (!perm) return false;
+
+    if (action === "add") return Boolean(perm.add);
+    if (action === "edit") return Boolean(perm.edit);
+    if (action === "view" || action === "read") return Boolean(perm.view || perm.add || perm.edit);
+    if (action === "write") return Boolean(perm.add || perm.edit);
+    return Boolean(perm.view || perm.add || perm.edit);
+  },
+
   async assertAccess(companyId, { isOwner, designationId, designationName, allowedModules }, navId, action) {
     if (isOwner || allowedModules?.includes("all")) {
       return true;
     }
 
-    if (!navId) {
-      return true;
-    }
+    const map = await permissionsFor(companyId, { designationId, designationName });
+    const perm = map[navId];
 
-    if (Array.isArray(allowedModules) && allowedModules.length > 0 && !allowedModules.includes("all")) {
-      const allowedNavs = new Set(allowedModules.flatMap((mod) => MODULE_NAV_MAP[mod] || []));
-      if (allowedNavs.has(navId)) {
+    if (!perm) {
+      // Baseline fallback for common employee self-service tabs
+      const baselineSelfNavs = new Set(["dashboard", "profile", "attendance", "leave", "leave-apply", "revokes", "revoke-apply"]);
+      if (baselineSelfNavs.has(navId) && action !== "edit") {
         return true;
       }
-      throw new AppError("You do not have permission for this action", 403, "FORBIDDEN");
+      throw new AppError("Access denied for this resource", 403, "ACCESS_DENIED");
     }
 
-    const perm = (await permissionsFor(companyId, { designationId, designationName }))[navId] || {
-      view: false,
-      add: false,
-      edit: false,
-    };
-
-    if (action === "add" && perm.add) {
-      return true;
-    }
-    if (action === "edit" && perm.edit) {
-      return true;
-    }
-    if ((action === "access" || action === "view") && hasAccess(perm)) {
-      return true;
+    if (action === "add" && !perm.add) {
+      throw new AppError("Access denied: You do not have permission to create this resource", 403, "ACCESS_DENIED");
     }
 
-    throw new AppError("You do not have permission for this action", 403, "FORBIDDEN");
+    if (action === "edit" && !perm.edit) {
+      throw new AppError("Access denied: You do not have permission to modify or approve this resource", 403, "ACCESS_DENIED");
+    }
+
+    if ((action === "read" || action === "view") && !hasAccess(perm)) {
+      throw new AppError("Access denied for this resource", 403, "ACCESS_DENIED");
+    }
+
+    if (action === "write" && !perm.add && !perm.edit) {
+      throw new AppError("Access denied for this resource", 403, "ACCESS_DENIED");
+    }
+
+    if (action === "access" && !hasAccess(perm)) {
+      throw new AppError("Access denied for this resource", 403, "ACCESS_DENIED");
+    }
+
+    return true;
   },
 };
-

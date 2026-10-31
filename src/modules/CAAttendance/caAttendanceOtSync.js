@@ -2,6 +2,7 @@ import { db } from "../../core/db/pool.js";
 import { caEmployeesRepository } from "../CAEmployees/caEmployees.repository.js";
 import { caAttendanceRepository } from "./caAttendance.repository.js";
 import { caOtRequestsRepository } from "../CAOvertime/caOtRequests.repository.js";
+import { caFcmService } from "../CANotifications/caFcm.service.js";
 
 const calculateOtHours = (row, employee) => {
   const isOtApplicable = employee?.otApplicable !== undefined ? Boolean(employee.otApplicable) : Boolean(employee?.details?.otApplicable ?? true);
@@ -66,10 +67,10 @@ export const syncOtRequest = async (companyId, attendanceId) => {
     if (otHours > 0) {
       if (existingOt) {
         if (existingOt.status === "Pending" && existingOt.source === "auto") {
-          await caOtRequestsRepository.update(existingOt.id, companyId, { hours: otHours });
+          await caOtRequestsRepository.update(existingOt.id, companyId, { hours: otHours, workedOtHours: otHours });
         }
       } else {
-        await caOtRequestsRepository.create(companyId, {
+        const created = await caOtRequestsRepository.create(companyId, {
           establishmentId: employee.establishmentId,
           establishmentName: employee.establishmentName,
           employeeId: employee.id,
@@ -78,9 +79,17 @@ export const syncOtRequest = async (companyId, attendanceId) => {
           date: dateKey,
           workDate: dateKey,
           hours: otHours,
+          workedOtHours: otHours,
           reason: "Auto-calculated from attendance",
           source: "auto",
         });
+        if (created) {
+          void caFcmService.notifyApproversOfOtRequest({
+            companyId,
+            employee,
+            otRequest: created,
+          });
+        }
       }
     } else {
       if (existingOt && existingOt.status === "Pending" && existingOt.source === "auto") {

@@ -51,6 +51,8 @@ export const MODULE_NAV_MAP = {
     "revoke-overview",
     "revoke-apply",
     "revoke-requests",
+    "daily",
+    "requests",
   ],
   "talent-acquisition": [
     "recruitment-dashboard",
@@ -85,7 +87,6 @@ export const MODULE_NAV_MAP = {
   ],
 };
 
-
 export const caDesignationPermissionsTableSql = `
 CREATE TABLE IF NOT EXISTS public.ca_designation_permissions (
   id SERIAL PRIMARY KEY,
@@ -95,10 +96,15 @@ CREATE TABLE IF NOT EXISTS public.ca_designation_permissions (
   can_view BOOLEAN NOT NULL DEFAULT FALSE,
   can_add BOOLEAN NOT NULL DEFAULT FALSE,
   can_edit BOOLEAN NOT NULL DEFAULT FALSE,
+  scope VARCHAR(32) NOT NULL DEFAULT 'self',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (created_by_company_id, designation_id, nav_id)
 );
+`;
+
+export const caDesignationPermissionsAlterSql = `
+ALTER TABLE public.ca_designation_permissions ADD COLUMN IF NOT EXISTS scope VARCHAR(32) NOT NULL DEFAULT 'self';
 `;
 
 export const caDesignationPermissionsIndexSql = `
@@ -114,4 +120,5 @@ export const mapPermission = (row) => ({
   view: Boolean(row.can_view),
   add: Boolean(row.can_add),
   edit: Boolean(row.can_edit),
+  scope: row.scope || "self",
 });

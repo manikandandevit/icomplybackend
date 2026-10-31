@@ -1,14 +1,15 @@
 import { AppError } from "../../core/errors/AppError.js";
 import { caEmployeesRepository } from "../CAEmployees/caEmployees.repository.js";
 import { caEstablishmentsRepository } from "../CAEstablishments/caEstablishments.repository.js";
+import { caHrMasterRepository } from "../CAHrMaster/caHrMaster.repository.js";
+import { caFcmService } from "../CANotifications/caFcm.service.js";
 import { caOtRequestsRepository } from "./caOtRequests.repository.js";
 
 export const caOtRequestsService = {
   async list(companyId, filters = {}, actor = {}) {
     const activeFilters = { ...filters };
     if (actor.employeeId && !actor.isOwner) {
-      // If regular employee viewing, only show their own unless viewing as reviewer
-      if (filters.scope === "mine" || !actor.canReview) {
+      if (filters.scope === "mine") {
         activeFilters.employeeId = actor.employeeId;
       }
     }
@@ -58,6 +59,7 @@ export const caOtRequestsService = {
       date,
       workDate: date,
       hours,
+      workedOtHours: hours,
       otHours: String(hours),
       otMinutes: Math.round(hours * 60),
       totalWorkingHours: payload.totalWorkingHours || String((8 + hours).toFixed(1)),
@@ -71,7 +73,17 @@ export const caOtRequestsService = {
       source: "manual",
     };
 
-    return caOtRequestsRepository.create(companyId, requestData);
+    const created = await caOtRequestsRepository.create(companyId, requestData);
+
+    if (created) {
+      void caFcmService.notifyApproversOfOtRequest({
+        companyId,
+        employee,
+        otRequest: created,
+      });
+    }
+
+    return created;
   },
 
   async approve(id, companyId, payload = {}, actor = {}) {
@@ -80,14 +92,48 @@ export const caOtRequestsService = {
       throw new AppError(`Cannot approve an OT request that is already ${existing.status}`, 400, "INVALID_STATUS");
     }
 
-    const otType = payload.otTypeName || payload.type || existing.type || "Weekday Ot";
+    const otTypeName = payload.otTypeName || payload.type || existing.type || "Weekday Ot";
 
-    return caOtRequestsRepository.update(id, companyId, {
+    // Check OT Type policy from Master to enforce maxHours cap
+    const otTypes = await caHrMasterRepository.list(companyId, "ot-type").catch(() => []);
+    const matchedType = otTypes.find(
+      (t) => String(t.values?.name || "").trim().toLowerCase() === String(otTypeName).trim().toLowerCase()
+    );
+
+    const workedHours = Number(existing.workedOtHours || existing.hours || existing.otHours || 0);
+    let payableHours = workedHours;
+
+    if (matchedType) {
+      const maxH = matchedType.values?.maxHours ? Number(matchedType.values.maxHours) : null;
+      if (maxH && maxH > 0 && workedHours > maxH) {
+        payableHours = maxH;
+      }
+    }
+
+    if (payload.hours && Number(payload.hours) > 0) {
+      payableHours = Number(payload.hours);
+    }
+
+    const updated = await caOtRequestsRepository.update(id, companyId, {
       status: "Approved",
-      type: otType,
+      type: otTypeName,
+      hours: payableHours,
+      workedOtHours: workedHours,
       reviewedByName: actor.name || "Company Admin",
       reviewedAt: new Date().toISOString(),
     });
+
+    void caFcmService.notifyEmployeeOfOtStatus({
+      companyId,
+      employeeId: existing.employeeId,
+      status: "Approved",
+      date: existing.date,
+      hours: payableHours,
+      otTypeName,
+      reviewedByName: actor.name || "Company Admin",
+    });
+
+    return updated;
   },
 
   async reject(id, companyId, payload = {}, actor = {}) {
@@ -101,11 +147,23 @@ export const caOtRequestsService = {
       throw new AppError("Reject reason is required", 400, "MISSING_REJECT_REASON");
     }
 
-    return caOtRequestsRepository.update(id, companyId, {
+    const updated = await caOtRequestsRepository.update(id, companyId, {
       status: "Rejected",
       rejectReason,
       reviewedByName: actor.name || "Company Admin",
       reviewedAt: new Date().toISOString(),
     });
+
+    void caFcmService.notifyEmployeeOfOtStatus({
+      companyId,
+      employeeId: existing.employeeId,
+      status: "Rejected",
+      date: existing.date,
+      hours: existing.hours,
+      rejectReason,
+      reviewedByName: actor.name || "Company Admin",
+    });
+
+    return updated;
   },
 };

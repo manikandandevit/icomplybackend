@@ -15,6 +15,18 @@ const sendAppError = (res, error) => {
   throw error;
 };
 
+export const employeeActorFromReq = (req) => ({
+  employeeId: req.employeeId ? String(req.employeeId) : null,
+  isOwner: Boolean(req.isCompanyOwner),
+  isCaUser: Boolean(req.caUserId),
+  actorName: req.actorName || "",
+  departmentId: req.departmentId ? String(req.departmentId) : null,
+  departmentName: req.departmentName || null,
+  designationId: req.designationId ? String(req.designationId) : null,
+  designationName: req.designationName || null,
+  allowedModules: req.allowedModules || [],
+});
+
 export const caEmployeesController = {
   counts: asyncHandler(async (req, res) => {
     const counts = await caEmployeesService.counts(req.companyId);
@@ -25,7 +37,7 @@ export const caEmployeesController = {
   }),
 
   list: asyncHandler(async (req, res) => {
-    const employees = await caEmployeesService.list(req.companyId, req.companyAccess);
+    const employees = await caEmployeesService.list(req.companyId, req.companyAccess, employeeActorFromReq(req));
     return success(res, {
       message: "Employees loaded",
       data: { employees },
@@ -34,7 +46,7 @@ export const caEmployeesController = {
 
   get: asyncHandler(async (req, res) => {
     try {
-      const employee = await caEmployeesService.get(req.params.id, req.companyId, req.companyAccess, req.employeeId);
+      const employee = await caEmployeesService.get(req.params.id, req.companyId, req.companyAccess, employeeActorFromReq(req));
       return success(res, {
         message: "Employee loaded",
         data: { employee },

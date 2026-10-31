@@ -249,4 +249,260 @@ export const caFcmService = {
       console.error("[FCM] notifyEmployeeOfRegularizationStatus error:", error?.message || error);
     }
   },
+
+  async notifyApproversOfLeaveRequest({ companyId, employee, request }) {
+    try {
+      const employeeName = employee?.name || request?.employeeName || "Employee";
+      const empCode = employee?.employeeCode || request?.employeeCode;
+      const leaveTypeName = request?.leaveTypeName || "Leave";
+      const startDate = request?.startDate ? String(request.startDate).slice(0, 10) : "";
+      const endDate = request?.endDate ? String(request.endDate).slice(0, 10) : "";
+      const days = request?.days || "1";
+      const reportingToId = request?.reportingToId || employee?.details?.reportingToId || null;
+
+      const title = "New Leave Application";
+      const body = `${employeeName}${empCode ? ` (${empCode})` : ""} has applied for ${days} day(s) ${leaveTypeName} (${startDate} to ${endDate}).`;
+
+      // 1. Notification to Reporting Manager (if assigned)
+      if (reportingToId) {
+        await caFcmRepository.saveInAppNotification({
+          companyId,
+          targetUserType: "employee",
+          targetUserId: String(reportingToId),
+          title: "Leave Request From Team",
+          body,
+          data: {
+            type: "LEAVE_REQUEST",
+            requestId: String(request?.id || ""),
+            employeeId: String(employee?.id || ""),
+            employeeName,
+            startDate,
+            endDate,
+            days: String(days),
+            url: "/companyadmin/leave",
+          },
+        });
+
+        const managerTokens = await caFcmRepository.getEmployeeTokens(companyId, reportingToId);
+        if (managerTokens.length > 0) {
+          await this.sendPushNotification(managerTokens, {
+            title: "Leave Request From Team",
+            body,
+            data: {
+              type: "LEAVE_REQUEST",
+              requestId: String(request?.id || ""),
+              employeeId: String(employee?.id || ""),
+              employeeName,
+              url: "/companyadmin/leave",
+            },
+          });
+        }
+      }
+
+      // 2. Notification to Company Admin / HR (Global Oversight)
+      await caFcmRepository.saveInAppNotification({
+        companyId,
+        targetUserType: "admin",
+        title,
+        body,
+        data: {
+          type: "LEAVE_REQUEST",
+          requestId: String(request?.id || ""),
+          employeeId: String(employee?.id || ""),
+          employeeName,
+          startDate,
+          endDate,
+          days: String(days),
+          url: "/companyadmin/leave",
+        },
+      });
+
+      const adminTokens = await caFcmRepository.getAdminTokens(companyId);
+      if (adminTokens.length > 0) {
+        await this.sendPushNotification(adminTokens, {
+          title,
+          body,
+          data: {
+            type: "LEAVE_REQUEST",
+            requestId: String(request?.id || ""),
+            employeeId: String(employee?.id || ""),
+            employeeName,
+            url: "/companyadmin/leave",
+          },
+        });
+      }
+    } catch (error) {
+      console.error("[FCM] notifyApproversOfLeaveRequest error:", error?.message || error);
+    }
+  },
+
+  async notifyEmployeeOfLeaveStatus({ companyId, employeeId, status, leaveTypeName, startDate, endDate, reviewedByName, rejectReason }) {
+    try {
+      const employeeTokens = await caFcmRepository.getEmployeeTokens(companyId, employeeId);
+      const isApproved = status === "Approved";
+      const title = isApproved ? "Leave Request Approved" : "Leave Request Rejected";
+      const formattedStart = startDate ? String(startDate).slice(0, 10) : "";
+      const formattedEnd = endDate ? String(endDate).slice(0, 10) : "";
+      const dateRange = formattedStart === formattedEnd ? formattedStart : `${formattedStart} - ${formattedEnd}`;
+      const body = `Your ${leaveTypeName || "leave"} request (${dateRange}) has been ${status.toLowerCase()} by ${reviewedByName || "Approver"}.${rejectReason ? ` Reason: "${rejectReason}"` : ""}`;
+
+      // 1. In-app notification for employee
+      await caFcmRepository.saveInAppNotification({
+        companyId,
+        targetUserType: "employee",
+        targetUserId: String(employeeId),
+        title,
+        body,
+        data: {
+          type: "LEAVE_STATUS_UPDATE",
+          status,
+          dateRange,
+          url: "/companyadmin/leave",
+        },
+      });
+
+      // 2. FCM Push Notification
+      if (employeeTokens.length > 0) {
+        await this.sendPushNotification(employeeTokens, {
+          title,
+          body,
+          data: {
+            type: "LEAVE_STATUS_UPDATE",
+            status,
+            dateRange,
+            url: "/companyadmin/leave",
+          },
+        });
+      }
+    } catch (error) {
+      console.error("[FCM] notifyEmployeeOfLeaveStatus error:", error?.message || error);
+    }
+  },
+
+  async notifyApproversOfOtRequest({ companyId, employee, otRequest }) {
+    try {
+      const employeeName = employee?.name || otRequest?.employeeName || "Employee";
+      const empCode = employee?.employeeCode || otRequest?.employeeCode;
+      const dateStr = otRequest?.date ? String(otRequest.date).slice(0, 10) : "";
+      const hours = otRequest?.hours || otRequest?.otHours || "0";
+      const reportingToId = otRequest?.reportingToId || employee?.details?.reportingToId || null;
+
+      const title = "New Overtime Request";
+      const body = `${employeeName}${empCode ? ` (${empCode})` : ""} has applied for ${hours} hrs Overtime on ${dateStr}.`;
+
+      // 1. Notification to Reporting Manager (if assigned)
+      if (reportingToId) {
+        await caFcmRepository.saveInAppNotification({
+          companyId,
+          targetUserType: "employee",
+          targetUserId: String(reportingToId),
+          title: "Overtime Request From Team",
+          body,
+          data: {
+            type: "OT_REQUEST",
+            requestId: String(otRequest?.id || ""),
+            employeeId: String(employee?.id || ""),
+            employeeName,
+            date: dateStr,
+            hours: String(hours),
+            url: "/companyadmin/ot",
+          },
+        });
+
+        const managerTokens = await caFcmRepository.getEmployeeTokens(companyId, reportingToId);
+        if (managerTokens.length > 0) {
+          await this.sendPushNotification(managerTokens, {
+            title: "Overtime Request From Team",
+            body,
+            data: {
+              type: "OT_REQUEST",
+              requestId: String(otRequest?.id || ""),
+              employeeId: String(employee?.id || ""),
+              employeeName,
+              url: "/companyadmin/ot",
+            },
+          });
+        }
+      }
+
+      // 2. Notification to Company Admin
+      await caFcmRepository.saveInAppNotification({
+        companyId,
+        targetUserType: "admin",
+        title,
+        body,
+        data: {
+          type: "OT_REQUEST",
+          requestId: String(otRequest?.id || ""),
+          employeeId: String(employee?.id || ""),
+          employeeName,
+          date: dateStr,
+          hours: String(hours),
+          url: "/companyadmin/ot",
+        },
+      });
+
+      const adminTokens = await caFcmRepository.getAdminTokens(companyId);
+      if (adminTokens.length > 0) {
+        await this.sendPushNotification(adminTokens, {
+          title,
+          body,
+          data: {
+            type: "OT_REQUEST",
+            requestId: String(otRequest?.id || ""),
+            employeeId: String(employee?.id || ""),
+            employeeName,
+            url: "/companyadmin/ot",
+          },
+        });
+      }
+    } catch (error) {
+      console.error("[FCM] notifyApproversOfOtRequest error:", error?.message || error);
+    }
+  },
+
+  async notifyEmployeeOfOtStatus({ companyId, employeeId, status, date, hours, otTypeName, reviewedByName, rejectReason }) {
+    try {
+      const employeeTokens = await caFcmRepository.getEmployeeTokens(companyId, employeeId);
+      const isApproved = status === "Approved";
+      const title = isApproved ? "Overtime Request Approved" : "Overtime Request Rejected";
+      const dateStr = date ? String(date).slice(0, 10) : "";
+      const body = isApproved
+        ? `Your Overtime request (${hours || "—"} hrs on ${dateStr}${otTypeName ? ` · ${otTypeName}` : ""}) has been approved by ${reviewedByName || "Approver"}.`
+        : `Your Overtime request (${hours || "—"} hrs on ${dateStr}) has been rejected by ${reviewedByName || "Approver"}.${rejectReason ? ` Reason: "${rejectReason}"` : ""}`;
+
+      // 1. In-app notification
+      await caFcmRepository.saveInAppNotification({
+        companyId,
+        targetUserType: "employee",
+        targetUserId: String(employeeId),
+        title,
+        body,
+        data: {
+          type: "OT_STATUS_UPDATE",
+          status,
+          date: dateStr,
+          hours: String(hours || ""),
+          url: "/companyadmin/ot",
+        },
+      });
+
+      // 2. Push Notification
+      if (employeeTokens.length > 0) {
+        await this.sendPushNotification(employeeTokens, {
+          title,
+          body,
+          data: {
+            type: "OT_STATUS_UPDATE",
+            status,
+            date: dateStr,
+            hours: String(hours || ""),
+            url: "/companyadmin/ot",
+          },
+        });
+      }
+    } catch (error) {
+      console.error("[FCM] notifyEmployeeOfOtStatus error:", error?.message || error);
+    }
+  },
 };

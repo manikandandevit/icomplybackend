@@ -18,9 +18,19 @@ const sendAppError = (res, error) => {
   throw error;
 };
 
+export const establishmentActorFromReq = (req) => ({
+  employeeId: req.employeeId ? String(req.employeeId) : null,
+  isOwner: Boolean(req.isCompanyOwner),
+  isCaUser: Boolean(req.caUserId),
+  establishmentId: req.establishmentId ? String(req.establishmentId) : null,
+  designationId: req.designationId ? String(req.designationId) : null,
+  designationName: req.designationName || null,
+  allowedModules: req.allowedModules || [],
+});
+
 export const caEstablishmentsController = {
   list: asyncHandler(async (req, res) => {
-    const establishments = await caEstablishmentsService.list(req.companyId, req.companyAccess);
+    const establishments = await caEstablishmentsService.list(req.companyId, req.companyAccess, establishmentActorFromReq(req));
 
     return success(res, {
       message: "Establishments loaded",
@@ -30,7 +40,7 @@ export const caEstablishmentsController = {
 
   get: asyncHandler(async (req, res) => {
     try {
-      const establishment = await caEstablishmentsService.get(req.params.id, req.companyId, req.companyAccess);
+      const establishment = await caEstablishmentsService.get(req.params.id, req.companyId, req.companyAccess, establishmentActorFromReq(req));
 
       return success(res, {
         message: "Establishment loaded",
@@ -114,7 +124,7 @@ export const caEstablishmentsController = {
   }),
   syncCounts: asyncHandler(async (req, res) => {
     await caEstablishmentsRepository.syncAllForCompany(req.companyId);
-    const establishments = await caEstablishmentsService.list(req.companyId, req.companyAccess);
+    const establishments = await caEstablishmentsService.list(req.companyId, req.companyAccess, establishmentActorFromReq(req));
     return success(res, {
       message: "Employee counts synced",
       data: { establishments },

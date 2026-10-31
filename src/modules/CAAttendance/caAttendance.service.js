@@ -5,6 +5,7 @@ import { caEmployeesRepository } from "../CAEmployees/caEmployees.repository.js"
 import { caAttendanceRepository } from "./caAttendance.repository.js";
 import { syncOtRequest } from "./caAttendanceOtSync.js";
 import { caFcmService } from "../CANotifications/caFcm.service.js";
+import { caPermissionsService } from "../CAPermissions/caPermissions.service.js";
 
 const todayIso = () => {
   const now = new Date();
@@ -35,12 +36,26 @@ export const attendanceActorFromReq = (req) => ({
   isOwner: Boolean(req.isCompanyOwner),
   isCaUser: Boolean(req.caUserId),
   actorName: req.actorName || "",
+  departmentId: req.departmentId ? String(req.departmentId) : null,
+  departmentName: req.departmentName || null,
+  designationId: req.designationId ? String(req.designationId) : null,
+  designationName: req.designationName || null,
+  allowedModules: req.allowedModules || [],
 });
 
 export const caAttendanceService = {
-  list(companyId, actor = {}) {
-    const selfOnly = !isPrivileged(actor) && actor.employeeId;
-    return caAttendanceRepository.list(companyId, selfOnly ? actor.employeeId : null);
+  async list(companyId, actor = {}) {
+    let scope = "self";
+    if (isPrivileged(actor)) {
+      scope = "all";
+    } else {
+      scope = await caPermissionsService.getScope(companyId, actor, "attendance");
+    }
+    return caAttendanceRepository.list(companyId, {
+      scope,
+      employeeId: actor.employeeId,
+      departmentId: actor.departmentId,
+    });
   },
 
   async punch(companyId, action, payload = {}, actor = {}) {
@@ -98,8 +113,9 @@ export const caAttendanceService = {
   },
 
   async create(companyId, data, actor = {}) {
-    if (!isPrivileged(actor)) {
-      throw new AppError("Only company admin can create attendance records", 403, "FORBIDDEN");
+    const canAdd = isPrivileged(actor) || await caPermissionsService.can(companyId, actor, "attendance", "add");
+    if (!canAdd) {
+      throw new AppError("You do not have permission to create attendance records", 403, "FORBIDDEN");
     }
     if (!data.employeeId || !data.date || !data.establishmentId) {
       throw new AppError("Missing required fields for attendance", 422, "VALIDATION_ERROR");
@@ -111,8 +127,9 @@ export const caAttendanceService = {
   },
 
   async updateTimes(id, companyId, payload = {}, actor = {}) {
-    if (!isPrivileged(actor)) {
-      throw new AppError("Only company admin can edit attendance time", 403, "FORBIDDEN");
+    const canEdit = isPrivileged(actor) || await caPermissionsService.can(companyId, actor, "attendance", "edit");
+    if (!canEdit) {
+      throw new AppError("You do not have permission to edit attendance time", 403, "FORBIDDEN");
     }
     const existing = await caAttendanceRepository.getById(id, companyId);
     if (!existing) {
@@ -137,8 +154,9 @@ export const caAttendanceService = {
   },
 
   async update(id, companyId, data, actor = {}) {
-    if (!isPrivileged(actor)) {
-      throw new AppError("Only company admin can edit attendance", 403, "FORBIDDEN");
+    const canEdit = isPrivileged(actor) || await caPermissionsService.can(companyId, actor, "attendance", "edit");
+    if (!canEdit) {
+      throw new AppError("You do not have permission to edit attendance", 403, "FORBIDDEN");
     }
     const existing = await caAttendanceRepository.getById(id, companyId);
     if (!existing) {
@@ -222,9 +240,6 @@ export const caAttendanceService = {
   },
 
   async regularize(id, companyId, { status, reason, adminReply } = {}, actor = {}) {
-    if (!isPrivileged(actor)) {
-      throw new AppError("Only company admin can review regularization", 403, "FORBIDDEN");
-    }
     if (!["Approved", "Rejected"].includes(status)) {
       throw new AppError("Invalid regularization status", 422, "INVALID_STATUS");
     }
@@ -235,6 +250,31 @@ export const caAttendanceService = {
     }
     if (existing.regularizationStatus !== "Pending") {
       throw new AppError("Only pending requests can be reviewed", 422, "NOT_PENDING");
+    }
+
+    // 1. SOX Maker-Checker: Self-approval check
+    if (actor.employeeId && String(existing.employeeId) === String(actor.employeeId)) {
+      throw new AppError("You cannot review or approve your own attendance regularization request", 403, "SELF_APPROVAL_FORBIDDEN");
+    }
+
+    // 2. Permission check: Admin or Attendance Edit/Approve permission
+    const canReview = isPrivileged(actor) || await caPermissionsService.can(companyId, actor, "attendance", "edit");
+    if (!canReview) {
+      throw new AppError("You do not have permission to review regularization", 403, "FORBIDDEN");
+    }
+
+    // 3. Department Scope check
+    if (!isPrivileged(actor)) {
+      const scope = await caPermissionsService.getScope(companyId, actor, "attendance");
+      if (scope === "self") {
+        throw new AppError("You cannot review team regularization requests", 403, "FORBIDDEN");
+      }
+      if (scope === "department") {
+        const emp = await caEmployeesRepository.findById(existing.employeeId, companyId);
+        if (emp && actor.departmentId && String(emp.departmentId) !== String(actor.departmentId)) {
+          throw new AppError("You can only review attendance in your own department", 403, "DEPARTMENT_MISMATCH");
+        }
+      }
     }
 
     const reply = String(adminReply || reason || "").trim();
@@ -293,4 +333,3 @@ export const caAttendanceService = {
     return updated;
   },
 };
-

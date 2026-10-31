@@ -22,7 +22,12 @@ export const requireNavPermission = (navId, { read = false } = {}) => async (req
 
     await caPermissionsService.assertAccess(
       req.companyId,
-      { isOwner: Boolean(req.isCompanyOwner), designationId: req.designationId, designationName: req.designationName },
+      {
+        isOwner: Boolean(req.isCompanyOwner),
+        designationId: req.designationId,
+        designationName: req.designationName,
+        allowedModules: req.allowedModules,
+      },
       navId,
       action,
     );

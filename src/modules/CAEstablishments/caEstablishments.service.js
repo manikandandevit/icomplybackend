@@ -3,6 +3,7 @@ import { isAllCompanyAccess, matchesCompanyAccess } from "../../core/access/comp
 import { companiesRepository } from "../Companies/companies.repository.js";
 import { countryRepository } from "../Country/country.repository.js";
 import { caCompaniesRepository } from "../CACompanies/caCompanies.repository.js";
+import { caPermissionsService } from "../CAPermissions/caPermissions.service.js";
 import { caEstablishmentsRepository } from "./caEstablishments.repository.js";
 
 const LEGACY_COUNTRY_CODES = {
@@ -142,13 +143,26 @@ const denyCompanyScope = async (companyId, companyAccess, row) => {
 };
 
 export const caEstablishmentsService = {
-  async list(companyId, companyAccess) {
+  async list(companyId, companyAccess, actor = {}) {
     const rows = await caEstablishmentsRepository.listByCreator(companyId);
     const keys = await allowedCompanyKeys(companyId, companyAccess);
-    return rows.filter((row) => inCompanyScope(keys, row, companyAccess));
+    const inScope = rows.filter((row) => inCompanyScope(keys, row, companyAccess));
+
+    if (actor.isOwner || actor.allowedModules?.includes("all")) {
+      return inScope;
+    }
+
+    if (actor.employeeId && actor.establishmentId) {
+      const scope = await caPermissionsService.getScope(companyId, actor, "establishments");
+      if (scope === "self") {
+        return inScope.filter((row) => String(row.id) === String(actor.establishmentId));
+      }
+    }
+
+    return inScope;
   },
 
-  async get(id, companyId, companyAccess) {
+  async get(id, companyId, companyAccess, actor = {}) {
     const establishment = await caEstablishmentsRepository.findById(id);
 
     if (!establishment || !ownedBy(establishment, companyId)) {
@@ -156,6 +170,14 @@ export const caEstablishmentsService = {
     }
 
     await denyCompanyScope(companyId, companyAccess, establishment);
+
+    if (!actor.isOwner && actor.employeeId && actor.establishmentId) {
+      const scope = await caPermissionsService.getScope(companyId, actor, "establishments");
+      if (scope === "self" && String(id) !== String(actor.establishmentId)) {
+        throw new AppError("You can only access your assigned establishment", 403, "FORBIDDEN");
+      }
+    }
+
     return establishment;
   },
 
