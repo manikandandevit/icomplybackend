@@ -55,6 +55,7 @@ export const validateMasterBody = (masterType, body = {}) => {
     "ot-type",
     "bank-account-type",
     "holiday-type",
+    "leave-types",
   ];
   if (ESTABLISHMENT_SCOPED_TYPES.includes(masterType)) {
     const establishmentId = String(body.establishmentId ?? body.values?.establishmentId ?? "").trim();

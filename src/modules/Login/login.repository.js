@@ -188,7 +188,7 @@ export const loginRepository = {
       SELECT
         e.id, e.name, e.email, e.status, e.password_hash, e.must_reset_password,
         e.created_by_company_id, e.company_id, e.company_name, e.company_source,
-        e.department_name, e.designation_id, e.designation_name,
+        e.department_id, e.department_name, e.designation_id, e.designation_name,
         e.establishment_id, e.establishment_name,
         COALESCE(NULLIF(TRIM(e.details->>'countryId'), ''), est.country_id::text) AS country_id,
         COALESCE(NULLIF(TRIM(est.country_name), ''), '') AS country_name

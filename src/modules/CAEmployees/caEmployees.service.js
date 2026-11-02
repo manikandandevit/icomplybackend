@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { isAllCompanyAccess, matchesCompanyAccess } from "../../core/access/companyAccess.js";
 import { caEstablishmentsRepository } from "../CAEstablishments/caEstablishments.repository.js";
 import { companiesRepository } from "../Companies/companies.repository.js";
+import { caPermissionsService } from "../CAPermissions/caPermissions.service.js";
 import { caEmployeesRepository } from "./caEmployees.repository.js";
 
 export const DEFAULT_EMPLOYEE_PASSWORD = "Employee@123";
@@ -69,21 +70,68 @@ export const caEmployeesService = {
     };
   },
 
-  async list(companyId, companyAccess) {
+  async list(companyId, companyAccess, requester = {}) {
     const rows = await caEmployeesRepository.list(companyId);
-    return rows.filter((row) => inEmployeeScope(companyAccess, row));
+    const filtered = rows.filter((row) => inEmployeeScope(companyAccess, row));
+
+    const canViewCompensation =
+      requester.isOwner ||
+      requester.allowedModules?.includes("all") ||
+      requester.allowedModules?.includes("payroll") ||
+      (await caPermissionsService.can(companyId, requester, "payroll", "view")) ||
+      (await caPermissionsService.can(companyId, requester, "employee-master", "edit"));
+
+    if (canViewCompensation) {
+      return filtered;
+    }
+
+    return filtered.map((emp) => {
+      const isSelf = requester.employeeId && String(emp.id) === String(requester.employeeId);
+      if (isSelf) return emp;
+      return {
+        ...emp,
+        ctc: "",
+        bankDetails: [],
+        details: {
+          ...emp.details,
+          uanNumber: "",
+        },
+      };
+    });
   },
 
-  async get(id, companyId, companyAccess, requesterEmployeeId = null) {
+  async get(id, companyId, companyAccess, requester = {}) {
     const employee = await caEmployeesRepository.findById(id, companyId);
     if (!employee) {
       throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");
     }
+    const requesterEmployeeId = requester?.employeeId || (typeof requester === "string" ? requester : null);
     const isSelf = requesterEmployeeId && String(requesterEmployeeId) === String(id);
     if (!isSelf && !inEmployeeScope(companyAccess, employee)) {
       throw new AppError("You can only access your assigned company data", 403, "FORBIDDEN");
     }
-    return employee;
+
+    const canViewCompensation =
+      isSelf ||
+      requester?.isOwner ||
+      requester?.allowedModules?.includes("all") ||
+      requester?.allowedModules?.includes("payroll") ||
+      (await caPermissionsService.can(companyId, requester, "payroll", "view")) ||
+      (await caPermissionsService.can(companyId, requester, "employee-master", "edit"));
+
+    if (canViewCompensation) {
+      return employee;
+    }
+
+    return {
+      ...employee,
+      ctc: "",
+      bankDetails: [],
+      details: {
+        ...employee.details,
+        uanNumber: "",
+      },
+    };
   },
 
   async create(companyId, payload, companyAccess) {
@@ -119,7 +167,7 @@ export const caEmployeesService = {
     }
   },
 
-  async updateStatus(id, companyId, status, companyAccess) {
+  async updateStatus(id, companyId, status, companyAccess, options = {}) {
     const existing = await caEmployeesRepository.findById(id, companyId);
     if (!existing) {
       throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");

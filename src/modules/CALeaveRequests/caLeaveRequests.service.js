@@ -5,9 +5,11 @@ import { notifyLeaveStatus, notifyLeaveSubmitted } from "../../core/mail/leaveMa
 import { caEmployeesRepository } from "../CAEmployees/caEmployees.repository.js";
 import { caEstablishmentsRepository } from "../CAEstablishments/caEstablishments.repository.js";
 import { caHrMasterRepository } from "../CAHrMaster/caHrMaster.repository.js";
+import { caPermissionsService } from "../CAPermissions/caPermissions.service.js";
 import { caLeaveRequestsRepository } from "./caLeaveRequests.repository.js";
 import { leaveCalendarFor } from "./leaveCalendar.js";
 import { caLeaveYearBalancesService } from "../CALeaveYearBalances/caLeaveYearBalances.service.js";
+import { caFcmService } from "../CANotifications/caFcm.service.js";
 
 const leaveTypeName = (item) => {
   const name = item?.values?.name || "Leave";
@@ -18,6 +20,12 @@ export const leaveActorFromReq = (req) => ({
   employeeId: req.employeeId ? String(req.employeeId) : null,
   isOwner: Boolean(req.isCompanyOwner),
   isCaUser: Boolean(req.caUserId),
+  actorName: req.actorName || "",
+  departmentId: req.departmentId ? String(req.departmentId) : null,
+  departmentName: req.departmentName || null,
+  designationId: req.designationId ? String(req.designationId) : null,
+  designationName: req.designationName || null,
+  allowedModules: req.allowedModules || [],
 });
 
 export const isCompanyPrivileged = (actor) => Boolean(actor?.isOwner || actor?.isCaUser || !actor?.employeeId);
@@ -25,22 +33,54 @@ export const isCompanyPrivileged = (actor) => Boolean(actor?.isOwner || actor?.i
 const reportingIdOf = (request, employee) =>
   String(request?.reportingToId || employee?.details?.reportingToId || "").trim();
 
-export const assertCanReviewLeave = (request, actor, employee) => {
-  if (isCompanyPrivileged(actor)) return;
+export const assertCanReviewLeave = async (request, actor, employee, companyId) => {
+  // 1. SOX Maker-Checker: Absolutely no self-approval under any circumstances
+  if (actor.employeeId && String(request.employeeId) === String(actor.employeeId)) {
+    throw new AppError("You cannot review or approve your own leave request", 403, "SELF_APPROVAL_FORBIDDEN");
+  }
+
+  // 2. Privileged owner or full-admin
+  if (actor.isOwner || actor.allowedModules?.includes("all")) {
+    return;
+  }
+
   if (!actor?.employeeId) {
     throw new AppError("You cannot review this leave request", 403, "FORBIDDEN");
   }
-  if (String(request.employeeId) === String(actor.employeeId)) {
-    throw new AppError("You cannot review your own leave request", 403, "FORBIDDEN");
+
+  // 3. Direct reporting manager hierarchy
+  if (reportingIdOf(request, employee) === String(actor.employeeId)) {
+    return;
   }
-  if (reportingIdOf(request, employee) !== String(actor.employeeId)) {
-    throw new AppError("You can only review your team's leave requests", 403, "FORBIDDEN");
+
+  // 4. Dynamic designation permission scope
+  const designationScope = await caPermissionsService.getScope(companyId, actor, "leave-requests");
+  if (designationScope === "all") {
+    return;
   }
+
+  if (designationScope === "department") {
+    const reqDeptId = String(employee?.departmentId || employee?.department_id || "");
+    const actorDeptId = String(actor?.departmentId || "");
+    if (reqDeptId && actorDeptId && reqDeptId === actorDeptId) {
+      return;
+    }
+    throw new AppError("You can only review leave requests in your department", 403, "DEPARTMENT_MISMATCH");
+  }
+
+  throw new AppError("You can only review your team's leave requests", 403, "FORBIDDEN");
 };
 
 export const caLeaveRequestsService = {
   async list(companyId, actor, scope, companyAccess) {
-    const rows = await caLeaveRequestsRepository.list(companyId, { scope, actor });
+    let designationScope = "self";
+    if (isCompanyPrivileged(actor)) {
+      designationScope = "all";
+    } else {
+      designationScope = await caPermissionsService.getScope(companyId, actor, "leave-requests");
+    }
+
+    const rows = await caLeaveRequestsRepository.list(companyId, { scope, actor, designationScope });
     const { isAllCompanyAccess, matchesCompanyAccess } = await import("../../core/access/companyAccess.js");
     return rows.filter((row) => 
       isAllCompanyAccess(companyAccess) || 
@@ -72,6 +112,15 @@ export const caLeaveRequestsService = {
     const leaveType = await caHrMasterRepository.findById(next.leaveTypeId, companyId, "leave-types");
     if (!leaveType) {
       throw new AppError("Leave type not found", 404, "LEAVE_TYPE_NOT_FOUND");
+    }
+
+    const leaveTypeEstId = leaveType.values?.establishmentId;
+    if (
+      leaveTypeEstId &&
+      String(leaveTypeEstId).toLowerCase() !== "all" &&
+      String(leaveTypeEstId) !== String(next.establishmentId)
+    ) {
+      throw new AppError("Selected leave type is not applicable to this establishment", 422, "LEAVE_TYPE_ESTABLISHMENT_MISMATCH");
     }
 
     const calendar = await leaveCalendarFor(companyId, employee, establishment);
@@ -176,19 +225,23 @@ export const caLeaveRequestsService = {
       deductions: sandwichCalc.deductions,
     };
 
+    const reportingToId = employee.details?.reportingToId || employee.reporting_to_id || employee.reportingToId || "";
+    const approverName = employee.details?.reportingToName || employee.reporting_to_name || employee.reportingToName || "";
+
     const created = await caLeaveRequestsRepository.create(companyId, {
       ...next,
       establishmentName: establishment.name,
       employeeName: employee.name,
       employeeCode: employee.employeeCode,
       leaveTypeName: leaveTypeName(leaveType),
-      approverName: employee.details?.reportingToName || "",
-      reportingToId: employee.details?.reportingToId || "",
+      approverName,
+      reportingToId,
     });
     if (!created) {
       throw new AppError("Unable to create leave request", 500, "LEAVE_REQUEST_CREATE_FAILED");
     }
     void notifyLeaveSubmitted({ companyId, employee, request: created, kind: "leave" });
+    void caFcmService.notifyApproversOfLeaveRequest({ companyId, employee, request: created });
     return created;
   },
 
@@ -202,7 +255,7 @@ export const caLeaveRequestsService = {
     }
 
     const employee = await caEmployeesRepository.findById(request.employeeId, companyId);
-    assertCanReviewLeave(request, actor, employee);
+    await assertCanReviewLeave(request, actor, employee, companyId);
 
     const leaveType = await caHrMasterRepository.findById(request.leaveTypeId, companyId, "leave-types");
     if (!employee || !leaveType) {
@@ -252,6 +305,15 @@ export const caLeaveRequestsService = {
       action: "approved",
       reviewedByName,
     });
+    void caFcmService.notifyEmployeeOfLeaveStatus({
+      companyId,
+      employeeId: request.employeeId,
+      status: "Approved",
+      leaveTypeName: request.leaveTypeName,
+      startDate: request.startDate,
+      endDate: request.endDate,
+      reviewedByName,
+    });
     return updated;
   },
 
@@ -265,7 +327,7 @@ export const caLeaveRequestsService = {
     }
 
     const employee = await caEmployeesRepository.findById(request.employeeId, companyId);
-    assertCanReviewLeave(request, actor, employee);
+    await assertCanReviewLeave(request, actor, employee, companyId);
 
     const reason = String(rejectReason || "").trim();
     if (!reason) {
@@ -287,6 +349,16 @@ export const caLeaveRequestsService = {
       action: "rejected",
       reviewedByName,
     });
+    void caFcmService.notifyEmployeeOfLeaveStatus({
+      companyId,
+      employeeId: request.employeeId,
+      status: "Rejected",
+      leaveTypeName: request.leaveTypeName,
+      startDate: request.startDate,
+      endDate: request.endDate,
+      reviewedByName,
+      rejectReason: reason,
+    });
     return updated;
   },
 
@@ -302,7 +374,6 @@ export const caLeaveRequestsService = {
       throw new AppError("You can only cancel your own leave request", 403, "FORBIDDEN");
     }
     
-    // Update status to Cancelled (which covers both Cancel and Revoke logically in DB)
     const updated = await caLeaveRequestsRepository.updateStatus(id, companyId, {
       status: "Cancelled",
       reviewedByName: actor.name || "Company Admin",

@@ -29,6 +29,7 @@ export const caPermissionsController = {
       isOwner: Boolean(req.isCompanyOwner),
       designationId: req.designationId,
       designationName: req.designationName,
+      departmentId: req.departmentId,
       allowedModules: req.allowedModules || null,
     });
 

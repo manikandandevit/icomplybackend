@@ -65,7 +65,7 @@ const teamMatchSql = (empIdParam, empTextParam) => `
 `;
 
 export const caLeaveRequestsRepository = {
-  async list(companyId, { scope = "all", actor } = {}) {
+  async list(companyId, { scope = "all", actor, designationScope = "self" } = {}) {
     await ensureTable();
     const cid = parseRowId(companyId);
     if (!cid) return [];
@@ -82,15 +82,43 @@ export const caLeaveRequestsRepository = {
 
     if (!privileged && empId) {
       const empText = String(actor.employeeId);
-      if (scope === "mine" || scope === "all") {
+      const deptId = parseRowId(actor.departmentId);
+
+      if (scope === "mine") {
         sql += " AND r.employee_id = $2";
         params.push(empId);
+      } else if (scope === "team" || scope === "requests" || scope === "review") {
+        if (designationScope === "all") {
+          sql += " AND r.employee_id <> $2";
+          params.push(empId);
+        } else if (designationScope === "department" && deptId) {
+          sql += ` AND r.employee_id <> $2 AND (e.department_id = $3 OR ${teamMatchSql("$2", "$4")})`;
+          params.push(empId, deptId, empText);
+        } else {
+          sql += ` AND r.employee_id <> $2 AND ${teamMatchSql("$2", "$3")}`;
+          params.push(empId, empText);
+        }
       } else if (scope === "overview") {
-        sql += ` AND (r.employee_id = $2 OR ${teamMatchSql("$2", "$3")})`;
-        params.push(empId, empText);
+        if (designationScope === "all") {
+          // See all
+        } else if (designationScope === "department" && deptId) {
+          sql += ` AND (r.employee_id = $2 OR e.department_id = $3 OR ${teamMatchSql("$2", "$4")})`;
+          params.push(empId, deptId, empText);
+        } else {
+          sql += ` AND (r.employee_id = $2 OR ${teamMatchSql("$2", "$3")})`;
+          params.push(empId, empText);
+        }
       } else {
-        sql += ` AND r.employee_id <> $2 AND ${teamMatchSql("$2", "$3")}`;
-        params.push(empId, empText);
+        // scope === "all"
+        if (designationScope === "all") {
+          // Allowed all
+        } else if (designationScope === "department" && deptId) {
+          sql += ` AND (r.employee_id = $2 OR e.department_id = $3 OR ${teamMatchSql("$2", "$4")})`;
+          params.push(empId, deptId, empText);
+        } else {
+          sql += " AND r.employee_id = $2";
+          params.push(empId);
+        }
       }
     }
 

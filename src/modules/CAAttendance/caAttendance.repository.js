@@ -45,21 +45,44 @@ const parseRowId = (id) => {
 };
 
 export const caAttendanceRepository = {
-  async list(companyId, employeeId = null) {
+  async list(companyId, filterOrEmployeeId = null) {
     await ensureTable();
     const cid = parseRowId(companyId);
-    const empId = parseRowId(employeeId);
     if (!cid) return [];
-    const result = await db.query(
-      `
+
+    let employeeId = null;
+    let departmentId = null;
+    let scope = "all";
+
+    if (filterOrEmployeeId && typeof filterOrEmployeeId === "object") {
+      scope = filterOrEmployeeId.scope || "all";
+      employeeId = filterOrEmployeeId.employeeId;
+      departmentId = filterOrEmployeeId.departmentId;
+    } else if (filterOrEmployeeId != null) {
+      employeeId = filterOrEmployeeId;
+      scope = "self";
+    }
+
+    const empId = parseRowId(employeeId);
+    const deptId = parseRowId(departmentId);
+
+    let sql = `
       SELECT ${selectColumns}
       ${fromJoined}
       WHERE a.created_by_company_id = $1
-        ${empId ? "AND a.employee_id = $2" : ""}
-      ORDER BY a.date DESC, a.id DESC
-      `,
-      empId ? [cid, empId] : [cid],
-    );
+    `;
+    const params = [cid];
+
+    if (scope === "self" && empId) {
+      sql += " AND a.employee_id = $2";
+      params.push(empId);
+    } else if (scope === "department" && deptId) {
+      sql += " AND e.department_id = $2";
+      params.push(deptId);
+    }
+
+    sql += " ORDER BY a.date DESC, a.id DESC";
+    const result = await db.query(sql, params);
     return result.rows.map(mapCAAttendance);
   },
 

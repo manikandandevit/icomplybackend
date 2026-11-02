@@ -4,10 +4,10 @@ import { caOtRequestsService } from "./caOtRequests.service.js";
 
 const otActorFromReq = (req) => ({
   companyId: req.companyId,
-  employeeId: req.user?.employeeId,
-  isOwner: Boolean(req.user?.isOwner),
-  name: req.user?.name || "Company Admin",
-  canReview: true,
+  employeeId: req.employeeId || req.user?.employeeId,
+  isOwner: Boolean(req.isCompanyOwner || req.user?.isOwner),
+  name: req.actorName || req.user?.name || "Company Admin",
+  canReview: Boolean(req.isCompanyOwner || req.user?.isOwner),
 });
 
 export const caOtRequestsController = {
