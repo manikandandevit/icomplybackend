@@ -199,6 +199,25 @@ export const caEmployeesService = {
       throw new AppError("You can only access your assigned company data", 403, "FORBIDDEN");
     }
 
+    if (isSelf) {
+      // Employees are strictly NOT allowed to modify Admin-only fields (Resignation Details & Referral Details)
+      const existingDetails = (existing.details && typeof existing.details === "object") ? existing.details : {};
+      const payloadDetails = (payload.details && typeof payload.details === "object") ? payload.details : {};
+
+      payload.details = {
+        ...payloadDetails,
+        resignationDate: existingDetails.resignationDate || null,
+        resignationReason: existingDetails.resignationReason || null,
+        lastWorkingDay: existingDetails.lastWorkingDay || null,
+        referralName: existingDetails.referralName || null,
+        referralEmail: existingDetails.referralEmail || null,
+        referralPhone: existingDetails.referralPhone || null,
+        referralCompany: existingDetails.referralCompany || null,
+        referralDesignation: existingDetails.referralDesignation || null,
+        referralDetails: existingDetails.referralDetails || null,
+      };
+    }
+
     const duplicate = await caEmployeesRepository.findByCode(companyId, payload.employeeCode, id);
     if (duplicate) {
       throw new AppError("Employee code already exists", 409, "EMPLOYEE_CODE_DUPLICATE");
