@@ -172,9 +172,9 @@ export const caFcmRepository = {
 
     const targetType = userType === "employee" ? "employee" : "admin";
     let query = `
-      SELECT id, company_id, target_user_type, target_user_id, title, body, data, created_at
+      SELECT id, company_id, target_user_type, target_user_id, title, body, data, is_read, created_at
       FROM public.ca_in_app_notifications
-      WHERE company_id = $1 AND target_user_type = $2 AND is_read = FALSE
+      WHERE company_id = $1 AND target_user_type = $2
     `;
     const params = [cid, targetType];
 
@@ -183,7 +183,7 @@ export const caFcmRepository = {
       params.push(String(userId));
     }
 
-    query += ` ORDER BY id DESC LIMIT 5`;
+    query += ` ORDER BY id DESC LIMIT 30`;
 
     const { rows } = await db.query(query, params);
     return rows;
@@ -199,6 +199,28 @@ export const caFcmRepository = {
       `UPDATE public.ca_in_app_notifications SET is_read = TRUE WHERE id = $1 AND company_id = $2`,
       [nid, cid]
     );
+    return rowCount;
+  },
+
+  async markAllInAppNotificationsRead(companyId, userType, userId = null) {
+    await ensureTable();
+    const cid = parseRowId(companyId);
+    if (!cid) return 0;
+
+    const targetType = userType === "employee" ? "employee" : "admin";
+    let query = `
+      UPDATE public.ca_in_app_notifications
+      SET is_read = TRUE
+      WHERE company_id = $1 AND target_user_type = $2 AND is_read = FALSE
+    `;
+    const params = [cid, targetType];
+
+    if (targetType === "employee" && userId) {
+      query += ` AND (target_user_id = $3 OR target_user_id IS NULL)`;
+      params.push(String(userId));
+    }
+
+    const { rowCount } = await db.query(query, params);
     return rowCount;
   },
 };

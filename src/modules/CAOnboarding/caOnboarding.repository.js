@@ -22,37 +22,91 @@ const ensureTables = async () => {
 };
 
 export const caOnboardingRepository = {
-  async findAssigneeEmail(companyId, assigneeName) {
-    if (!assigneeName) return "";
+  async findAssigneeDetails(companyId, assigneeName) {
+    if (!assigneeName) return null;
     const cleanName = assigneeName.trim().toLowerCase();
+    const cid = Number(companyId) || 0;
 
     try {
-      const userRes = await db.query(
-        `SELECT email, name FROM public.ca_users 
-         WHERE created_by_company_id = $1 AND lower(name) ILIKE $2
-         LIMIT 1`,
-        [companyId, `%${cleanName}%`]
-      );
+      // 1. Check in ca_users for current company
+      if (cid > 0) {
+        const userRes = await db.query(
+          `SELECT id, email, name, role FROM public.ca_users 
+           WHERE created_by_company_id = $1 AND lower(name) ILIKE $2
+           LIMIT 1`,
+          [cid, `%${cleanName}%`]
+        );
+        if (userRes.rows.length > 0 && userRes.rows[0].email) {
+          return {
+            id: userRes.rows[0].id,
+            name: userRes.rows[0].name,
+            email: userRes.rows[0].email,
+            userType: "admin",
+            companyId: cid,
+          };
+        }
 
-      if (userRes.rows.length > 0 && userRes.rows[0].email) {
-        return userRes.rows[0].email;
+        // 2. Check in ca_employees for current company
+        const empRes = await db.query(
+          `SELECT id, email, name FROM public.ca_employees 
+           WHERE (company_id = $1 OR created_by_company_id = $1) AND lower(name) ILIKE $2
+           LIMIT 1`,
+          [cid, `%${cleanName}%`]
+        );
+        if (empRes.rows.length > 0 && empRes.rows[0].email) {
+          return {
+            id: empRes.rows[0].id,
+            name: empRes.rows[0].name,
+            email: empRes.rows[0].email,
+            userType: "employee",
+            companyId: cid,
+          };
+        }
       }
 
-      // Fallback to employees table
-      const empRes = await db.query(
-        `SELECT email, name FROM public.ca_employees 
-         WHERE (company_id = $1 OR created_by_company_id = $1) AND lower(name) ILIKE $2
+      // 3. Global fallback for employees across any company (e.g. Sneha Iyer, Priya Menon)
+      const globalEmpRes = await db.query(
+        `SELECT id, email, name, company_id FROM public.ca_employees 
+         WHERE lower(name) ILIKE $1
          LIMIT 1`,
-        [String(companyId), `%${cleanName}%`]
+        [`%${cleanName}%`]
       );
-      if (empRes.rows.length > 0 && empRes.rows[0].email) {
-        return empRes.rows[0].email;
+      if (globalEmpRes.rows.length > 0 && globalEmpRes.rows[0].email) {
+        return {
+          id: globalEmpRes.rows[0].id,
+          name: globalEmpRes.rows[0].name,
+          email: globalEmpRes.rows[0].email,
+          userType: "employee",
+          companyId: globalEmpRes.rows[0].company_id,
+        };
+      }
+
+      // 4. Global fallback for users
+      const globalUserRes = await db.query(
+        `SELECT id, email, name, role, created_by_company_id FROM public.ca_users 
+         WHERE lower(name) ILIKE $1
+         LIMIT 1`,
+        [`%${cleanName}%`]
+      );
+      if (globalUserRes.rows.length > 0 && globalUserRes.rows[0].email) {
+        return {
+          id: globalUserRes.rows[0].id,
+          name: globalUserRes.rows[0].name,
+          email: globalUserRes.rows[0].email,
+          userType: "admin",
+          companyId: globalUserRes.rows[0].created_by_company_id,
+        };
       }
     } catch (dbErr) {
-      console.warn("Could not find assignee email in DB:", dbErr);
+      console.warn("Could not find assignee in DB:", dbErr);
     }
 
-    return "";
+    return null;
+  },
+
+  async findAssigneeEmail(companyId, assigneeName) {
+    const details = await this.findAssigneeDetails(companyId, assigneeName);
+    return details?.email || "";
   },
 
   async getTemplates(companyId) {

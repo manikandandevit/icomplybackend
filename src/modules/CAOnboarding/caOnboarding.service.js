@@ -1,3 +1,4 @@
+import { caFcmRepository } from "../CANotifications/caFcm.repository.js";
 import { sendMail } from "../../core/mail/mailer.js";
 import { config } from "../../config/index.js";
 import { caOnboardingRepository } from "./caOnboarding.repository.js";
@@ -131,15 +132,71 @@ export const caOnboardingService = {
       dueDate,
     } = payload;
 
-    // 1. Look up assignee email in DB
-    let assigneeEmail = await caOnboardingRepository.findAssigneeEmail(companyId, assigneeName);
+    // 1. Look up assignee details in DB
+    const assigneeDetails = await caOnboardingRepository.findAssigneeDetails(companyId, assigneeName);
+    let assigneeEmail = assigneeDetails?.email;
 
     // Default fallback email pattern if no explicit DB email found
     if (!assigneeEmail) {
       assigneeEmail = `${assigneeName.toLowerCase().replace(/[^a-z0-9]/g, ".")}@icomply.com`;
     }
 
-    // 2. Compose professional HTML Email Notification
+    const effectiveCompanyId = Number(companyId) || assigneeDetails?.companyId || 4;
+
+    // 2. Insert real-time in-app notification into DB so it pops up on screen & triggers bell icon
+    try {
+      if (assigneeDetails?.userType === "employee" && assigneeDetails?.id) {
+        await caFcmRepository.saveInAppNotification({
+          companyId: effectiveCompanyId,
+          targetUserType: "employee",
+          targetUserId: String(assigneeDetails.id),
+          title: `New Task Assigned: ${taskTitle}`,
+          body: `You have been assigned "${taskTitle}" for candidate ${candidateName} (Due: ${dueDate || "Day 1"}).`,
+          data: {
+            url: "/employeeadmin/dashboard",
+            type: "TASK_ASSIGNED",
+            direction: "received",
+            candidateName,
+            candidateRole,
+            candidateCountry: candidateCountry || "India",
+            candidateJoiningDate: candidateJoiningDate || "Upcoming",
+            taskTitle,
+            sectionTitle,
+            dueDate,
+            status: "Pending",
+          },
+        });
+      }
+
+      // Record Sent notification for Company Admin (Outgoing confirmation)
+      await caFcmRepository.saveInAppNotification({
+        companyId: effectiveCompanyId,
+        targetUserType: "admin",
+        targetUserId: null,
+        title: `Task Sent: ${taskTitle}`,
+        body: `Task notification sent to ${assigneeName} (${assigneeEmail}) for candidate ${candidateName}.`,
+        data: {
+          url: "/companyadmin/onboarding",
+          type: "TASK_SENT",
+          direction: "sent",
+          sentTo: assigneeName,
+          candidateName,
+          candidateRole: candidateRole || "New Joinee",
+          candidateCountry: candidateCountry || "India",
+          candidateJoiningDate: candidateJoiningDate || "Upcoming",
+          taskTitle,
+          sectionTitle: sectionTitle || "ONBOARDING",
+          assigneeName,
+          assigneeEmail,
+          dueDate: dueDate || "As scheduled",
+          status: "Sent",
+        },
+      });
+    } catch (notifErr) {
+      console.warn("Failed to create in-app notification:", notifErr?.message || notifErr);
+    }
+
+    // 3. Compose professional HTML Email Notification
     const subject = `[iComply Onboarding] New Task Assigned: ${taskTitle} for ${candidateName}`;
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
@@ -201,17 +258,23 @@ export const caOnboardingService = {
       </div>
     `;
 
-    await sendMail({
-      to: assigneeEmail,
-      subject,
-      html,
-      text: `New Task Assigned: ${taskTitle} for ${candidateName}. Section: ${sectionTitle}. Due: ${dueDate}`,
-    });
+    // 4. Send email
+    let emailSent = false;
+    try {
+      emailSent = await sendMail({
+        to: assigneeEmail,
+        subject,
+        html,
+        text: `New Task Assigned: ${taskTitle} for ${candidateName}. Section: ${sectionTitle}. Due: ${dueDate}`,
+      });
+    } catch (mailErr) {
+      console.warn("sendMail error in notifyTask:", mailErr?.message || mailErr);
+    }
 
-    return { assigneeEmail, sent: true };
+    return { assigneeEmail, sent: emailSent, inAppCreated: true };
   },
 
-  async notifyBatch(companyId, { tasks, country = "India" }) {
+    async notifyBatch(companyId, { tasks, country = "India" }) {
     // Group tasks by assigneeName
     const grouped = {};
     for (const t of tasks) {

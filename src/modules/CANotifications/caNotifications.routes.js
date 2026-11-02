@@ -11,6 +11,7 @@ caNotificationsRouter.use(authenticateToken, requireCompanyAdmin);
 caNotificationsRouter.post("/fcm-token", caFcmController.saveFcmToken);
 caNotificationsRouter.delete("/fcm-token", caFcmController.deleteFcmToken);
 caNotificationsRouter.get("/unread-alerts", caFcmController.getUnreadAlerts);
+caNotificationsRouter.put("/unread-alerts/mark-all-read", caFcmController.markAllAlertsRead);
 caNotificationsRouter.put("/unread-alerts/:id/read", caFcmController.markAlertRead);
 
 caNotificationsRouter.get("/settings", caNotificationsController.getSettings);

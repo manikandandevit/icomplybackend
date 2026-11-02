@@ -66,10 +66,12 @@ export const caFcmController = {
       userId,
     });
 
+    const unreadCount = (notifications || []).filter((n) => !n.is_read).length;
+
     return success(res, {
       status: 200,
       message: "Unread alerts retrieved",
-      data: { notifications },
+      data: { notifications, unreadCount },
     });
   }),
 
@@ -82,6 +84,19 @@ export const caFcmController = {
       status: 200,
       message: "Notification marked as read",
       data: { read: true },
+    });
+  }),
+
+  markAllAlertsRead: asyncHandler(async (req, res) => {
+    const companyId = req.companyId;
+    const userType = req.employeeId ? "employee" : "admin";
+    const userId = req.employeeId || null;
+
+    const count = await caFcmRepository.markAllInAppNotificationsRead(companyId, userType, userId);
+    return success(res, {
+      status: 200,
+      message: "All notifications marked as read",
+      data: { count, read: true },
     });
   }),
 };

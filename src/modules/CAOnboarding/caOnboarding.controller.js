@@ -144,7 +144,7 @@ export const caOnboardingController = {
         return fail(res, { message: validationError, status: 400 });
       }
 
-      const companyId = req.user?.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const result = await caOnboardingService.notifyTask(companyId, req.body);
       return success(res, {
         message: `Notification sent to ${req.body.assigneeName} (${result.assigneeEmail})`,
@@ -166,7 +166,7 @@ export const caOnboardingController = {
         return fail(res, { message: validationError, status: 400 });
       }
 
-      const companyId = req.user?.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const results = await caOnboardingService.notifyBatch(companyId, req.body);
       return success(res, {
         message: `Batch notifications processed for ${results.length} assignees`,
