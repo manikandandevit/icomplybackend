@@ -11,4 +11,6 @@ caAttendanceRouter.post("/check-out", authenticateToken, requireCompanyAdmin, ca
 caAttendanceRouter.post("/regularization", authenticateToken, requireCompanyAdmin, caAttendanceController.applyRegularization);
 caAttendanceRouter.post("/", authenticateToken, requireCompanyAdmin, requireNavPermission("attendance"), caAttendanceController.create);
 caAttendanceRouter.put("/:id/regularize", authenticateToken, requireCompanyAdmin, requireNavPermission("attendance"), caAttendanceController.regularize);
+caAttendanceRouter.post("/edit-time", authenticateToken, requireCompanyAdmin, requireNavPermission("attendance"), caAttendanceController.update);
+caAttendanceRouter.put("/edit-time", authenticateToken, requireCompanyAdmin, requireNavPermission("attendance"), caAttendanceController.update);
 caAttendanceRouter.put("/:id", authenticateToken, requireCompanyAdmin, requireNavPermission("attendance"), caAttendanceController.update);

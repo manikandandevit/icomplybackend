@@ -52,6 +52,7 @@ export const MODULE_NAV_MAP = {
     "revoke-apply",
     "revoke-requests",
     "daily",
+    "apply",
     "requests",
   ],
   "talent-acquisition": [

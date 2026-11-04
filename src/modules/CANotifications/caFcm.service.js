@@ -204,6 +204,40 @@ export const caFcmService = {
           },
         });
       }
+      const mgrId = employee?.details?.reportingToId || employee?.reporting_to_id;
+      if (mgrId) {
+        await caFcmRepository.saveInAppNotification({
+          companyId,
+          targetUserType: "employee",
+          targetUserId: String(mgrId),
+          title,
+          body,
+          data: {
+            type: "REGULARIZATION_REQUEST",
+            attendanceId: String(record?.id || ""),
+            employeeId: String(employee?.id || ""),
+            employeeName,
+            date: formattedDate,
+            url: "/companyadmin/attendance?tab=requests",
+          },
+        });
+        const mgrTokens = await caFcmRepository.getEmployeeTokens(companyId, mgrId);
+        if (mgrTokens.length > 0) {
+          await this.sendPushNotification(mgrTokens, {
+            title,
+            body,
+            data: {
+              type: "REGULARIZATION_REQUEST",
+              attendanceId: String(record?.id || ""),
+              employeeId: String(employee?.id || ""),
+              employeeName,
+              date: formattedDate,
+              url: "/companyadmin/attendance?tab=requests",
+            },
+          });
+        }
+      }
+
     } catch (error) {
       console.error("[FCM] notifyAdminsOfRegularizationRequest error:", error?.message || error);
     }

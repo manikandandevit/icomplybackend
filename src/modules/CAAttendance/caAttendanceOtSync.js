@@ -7,8 +7,15 @@ import { caFcmService } from "../CANotifications/caFcm.service.js";
 const calculateOtHours = (row, employee) => {
   const isOtApplicable = employee?.otApplicable !== undefined ? Boolean(employee.otApplicable) : Boolean(employee?.details?.otApplicable ?? true);
   if (!isOtApplicable) return 0;
-  if (!row.checkOut) return 0;
-  const out = new Date(row.checkOut);
+  const effectiveOut = row.checkOut || row.requestedCheckOut;
+  const effectiveIn = row.checkIn || row.requestedCheckIn;
+  if (!effectiveOut) return 0;
+
+  if (row.otHoursNum !== undefined && row.otHoursNum !== null && row.checkOut) {
+    return Number(row.otHoursNum);
+  }
+
+  const out = new Date(effectiveOut);
   if (Number.isNaN(out.getTime())) return 0;
 
   const dateObj = new Date(row.date);
@@ -17,35 +24,32 @@ const calculateOtHours = (row, employee) => {
   const dateKey = `${dateParts.find(p => p.type === 'year').value}-${dateParts.find(p => p.type === 'month').value}-${dateParts.find(p => p.type === 'day').value}`;
   const baseIsoDate = `${dateKey}T00:00:00+05:30`;
   const isSunday = new Date(baseIsoDate).getDay() === 0;
-  if (isSunday && row.checkIn) {
-    const inDate = new Date(row.checkIn);
+  if (isSunday && effectiveIn) {
+    const inDate = new Date(effectiveIn);
     const diffMs = out.getTime() - inDate.getTime();
     return diffMs > 0 ? Math.round((diffMs / 3600000) * 10) / 10 : 0;
   }
 
-  const shiftEndTime = employee.details?.shiftEndTime;
-  if (shiftEndTime) {
-    let [ehH, ehM] = shiftEndTime.split(":").map(Number);
-    const shiftStartTime = employee.details?.shiftStartTime;
-    let addDay = false;
-    if (shiftStartTime) {
-      const [shH, shM] = shiftStartTime.split(":").map(Number);
-      if (ehH < shH || (ehH === shH && ehM < shM)) {
-        addDay = true;
-      }
+  const shiftEndTime = row.shiftEndTime || employee.details?.shiftEndTime || "18:30";
+  let [ehH, ehM] = shiftEndTime.split(":").map(Number);
+  const shiftStartTime = row.shiftStartTime || employee.details?.shiftStartTime || "09:30";
+  let addDay = false;
+  if (shiftStartTime) {
+    const [shH, shM] = shiftStartTime.split(":").map(Number);
+    if (ehH < shH || (ehH === shH && ehM < shM)) {
+      addDay = true;
     }
-    
-    // Construct exact ISO string in IST
-    const shiftEndIso = `${dateKey}T${String(ehH).padStart(2, '0')}:${String(ehM).padStart(2, '0')}:00+05:30`;
-    const shiftEnd = new Date(shiftEndIso);
-    if (addDay) {
-      shiftEnd.setDate(shiftEnd.getDate() + 1);
-    }
-
-    const diffMs = out.getTime() - shiftEnd.getTime();
-    return diffMs > 0 ? Math.round((diffMs / 3600000) * 10) / 10 : 0;
   }
-  return 0;
+
+  // Construct exact ISO string in IST
+  const shiftEndIso = `${dateKey}T${String(ehH).padStart(2, '0')}:${String(ehM).padStart(2, '0')}:00+05:30`;
+  const shiftEnd = new Date(shiftEndIso);
+  if (addDay) {
+    shiftEnd.setDate(shiftEnd.getDate() + 1);
+  }
+
+  const diffMs = out.getTime() - shiftEnd.getTime();
+  return diffMs > 0 ? Math.round((diffMs / 3600000) * 10) / 10 : 0;
 };
 
 export const syncOtRequest = async (companyId, attendanceId) => {
@@ -64,10 +68,18 @@ export const syncOtRequest = async (companyId, attendanceId) => {
     );
     const existingOt = rows[0];
 
+    const reportingToId = employee.reportingToId || employee.details?.reportingToId || null;
+    const approverName = employee.reportingToName || employee.details?.reportingToName || "Company Admin";
+
     if (otHours > 0) {
       if (existingOt) {
         if (existingOt.status === "Pending" && existingOt.source === "auto") {
-          await caOtRequestsRepository.update(existingOt.id, companyId, { hours: otHours, workedOtHours: otHours });
+          await caOtRequestsRepository.update(existingOt.id, companyId, {
+            hours: otHours,
+            workedOtHours: otHours,
+            reportingToId: reportingToId ? Number(reportingToId) : null,
+            approverName,
+          });
         }
       } else {
         const created = await caOtRequestsRepository.create(companyId, {
@@ -81,6 +93,8 @@ export const syncOtRequest = async (companyId, attendanceId) => {
           hours: otHours,
           workedOtHours: otHours,
           reason: "Auto-calculated from attendance",
+          reportingToId: reportingToId ? Number(reportingToId) : null,
+          approverName,
           source: "auto",
         });
         if (created) {

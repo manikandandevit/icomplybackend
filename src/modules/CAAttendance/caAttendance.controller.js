@@ -3,7 +3,8 @@ import { success } from "../../core/utils/response.js";
 import { attendanceActorFromReq, caAttendanceService } from "./caAttendance.service.js";
 
 export const caAttendanceController = {
-  list: asyncHandler(async (req, res) => {
+
+list: asyncHandler(async (req, res) => {
     const records = await caAttendanceService.list(req.companyId, attendanceActorFromReq(req));
     return success(res, { message: "Attendance loaded", data: { records } });
   }),
@@ -34,7 +35,8 @@ export const caAttendanceController = {
 
   update: asyncHandler(async (req, res) => {
     const actor = attendanceActorFromReq(req);
-    const record = await caAttendanceService.updateTimes(req.params.id, req.companyId, req.body, actor);
+    const id = req.params.id || req.body.id || req.body.attendanceId;
+    const record = await caAttendanceService.updateTimes(id, req.companyId, req.body, actor);
     return success(res, { message: "Attendance time updated", data: { record } });
   }),
 

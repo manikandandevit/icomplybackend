@@ -1,3 +1,4 @@
+import { caEmployeesRepository } from "../CAEmployees/caEmployees.repository.js";
 import { db } from "../../core/db/pool.js";
 import { caAttendanceIndexSql, caAttendanceTableSql, mapCAAttendance } from "./caAttendance.constants.js";
 
@@ -26,17 +27,21 @@ const selectColumns = `
   COALESCE(NULLIF(TRIM(e.name), ''), a.employee_name) AS employee_name,
   COALESCE(NULLIF(TRIM(e.employee_code), ''), a.employee_code) AS employee_code,
   a.date, a.check_in, a.check_out, a.status, a.requested_check_in, a.requested_check_out,
+  a.original_check_in, a.original_check_out,
   a.regularization_status, a.regularization_reason, a.regularization_reviewed_by, a.admin_reply,
   a.created_by_company_id, a.created_at, a.updated_at,
-  NULLIF(TRIM(e.details->>'shiftStartTime'), '') AS shift_start_time,
-  NULLIF(TRIM(e.details->>'shiftEndTime'), '') AS shift_end_time,
-  COALESCE(e.ot_applicable, (e.details->>'otApplicable')::boolean, true) AS ot_applicable
+  COALESCE(NULLIF(TRIM(e.details->>'shiftStartTime'), ''), sm.start_time, '09:30') AS shift_start_time,
+  COALESCE(NULLIF(TRIM(e.details->>'shiftEndTime'), ''), sm.end_time, '18:30') AS shift_end_time,
+  COALESCE(e.ot_applicable, (e.details->>'otApplicable')::boolean, true) AS ot_applicable,
+  NULLIF(TRIM(COALESCE(e.details->>'reportingToId', e.details->>'reporting_to_id', '')), '') AS reporting_to_id
 `;
 
 const fromJoined = `
   FROM public.ca_attendance a
   LEFT JOIN public.ca_employees e
     ON e.id = a.employee_id AND e.created_by_company_id = a.created_by_company_id
+  LEFT JOIN public.ca_hr_masters sm
+    ON sm.id = e.shift_type_id AND sm.master_type = 'shift-type'
 `;
 
 const parseRowId = (id) => {
@@ -74,7 +79,7 @@ export const caAttendanceRepository = {
     const params = [cid];
 
     if (scope === "self" && empId) {
-      sql += " AND a.employee_id = $2";
+      sql += " AND (a.employee_id = $2 OR NULLIF(TRIM(COALESCE(e.details->>'reportingToId', e.details->>'reporting_to_id', '')), '') = $2::text)";
       params.push(empId);
     } else if (scope === "department" && deptId) {
       sql += " AND e.department_id = $2";
@@ -119,8 +124,9 @@ export const caAttendanceRepository = {
       `INSERT INTO public.ca_attendance (
         establishment_id, establishment_name, employee_id, employee_name, employee_code,
         date, check_in, check_out, status, requested_check_in, requested_check_out,
+        original_check_in, original_check_out,
         regularization_status, regularization_reason, regularization_reviewed_by, created_by_company_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING id`,
       [
         parseRowId(data.establishmentId),
@@ -134,6 +140,8 @@ export const caAttendanceRepository = {
         data.status || "Present",
         data.requestedCheckIn || null,
         data.requestedCheckOut || null,
+        data.originalCheckIn || null,
+        data.originalCheckOut || null,
         data.regularizationStatus || null,
         data.regularizationReason || null,
         data.regularizationReviewedBy || null,
@@ -164,6 +172,14 @@ export const caAttendanceRepository = {
     if (data.requestedCheckOut !== undefined) {
       updates.push(`requested_check_out = $${idx++}`);
       values.push(data.requestedCheckOut);
+    }
+    if (data.originalCheckIn !== undefined) {
+      updates.push(`original_check_in = $${idx++}`);
+      values.push(data.originalCheckIn);
+    }
+    if (data.originalCheckOut !== undefined) {
+      updates.push(`original_check_out = $${idx++}`);
+      values.push(data.originalCheckOut);
     }
     if (data.status !== undefined) {
       updates.push(`status = $${idx++}`);
@@ -199,4 +215,5 @@ export const caAttendanceRepository = {
     );
     return this.getById(result.rows[0]?.id, companyId);
   },
+
 };
