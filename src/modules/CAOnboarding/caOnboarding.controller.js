@@ -25,7 +25,9 @@ export const caOnboardingController = {
              AND (
                LOWER(TRIM(COALESCE(c.stage, ''))) IN ('offer acceptance', 'hired', 'accepted', 'onboarding')
                OR LOWER(TRIM(COALESCE(o.status, ''))) IN ('accepted', 'offer accepted')
-             )`,
+             )
+             AND LOWER(TRIM(COALESCE(c.stage, ''))) NOT IN ('alumni', 'relieved', 'rejected')
+             AND LOWER(TRIM(COALESCE(o.status, ''))) NOT IN ('completed', 'rejected', 'cancelled')`,
           [companyId]
         );
 
@@ -183,7 +185,7 @@ export const caOnboardingController = {
 
   async getTemplates(req, res) {
     try {
-      const companyId = String(req.user?.companyId || "");
+      const companyId = String(req.companyId || req.user?.companyId || "");
       const templates = await caOnboardingService.getTemplates(companyId);
       return success(res, {
         message: "Templates retrieved successfully",
@@ -200,7 +202,7 @@ export const caOnboardingController = {
 
   async saveTemplates(req, res) {
     try {
-      const companyId = String(req.user?.companyId || "");
+      const companyId = String(req.companyId || req.user?.companyId || "");
       if (!companyId) {
         return fail(res, { message: "Invalid company ID", status: 400 });
       }
@@ -230,7 +232,7 @@ export const caOnboardingController = {
 
   async getProgress(req, res) {
     try {
-      const companyId = String(req.user?.companyId || "");
+      const companyId = String(req.companyId || req.user?.companyId || "");
       const { progress, joiners } = await caOnboardingService.getProgress(companyId);
       return success(res, {
         message: "Joiners progress retrieved successfully",
@@ -247,7 +249,7 @@ export const caOnboardingController = {
 
   async saveProgress(req, res) {
     try {
-      const companyId = String(req.user?.companyId || "");
+      const companyId = String(req.companyId || req.user?.companyId || "");
       if (!companyId) {
         return fail(res, { message: "Invalid company ID", status: 400 });
       }

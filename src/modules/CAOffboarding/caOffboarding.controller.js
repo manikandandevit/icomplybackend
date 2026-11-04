@@ -5,7 +5,7 @@ import { caOffboardingValidator } from "./caOffboarding.validator.js";
 export const caOffboardingController = {
   async listExits(req, res) {
     try {
-      const companyId = req.user?.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const exits = await caOffboardingService.listExits(companyId);
       return success(res, {
         message: "Offboarding exits loaded",
@@ -19,7 +19,7 @@ export const caOffboardingController = {
 
   async initiate(req, res) {
     try {
-      const companyId = req.user?.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const validationError = caOffboardingValidator.validateInitiate(req.body);
       if (validationError) {
         return fail(res, { message: validationError, status: 400 });
@@ -39,7 +39,7 @@ export const caOffboardingController = {
 
   async updateSections(req, res) {
     try {
-      const companyId = req.user?.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const { sections } = req.body;
       const validationError = caOffboardingValidator.validateSections(sections);
       if (validationError) {
@@ -59,7 +59,7 @@ export const caOffboardingController = {
 
   async completeExit(req, res) {
     try {
-      const companyId = req.user?.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const completed = await caOffboardingService.completeExit(req.params.id, companyId);
       return success(res, {
         message: "Exit completed and candidate successfully moved to Alumni",
@@ -74,7 +74,7 @@ export const caOffboardingController = {
 
   async getTemplates(req, res) {
     try {
-      const companyId = req.user?.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const templates = await caOffboardingService.getTemplates(companyId);
       return success(res, {
         message: "Offboarding templates retrieved successfully",
@@ -88,7 +88,7 @@ export const caOffboardingController = {
 
   async saveTemplates(req, res) {
     try {
-      const companyId = req.user?.companyId;
+      const companyId = req.companyId || req.user?.companyId;
       const validationError = caOffboardingValidator.validateSaveTemplates(req.body);
       if (validationError) {
         return fail(res, { message: validationError, status: 400 });
@@ -105,6 +105,40 @@ export const caOffboardingController = {
     } catch (err) {
       console.error("Failed to save offboarding templates:", err);
       return fail(res, { message: "Failed to save offboarding templates", status: 500 });
+    }
+  },
+
+  async notifyTask(req, res) {
+    try {
+      const companyId = req.companyId || req.user?.companyId;
+      const result = await caOffboardingService.notifyTask(companyId, req.body);
+      return success(res, {
+        message: `Notification sent to ${req.body.assigneeName} (${result.assigneeEmail})`,
+        data: result,
+      });
+    } catch (err) {
+      console.error("Failed to notify offboarding assignee:", err);
+      return fail(res, {
+        message: "Failed to send email notification to assignee",
+        status: 500,
+      });
+    }
+  },
+
+  async notifyBatch(req, res) {
+    try {
+      const companyId = req.companyId || req.user?.companyId;
+      const results = await caOffboardingService.notifyBatch(companyId, req.body);
+      return success(res, {
+        message: `Batch notifications processed for ${results.length} assignees`,
+        data: { results },
+      });
+    } catch (err) {
+      console.error("Failed to process batch offboarding notifications:", err);
+      return fail(res, {
+        message: "Failed to process batch notifications",
+        status: 500,
+      });
     }
   },
 };

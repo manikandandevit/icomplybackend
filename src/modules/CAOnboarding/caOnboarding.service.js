@@ -143,58 +143,7 @@ export const caOnboardingService = {
 
     const effectiveCompanyId = Number(companyId) || assigneeDetails?.companyId || 4;
 
-    // 2. Insert real-time in-app notification into DB so it pops up on screen & triggers bell icon
-    try {
-      if (assigneeDetails?.userType === "employee" && assigneeDetails?.id) {
-        await caFcmRepository.saveInAppNotification({
-          companyId: effectiveCompanyId,
-          targetUserType: "employee",
-          targetUserId: String(assigneeDetails.id),
-          title: `New Task Assigned: ${taskTitle}`,
-          body: `You have been assigned "${taskTitle}" for candidate ${candidateName} (Due: ${dueDate || "Day 1"}).`,
-          data: {
-            url: "/employeeadmin/dashboard",
-            type: "TASK_ASSIGNED",
-            direction: "received",
-            candidateName,
-            candidateRole,
-            candidateCountry: candidateCountry || "India",
-            candidateJoiningDate: candidateJoiningDate || "Upcoming",
-            taskTitle,
-            sectionTitle,
-            dueDate,
-            status: "Pending",
-          },
-        });
-      }
-
-      // Record Sent notification for Company Admin (Outgoing confirmation)
-      await caFcmRepository.saveInAppNotification({
-        companyId: effectiveCompanyId,
-        targetUserType: "admin",
-        targetUserId: null,
-        title: `Task Sent: ${taskTitle}`,
-        body: `Task notification sent to ${assigneeName} (${assigneeEmail}) for candidate ${candidateName}.`,
-        data: {
-          url: "/companyadmin/onboarding",
-          type: "TASK_SENT",
-          direction: "sent",
-          sentTo: assigneeName,
-          candidateName,
-          candidateRole: candidateRole || "New Joinee",
-          candidateCountry: candidateCountry || "India",
-          candidateJoiningDate: candidateJoiningDate || "Upcoming",
-          taskTitle,
-          sectionTitle: sectionTitle || "ONBOARDING",
-          assigneeName,
-          assigneeEmail,
-          dueDate: dueDate || "As scheduled",
-          status: "Sent",
-        },
-      });
-    } catch (notifErr) {
-      console.warn("Failed to create in-app notification:", notifErr?.message || notifErr);
-    }
+    // Task assignment notifications removed as per user requirement (tasks are tracked directly in Dashboard Assigned/Pending Tasks)
 
     // 3. Compose professional HTML Email Notification
     const subject = `[iComply Onboarding] New Task Assigned: ${taskTitle} for ${candidateName}`;
