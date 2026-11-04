@@ -2,6 +2,7 @@ import { sendMail } from "./mailer.js";
 import { companiesRepository } from "../../modules/Companies/companies.repository.js";
 import { companiesStorage, LOGO_KEY_PATTERN } from "../../modules/Companies/companies.storage.js";
 import { caCompaniesRepository } from "../../modules/CACompanies/caCompanies.repository.js";
+import { caEmployeesRepository } from "../../modules/CAEmployees/caEmployees.repository.js";
 
 const escapeHtml = (value) =>
   String(value ?? "")
@@ -195,7 +196,13 @@ const uniqueEmails = (values) =>
 export const notifyRegularizationSubmitted = async ({ companyId, employee, record }) => {
   try {
     const company = await companiesRepository.findById(companyId);
-    const to = uniqueEmails([company?.email]).filter(
+    let managerEmail = null;
+    const mgrId = employee?.details?.reportingToId || employee?.reporting_to_id;
+    if (mgrId) {
+      const mgr = await caEmployeesRepository.findById(mgrId, companyId);
+      if (mgr?.email) managerEmail = mgr.email;
+    }
+    const to = uniqueEmails([company?.email, managerEmail]).filter(
       (email) => email !== String(employee?.email || "").trim().toLowerCase(),
     );
     if (!to.length) return;

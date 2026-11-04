@@ -20,9 +20,15 @@ const isPrivileged = (actor) => Boolean(actor?.isOwner || actor?.isCaUser || !ac
 const stampFrom = (date, time) => {
   const raw = String(time || "").trim();
   if (!raw) return null;
-  if (/^\d{2}:\d{2}$/.test(raw)) {
-    const [hour, minute] = raw.split(":").map(Number);
-    const [year, month, day] = formatDateToIST(date).split("-").map(Number);
+  const ampmMatch = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+  if (ampmMatch) {
+    let hour = Number(ampmMatch[1]);
+    const minute = Number(ampmMatch[2]);
+    const ampm = (ampmMatch[3] || "").toUpperCase();
+    if (ampm === "PM" && hour < 12) hour += 12;
+    if (ampm === "AM" && hour === 12) hour = 0;
+    const parts = formatDateToIST(date).split("-").map(Number);
+    const [year, month, day] = parts;
     if (!year || !month || !day) return null;
     const isoString = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+05:30`;
     return new Date(isoString).toISOString();
@@ -44,7 +50,9 @@ export const attendanceActorFromReq = (req) => ({
 });
 
 export const caAttendanceService = {
-  async list(companyId, actor = {}) {
+
+
+async list(companyId, actor = {}) {
     let scope = "self";
     if (isPrivileged(actor)) {
       scope = "all";
@@ -127,15 +135,20 @@ export const caAttendanceService = {
   },
 
   async updateTimes(id, companyId, payload = {}, actor = {}) {
-    const canEdit = isPrivileged(actor) || await caPermissionsService.can(companyId, actor, "attendance", "edit");
+    const canEdit = isPrivileged(actor) || await caPermissionsService.can(companyId, actor, "attendance", "edit") || await caPermissionsService.can(companyId, actor, "daily", "edit");
     if (!canEdit) {
       throw new AppError("You do not have permission to edit attendance time", 403, "FORBIDDEN");
     }
-    const existing = await caAttendanceRepository.getById(id, companyId);
-    if (!existing) {
-      throw new AppError("Attendance record not found", 404, "ATTENDANCE_NOT_FOUND");
+
+    let existing = null;
+    if (id && String(id) !== "0" && String(id) !== "new" && String(id) !== "undefined") {
+      existing = await caAttendanceRepository.getById(id, companyId);
     }
-    const date = formatDateToIST(existing.date || "");
+    if (!existing && payload.employeeId && payload.date) {
+      existing = await caAttendanceRepository.findByEmployeeDate(companyId, payload.employeeId, payload.date);
+    }
+
+    const date = formatDateToIST(existing?.date || payload.date || todayIso());
     const checkIn = stampFrom(date, payload.checkIn);
     const checkOut = stampFrom(date, payload.checkOut);
     if (!checkIn) {
@@ -144,12 +157,40 @@ export const caAttendanceService = {
     if (checkOut && checkOut <= checkIn) {
       throw new AppError("Check-out must be after check-in", 422, "CHECK_OUT_INVALID");
     }
-    const updated = await caAttendanceRepository.update(id, companyId, {
-      checkIn,
-      checkOut,
-      status: "Present",
-    });
-    void syncOtRequest(companyId, id);
+
+    let updated;
+    if (existing) {
+      updated = await caAttendanceRepository.update(existing.id, companyId, {
+        checkIn,
+        checkOut: checkOut || null,
+        status: "Present",
+      });
+      void syncOtRequest(companyId, existing.id);
+    } else {
+      const empId = payload.employeeId;
+      if (!empId) {
+        throw new AppError("Employee is required", 422, "EMPLOYEE_REQUIRED");
+      }
+      const employee = await caEmployeesRepository.findById(empId, companyId);
+      if (!employee) {
+        throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");
+      }
+      updated = await caAttendanceRepository.insert({
+        establishmentId: employee.establishmentId,
+        establishmentName: employee.establishmentName,
+        employeeId: employee.id,
+        employeeName: employee.name,
+        employeeCode: employee.employeeCode,
+        date,
+        checkIn,
+        checkOut: checkOut || null,
+        status: "Present",
+        createdByCompanyId: companyId,
+      });
+      if (updated) {
+        void syncOtRequest(companyId, updated.id);
+      }
+    }
     return updated;
   },
 
@@ -166,11 +207,15 @@ export const caAttendanceService = {
   },
 
   async applyRegularization(companyId, payload = {}, actor = {}) {
-    if (isPrivileged(actor) || !actor.employeeId) {
-      throw new AppError("Only employees can apply regularization", 403, "FORBIDDEN");
+    let targetEmployeeId = actor.employeeId;
+    if (isPrivileged(actor) || !targetEmployeeId) {
+      targetEmployeeId = payload.employeeId;
+    }
+    if (!targetEmployeeId) {
+      throw new AppError("Select an employee", 422, "EMPLOYEE_REQUIRED");
     }
 
-    const employee = await caEmployeesRepository.findById(actor.employeeId, companyId);
+    const employee = await caEmployeesRepository.findById(targetEmployeeId, companyId);
     if (!employee || employee.status === "Inactive") {
       throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");
     }
@@ -201,10 +246,15 @@ export const caAttendanceService = {
     if (existing?.regularizationStatus === "Pending") {
       throw new AppError("A regularization request is already pending for this date", 422, "ALREADY_PENDING");
     }
+    if (existing?.regularizationStatus === "Approved") {
+      throw new AppError("Attendance for this date is already regularized and approved", 422, "ALREADY_APPROVED");
+    }
 
     const patch = {
       requestedCheckIn,
       requestedCheckOut,
+      originalCheckIn: existing?.checkIn || null,
+      originalCheckOut: existing?.checkOut || null,
       regularizationStatus: "Pending",
       regularizationReason: reason,
       regularizationReviewedBy: null,
@@ -230,6 +280,7 @@ export const caAttendanceService = {
 
     setImmediate(async () => {
       try {
+        void syncOtRequest(companyId, saved.id);
         void notifyRegularizationSubmitted({ companyId, employee, record: saved });
         void caFcmService.notifyAdminsOfRegularizationRequest({ companyId, employee, record: saved });
       } catch (err) {
@@ -257,14 +308,20 @@ export const caAttendanceService = {
       throw new AppError("You cannot review or approve your own attendance regularization request", 403, "SELF_APPROVAL_FORBIDDEN");
     }
 
-    // 2. Permission check: Admin or Attendance Edit/Approve permission
-    const canReview = isPrivileged(actor) || await caPermissionsService.can(companyId, actor, "attendance", "edit");
+    const employee = await caEmployeesRepository.findById(existing.employeeId, companyId);
+    const isReportingManager = Boolean(actor.employeeId && employee && (
+      String(employee.reporting_to_id) === String(actor.employeeId) ||
+      String(employee.details?.reportingToId) === String(actor.employeeId)
+    ));
+
+    // 2. Permission check: Admin or Reporting Manager or Attendance Edit permission
+    const canReview = isPrivileged(actor) || isReportingManager || await caPermissionsService.can(companyId, actor, "attendance", "edit") || await caPermissionsService.can(companyId, actor, "requests", "edit");
     if (!canReview) {
       throw new AppError("You do not have permission to review regularization", 403, "FORBIDDEN");
     }
 
-    // 3. Department Scope check
-    if (!isPrivileged(actor)) {
+    // 3. Department Scope check (reporting manager is allowed to review reportees)
+    if (!isPrivileged(actor) && !isReportingManager) {
       const scope = await caPermissionsService.getScope(companyId, actor, "attendance");
       if (scope === "self") {
         throw new AppError("You cannot review team regularization requests", 403, "FORBIDDEN");
@@ -290,6 +347,12 @@ export const caAttendanceService = {
       if (!existing.requestedCheckIn) {
         throw new AppError("Requested check-in time is missing", 422, "CHECK_IN_REQUIRED");
       }
+      if (!existing.originalCheckIn) {
+        patch.originalCheckIn = existing.checkIn || null;
+      }
+      if (!existing.originalCheckOut) {
+        patch.originalCheckOut = existing.checkOut || null;
+      }
       patch.checkIn = existing.requestedCheckIn;
       patch.checkOut = existing.requestedCheckOut || null;
       patch.status = "Present";
@@ -298,6 +361,10 @@ export const caAttendanceService = {
     const updated = await caAttendanceRepository.update(id, companyId, patch);
     if (!updated) {
       throw new AppError("Unable to update regularization", 500, "REGULARIZE_FAILED");
+    }
+
+    if (status === "Approved") {
+      void syncOtRequest(companyId, id);
     }
 
     setImmediate(async () => {

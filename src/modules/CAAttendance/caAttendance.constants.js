@@ -37,6 +37,12 @@ ALTER TABLE public.ca_attendance
   ADD COLUMN IF NOT EXISTS requested_check_out TIMESTAMPTZ;
 
 ALTER TABLE public.ca_attendance
+  ADD COLUMN IF NOT EXISTS original_check_in TIMESTAMPTZ;
+
+ALTER TABLE public.ca_attendance
+  ADD COLUMN IF NOT EXISTS original_check_out TIMESTAMPTZ;
+
+ALTER TABLE public.ca_attendance
   ADD COLUMN IF NOT EXISTS regularization_reviewed_by TEXT;
 `;
 
@@ -75,11 +81,24 @@ export const mapCAAttendance = (row) => {
   const shiftEndTime = String(row.shift_end_time || "").trim();
   const startMin = clockMinutes(shiftStartTime);
   const rawEndMin = clockMinutes(shiftEndTime);
-  const inMin = stampMinutesFromDate(date, row.check_in);
-  const outMin = stampMinutesFromDate(date, row.check_out);
+  const inMin = stampMinutesFromDate(date, row.check_in || row.requested_check_in);
+  const outMin = stampMinutesFromDate(date, row.check_out || row.requested_check_out);
   const endMin = startMin != null && rawEndMin != null && rawEndMin <= startMin ? rawEndMin + 24 * 60 : rawEndMin;
   const lateCheckIn = startMin != null && inMin != null && inMin > startMin;
   const earlyCheckOut = endMin != null && outMin != null && outMin < endMin;
+
+  let otMinutes = 0;
+  const isOtApplicable = row.ot_applicable !== undefined && row.ot_applicable !== null ? Boolean(row.ot_applicable) : true;
+  if (isOtApplicable && outMin != null) {
+    const isSunday = new Date(`${date}T00:00:00+05:30`).getDay() === 0;
+    if (isSunday && inMin != null) {
+      otMinutes = Math.max(0, outMin - inMin);
+    } else if (endMin != null && outMin > endMin) {
+      otMinutes = outMin - endMin;
+    }
+  }
+  const otHoursNum = Math.round((otMinutes / 60) * 10) / 10;
+  const otHoursStr = otMinutes > 0 ? (otMinutes % 60 === 0 ? `${Math.floor(otMinutes / 60)}h` : `${Math.floor(otMinutes / 60)}h ${otMinutes % 60}m`) : "0h";
 
   return {
     id: row.id,
@@ -94,13 +113,19 @@ export const mapCAAttendance = (row) => {
     status: row.status,
     requestedCheckIn: row.requested_check_in,
     requestedCheckOut: row.requested_check_out,
+    originalCheckIn: row.original_check_in || null,
+    originalCheckOut: row.original_check_out || null,
     regularizationStatus: row.regularization_status,
     regularizationReason: row.regularization_reason,
     regularizationReviewedBy: row.regularization_reviewed_by,
     adminReply: row.admin_reply || null,
+    reportingToId: row.reporting_to_id || null,
     shiftStartTime: shiftStartTime || null,
     shiftEndTime: shiftEndTime || null,
-    otApplicable: row.ot_applicable !== undefined && row.ot_applicable !== null ? Boolean(row.ot_applicable) : true,
+    otApplicable: isOtApplicable,
+    otHours: otHoursStr,
+    otHoursNum,
+    otMinutes,
     lateCheckIn,
     earlyCheckOut,
     createdByCompanyId: row.created_by_company_id,

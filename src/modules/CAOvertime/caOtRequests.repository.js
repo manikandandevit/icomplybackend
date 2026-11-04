@@ -42,6 +42,10 @@ export const caOtRequestsRepository = {
       where.push(`employee_id = $${idx++}`);
       values.push(Number(filters.employeeId));
     }
+    if (filters.reportingToId) {
+      where.push(`reporting_to_id = $${idx++}`);
+      values.push(Number(filters.reportingToId));
+    }
     if (filters.establishmentId && filters.establishmentId !== "all") {
       where.push(`establishment_id = $${idx++}`);
       values.push(Number(filters.establishmentId));
@@ -109,9 +113,9 @@ export const caOtRequestsRepository = {
       RETURNING ${selectColumns}
       `,
       [
-        Number(data.establishmentId),
+        parseRowId(data.establishmentId),
         data.establishmentName || "",
-        Number(data.employeeId),
+        parseRowId(data.employeeId),
         data.employeeName || "",
         data.employeeCode || "",
         dateVal,
@@ -125,9 +129,9 @@ export const caOtRequestsRepository = {
         data.reason || "",
         data.type || "Weekday Ot",
         data.status || "Pending",
-        data.reportingToId ? Number(data.reportingToId) : null,
+        parseRowId(data.reportingToId),
         data.approverName || "",
-        data.attendanceId ? Number(data.attendanceId) : null,
+        parseRowId(data.attendanceId),
         data.source || "manual",
         cid,
       ]
@@ -181,6 +185,14 @@ export const caOtRequestsRepository = {
     if (data.reason !== undefined) {
       updates.push(`reason = $${idx++}`);
       values.push(data.reason);
+    }
+    if (data.reportingToId !== undefined) {
+      updates.push(`reporting_to_id = $${idx++}`);
+      values.push(parseRowId(data.reportingToId));
+    }
+    if (data.approverName !== undefined) {
+      updates.push(`approver_name = $${idx++}`);
+      values.push(data.approverName || "");
     }
 
     const { rows } = await db.query(

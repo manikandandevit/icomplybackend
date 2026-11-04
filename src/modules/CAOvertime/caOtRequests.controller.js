@@ -7,7 +7,9 @@ const otActorFromReq = (req) => ({
   employeeId: req.employeeId || req.user?.employeeId,
   isOwner: Boolean(req.isCompanyOwner || req.user?.isOwner),
   name: req.actorName || req.user?.name || "Company Admin",
-  canReview: Boolean(req.isCompanyOwner || req.user?.isOwner),
+  designationId: req.designationId || req.user?.designationId,
+  departmentId: req.departmentId || req.user?.departmentId,
+  allowedModules: req.allowedModules || req.user?.allowedModules || [],
 });
 
 export const caOtRequestsController = {

@@ -17,7 +17,7 @@ export const errorHandler = (err, req, res, _next) => {
       ? "An unexpected error occurred"
       : err.message || "An unexpected error occurred";
 
-  if (config.env !== "production") {
+  if (config.env !== "production" && status >= 500) {
     console.error("[ErrorHandler]", err);
   }
 
