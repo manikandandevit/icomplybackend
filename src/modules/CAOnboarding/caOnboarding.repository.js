@@ -158,7 +158,10 @@ export const caOnboardingRepository = {
   async getProgress(companyId) {
     await ensureTables();
     const rows = await db.query(
-      `SELECT candidate_id, sections, candidate_data FROM public.ca_onboarding_joiner_progress WHERE company_id = $1`,
+      `SELECT candidate_id, sections, candidate_data, updated_at 
+       FROM public.ca_onboarding_joiner_progress 
+       WHERE company_id = $1 
+       ORDER BY updated_at ASC`,
       [companyId]
     );
 
@@ -178,6 +181,76 @@ export const caOnboardingRepository = {
     return { progress, joiners: customJoiners };
   },
 
+  async syncCandidateAndOnboardingTables(companyId, candidateId, sections, candidateData) {
+    try {
+      const cid = Number(companyId) || 0;
+      const rawIdStr = String(candidateId || "").trim();
+      const cleanNum = parseInt(rawIdStr.replace(/\D/g, ""), 10) || 0;
+      const nameStr = String(candidateData?.name || (isNaN(Number(rawIdStr)) && !rawIdStr.startsWith("CAND-") && !rawIdStr.startsWith("ONB-") ? rawIdStr : "")).trim();
+
+      // Calculate progress stats
+      let totalTasks = 0;
+      let completedTasks = 0;
+      (sections || []).forEach((sec) => {
+        (sec.tasks || []).forEach((t) => {
+          totalTasks++;
+          if (t.completed) completedTasks++;
+        });
+      });
+
+      const percent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      const computedStatus =
+        totalTasks > 0 && completedTasks === totalTasks
+          ? "Completed"
+          : completedTasks > 0
+          ? "In Progress"
+          : "Pending Onboarding";
+
+      const progressJson = JSON.stringify({
+        totalTasks,
+        completedTasks,
+        percent,
+        sections,
+        lastUpdated: new Date().toISOString(),
+      });
+
+      // 1. Update public.ca_onboarding
+      if (cid > 0) {
+        await db.query(
+          `UPDATE public.ca_onboarding
+           SET status = CASE WHEN status = 'Completed' AND $1 != 'Completed' THEN status ELSE $1 END,
+               onboarding_data = jsonb_set(
+                 COALESCE(onboarding_data, '{}'::jsonb),
+                 '{progress}',
+                 $2::jsonb
+               ),
+               updated_at = CURRENT_TIMESTAMP
+           WHERE created_by_company_id = $3
+             AND (
+               ($4 > 0 AND (candidate_id = $4 OR id = $4))
+               OR ($5 <> '' AND LOWER(TRIM(candidate_name)) = LOWER($5))
+             )`,
+          [computedStatus, progressJson, cid, cleanNum, nameStr]
+        );
+
+        // 2. Update public.ca_candidates
+        await db.query(
+          `UPDATE public.ca_candidates
+           SET pre_joining_checklist = $1::jsonb,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE created_by_company_id = $2
+             AND (
+               ($3 > 0 AND id = $3)
+               OR ($4 <> '' AND LOWER(TRIM(name)) = LOWER($4))
+             )`,
+          [JSON.stringify(sections), cid, cleanNum, nameStr]
+        );
+      }
+    } catch (err) {
+      console.warn("Could not sync candidate tables on onboarding progress save:", err?.message || err);
+    }
+  },
+
   async saveProgress(companyId, { candidateId, sections, allProgress, candidateData }) {
     await ensureTables();
 
@@ -192,27 +265,64 @@ export const caOnboardingRepository = {
            DO UPDATE SET sections = EXCLUDED.sections, updated_at = CURRENT_TIMESTAMP`,
           [companyId, String(cId), JSON.stringify(secList)]
         );
+        await this.syncCandidateAndOnboardingTables(companyId, cId, secList, null);
       }
       return true;
     }
 
     // Case 2: Single candidate update { candidateId: "JOINER-xxx", sections: [...], candidateData: {...} }
     if (candidateId && Array.isArray(sections)) {
-      await db.query(
-        `INSERT INTO public.ca_onboarding_joiner_progress (company_id, candidate_id, sections, candidate_data, updated_at)
-         VALUES ($1, $2, $3::jsonb, $4::jsonb, CURRENT_TIMESTAMP)
-         ON CONFLICT (company_id, candidate_id)
-         DO UPDATE SET 
-           sections = EXCLUDED.sections,
-           candidate_data = COALESCE(EXCLUDED.candidate_data, ca_onboarding_joiner_progress.candidate_data),
-           updated_at = CURRENT_TIMESTAMP`,
-        [
-          companyId,
-          String(candidateId),
-          JSON.stringify(sections),
-          candidateData ? JSON.stringify(candidateData) : null,
-        ]
-      );
+      const rawIdStr = String(candidateId).trim();
+      const cleanNum = parseInt(rawIdStr.replace(/\D/g, ""), 10) || 0;
+      const nameStr = String(candidateData?.name || "").trim();
+
+      const aliasKeys = new Set([rawIdStr]);
+      if (cleanNum > 0) {
+        aliasKeys.add(String(cleanNum));
+        aliasKeys.add(`CAND-${cleanNum}`);
+      }
+      if (nameStr) {
+        aliasKeys.add(nameStr);
+      }
+
+      // Check ca_onboarding to find associated IDs and names
+      try {
+        const onbCheck = await db.query(
+          `SELECT id, candidate_id, candidate_name FROM public.ca_onboarding 
+           WHERE created_by_company_id = $1 
+             AND (($2 > 0 AND (candidate_id = $2 OR id = $2)) OR ($3 <> '' AND LOWER(TRIM(candidate_name)) = LOWER($3)))`,
+          [Number(companyId) || 0, cleanNum, nameStr]
+        );
+        onbCheck.rows.forEach((r) => {
+          if (r.id) aliasKeys.add(`ONB-${r.id}`);
+          if (r.candidate_id) {
+            aliasKeys.add(String(r.candidate_id));
+            aliasKeys.add(`CAND-${r.candidate_id}`);
+          }
+          if (r.candidate_name) aliasKeys.add(r.candidate_name.trim());
+        });
+      } catch (onbErr) {
+        // non-fatal
+      }
+
+      for (const alias of aliasKeys) {
+        await db.query(
+          `INSERT INTO public.ca_onboarding_joiner_progress (company_id, candidate_id, sections, candidate_data, updated_at)
+           VALUES ($1, $2, $3::jsonb, $4::jsonb, CURRENT_TIMESTAMP)
+           ON CONFLICT (company_id, candidate_id)
+           DO UPDATE SET 
+             sections = EXCLUDED.sections,
+             candidate_data = COALESCE(EXCLUDED.candidate_data, ca_onboarding_joiner_progress.candidate_data),
+             updated_at = CURRENT_TIMESTAMP`,
+          [
+            companyId,
+            String(alias),
+            JSON.stringify(sections),
+            candidateData ? JSON.stringify(candidateData) : null,
+          ]
+        );
+      }
+      await this.syncCandidateAndOnboardingTables(companyId, candidateId, sections, candidateData);
       return true;
     }
 

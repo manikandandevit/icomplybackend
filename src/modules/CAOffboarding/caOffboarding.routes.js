@@ -51,3 +51,19 @@ caOffboardingRouter.post(
   requireCompanyAdmin,
   caOffboardingController.saveTemplates
 );
+
+// POST /api/ca-offboarding/notify-task
+caOffboardingRouter.post(
+  "/notify-task",
+  authenticateToken,
+  requireCompanyAdmin,
+  caOffboardingController.notifyTask
+);
+
+// POST /api/ca-offboarding/notify-batch
+caOffboardingRouter.post(
+  "/notify-batch",
+  authenticateToken,
+  requireCompanyAdmin,
+  caOffboardingController.notifyBatch
+);
