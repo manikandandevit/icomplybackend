@@ -45,8 +45,9 @@ export const caPayrollRunsRepository = {
     return rows[0] ? mapPayrollRun(rows[0]) : null;
   },
 
-  async upsertRun(companyId, establishmentId, establishmentName, month, year) {
+  async upsertRun(companyId, establishmentId, establishmentName, month, year, runBy = "Company Admin") {
     await ensureTable();
+    await db.query(`ALTER TABLE public.ca_payroll_runs ADD COLUMN IF NOT EXISTS run_by TEXT`);
     // Delete existing run for same establishment+month+year and recreate
     const existing = await this.getRun(companyId, establishmentId, month, year);
     if (existing) {
@@ -54,9 +55,9 @@ export const caPayrollRunsRepository = {
       await db.query(`DELETE FROM public.ca_payroll_runs WHERE id = $1`, [existing.id]);
     }
     const { rows } = await db.query(
-      `INSERT INTO public.ca_payroll_runs (establishment_id, establishment_name, run_month, run_year, created_by_company_id)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [establishmentId, establishmentName, month, year, companyId]
+      `INSERT INTO public.ca_payroll_runs (establishment_id, establishment_name, run_month, run_year, created_by_company_id, run_by)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [establishmentId, establishmentName, month, year, companyId, runBy]
     );
     return mapPayrollRun(rows[0]);
   },

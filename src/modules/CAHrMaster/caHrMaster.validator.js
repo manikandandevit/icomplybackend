@@ -50,6 +50,7 @@ export const validateMasterBody = (masterType, body = {}) => {
     "designation",
     "shift-type",
     "gender",
+    "religion",
     "marital-status",
     "payment-method",
     "ot-type",

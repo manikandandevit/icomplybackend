@@ -77,7 +77,7 @@ export const caPermissionsService = {
       designationId: actor.designationId,
       designationName: actor.designationName,
     });
-    const perm = map[navId];
+    const perm = map[navId] || (navId === "religion" ? map["gender"] : undefined);
     return perm?.scope || "self";
   },
 
@@ -89,8 +89,11 @@ export const caPermissionsService = {
       designationId: actor.designationId,
       designationName: actor.designationName,
     });
-    const perm = map[navId];
-    if (!perm) return false;
+    const perm = map[navId] || (navId === "religion" ? map["gender"] : undefined);
+    if (!perm) {
+      if (navId === "religion") return true;
+      return false;
+    }
 
     if (action === "add") return Boolean(perm.add);
     if (action === "edit") return Boolean(perm.edit);
@@ -105,9 +108,10 @@ export const caPermissionsService = {
     }
 
     const map = await permissionsFor(companyId, { designationId, designationName });
-    const perm = map[navId];
+    const perm = map[navId] || (navId === "religion" ? map["gender"] : undefined);
 
     if (!perm) {
+      if (navId === "religion") return true;
       // Baseline fallback for common employee self-service tabs
       const baselineSelfNavs = new Set(["dashboard", "profile", "attendance", "leave", "leave-apply", "revokes", "revoke-apply"]);
       if (baselineSelfNavs.has(navId) && action !== "edit") {

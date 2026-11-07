@@ -392,216 +392,161 @@ export const caPayrollRunsService = {
 
         const estName = run.establishmentName || "Your Company";
         const monthYear = `${run.month} ${run.year}`;
-        const subject = `Payslip for ${monthYear} - ${estName}`;
+        const subject = `Payslip for ${monthYear}`;
 
-        let earningsHtml = "";
-        let deductionsHtml = "";
-        
-        if (p.breakdown && p.breakdown.components) {
-          Object.entries(p.breakdown.components).forEach(([name, amount]) => {
-            earningsHtml += `
-              <tr>
-                <td style="padding: 10px; border-bottom: 1px solid #eee; color: #334155; font-size: 14px;">${name}</td>
-                <td style="padding: 10px; border-bottom: 1px solid #eee; color: #0f172a; font-size: 14px; text-align: right; font-weight: 500;">&#8377; ${Math.round(amount).toLocaleString("en-IN")}</td>
-              </tr>
-            `;
-          });
-        }
-
-        if (p.breakdown && p.breakdown.statutory) {
-          Object.entries(p.breakdown.statutory).forEach(([name, amount]) => {
-            deductionsHtml += `
-              <tr>
-                <td style="padding: 10px; border-bottom: 1px solid #eee; color: #334155; font-size: 14px;">${name}</td>
-                <td style="padding: 10px; border-bottom: 1px solid #eee; color: #ef4444; font-size: 14px; text-align: right; font-weight: 500;">&#8377; ${Math.round(amount).toLocaleString("en-IN")}</td>
-              </tr>
-            `;
-          });
-        }
-
+        // Simple Email Body - Direct & Concise
         const html = `
           <!DOCTYPE html>
           <html>
-          <head>
-            <style>
-              body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; margin: 0; padding: 40px 20px; }
-              .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden; }
-              .header img { max-height: 40px; margin-bottom: 10px; }
-              .header h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px; }
-              .header p { margin: 8px 0 0 0; font-size: 14px; opacity: 0.9; }
-              .content { padding: 40px; }
-              .greeting { font-size: 16px; color: #334155; margin-bottom: 30px; line-height: 1.5; }
-              .summary-box { background: linear-gradient(145deg, #f0f9ff, #e0f2fe); border: 1px solid #bae6fd; border-radius: 8px; padding: 20px; margin-bottom: 30px; text-align: center; }
-              .summary-box .label { font-size: 12px; font-weight: 700; color: #0369a1; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
-              .summary-box .amount { font-size: 32px; font-weight: 800; color: #0c2340; margin: 0; }
-              .details-grid { display: flex; flex-direction: column; gap: 30px; margin-bottom: 30px; }
-              table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-              th { text-align: left; padding: 12px 10px; background-color: #f1f5f9; color: #475569; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-              .footer { background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px; text-align: center; color: #64748b; font-size: 12px; }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <div class="header">
-                ${logoUrlForHtml ? `<img src="${logoUrlForHtml}" alt="Logo" />` : ''}
-                <h1>${estName}</h1>
-                <p>Payslip for ${monthYear}</p>
-              </div>
-              <div class="content">
-                <div class="greeting">
-                  <strong>Dear ${p.employeeName},</strong><br/><br/>
-                  Please find below the summary of your payroll for <strong>${monthYear}</strong>. 
-                  Your salary has been processed successfully.
-                </div>
-                
-                <div class="summary-box">
-                  <div class="label">Net In-Hand Salary</div>
-                  <div class="amount">&#8377; ${Math.round(p.netPay).toLocaleString("en-IN")}</div>
-                </div>
-
-                <div class="details-grid">
-                  <div>
-                    <h3 style="margin: 0 0 10px 0; color: #0c2340; font-size: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">Earnings</h3>
-                    <table>
-                      <tr><th>Component</th><th style="text-align:right;">Amount</th></tr>
-                      ${earningsHtml}
-                      <tr>
-                        <td style="padding: 12px 10px; border-top: 2px solid #e2e8f0; color: #0c2340; font-weight: bold; font-size: 14px;">Gross Pay</td>
-                        <td style="padding: 12px 10px; border-top: 2px solid #e2e8f0; color: #0c2340; font-weight: bold; font-size: 14px; text-align: right;">&#8377; ${Math.round(p.grossPay).toLocaleString("en-IN")}</td>
-                      </tr>
-                    </table>
-                  </div>
-
-                  <div>
-                    <h3 style="margin: 0 0 10px 0; color: #0c2340; font-size: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">Deductions</h3>
-                    <table>
-                      <tr><th>Component</th><th style="text-align:right;">Amount</th></tr>
-                      ${deductionsHtml || `<tr><td colspan="2" style="padding: 10px; text-align: center; color: #94a3b8; font-size: 14px;">No deductions</td></tr>`}
-                      <tr>
-                        <td style="padding: 12px 10px; border-top: 2px solid #e2e8f0; color: #0c2340; font-weight: bold; font-size: 14px;">Total Deductions</td>
-                        <td style="padding: 12px 10px; border-top: 2px solid #e2e8f0; color: #ef4444; font-weight: bold; font-size: 14px; text-align: right;">&#8377; ${Math.round(p.deductions).toLocaleString("en-IN")}</td>
-                      </tr>
-                    </table>
-                  </div>
-                </div>
-                
-                <p style="color: #64748b; font-size: 13px; text-align: center; margin-top: 40px; font-style: italic;">
-                  This is a computer-generated payslip and does not require a physical signature.
-                </p>
-              </div>
-              <div class="footer">
-                &copy; ${new Date().getFullYear()} ${estName}. All rights reserved.<br/>
-                Powered by iComply HR
-              </div>
-            </div>
+          <body style="font-family: Arial, sans-serif; color: #1e293b; padding: 24px; line-height: 1.6; margin: 0;">
+            <p style="font-size: 14px; margin-bottom: 12px;">Dear <strong>${p.employeeName}</strong>,</p>
+            <p style="font-size: 14px; margin-bottom: 12px;">Please find attached your payslip for <strong>${monthYear}</strong>.</p>
+            <p style="font-size: 14px; margin-bottom: 20px;">Net Pay: <strong style="color: #047857;">&#8377; ${Math.round(p.netPay).toLocaleString("en-IN")}</strong></p>
+            <p style="font-size: 13px; color: #64748b; margin-top: 24px;">Regards,<br/><strong>${estName}</strong></p>
           </body>
           </html>
         `;
 
+        // Extract earnings list
+        const earningsList = [];
+        if (p.breakdown && p.breakdown.earnings && typeof p.breakdown.earnings === "object") {
+          Object.values(p.breakdown.earnings).forEach((info) => {
+            const amt = info.earnedAmount ?? info.amount ?? 0;
+            if (amt > 0) earningsList.push({ name: info.name || "Earning", amount: amt });
+          });
+        } else if (p.breakdown && p.breakdown.components) {
+          Object.entries(p.breakdown.components).forEach(([name, amount]) => {
+            if (amount > 0) earningsList.push({ name, amount });
+          });
+        }
+        if (p.breakdown && Number(p.breakdown.otPayAmount) > 0) {
+          earningsList.push({
+            name: `Overtime (${p.breakdown.otHours || "OT"})`,
+            amount: Number(p.breakdown.otPayAmount),
+          });
+        }
+
+        // Extract deductions list
+        const deductionsList = [];
+        if (p.breakdown && p.breakdown.deductions && typeof p.breakdown.deductions === "object") {
+          Object.values(p.breakdown.deductions).forEach((info) => {
+            const amt = info.amount ?? 0;
+            if (amt > 0) deductionsList.push({ name: info.name || "Deduction", amount: amt });
+          });
+        } else if (p.breakdown && p.breakdown.statutory) {
+          Object.entries(p.breakdown.statutory).forEach(([name, amount]) => {
+            if (amount > 0) deductionsList.push({ name, amount });
+          });
+        }
+        if (p.breakdown && Number(p.breakdown.lopDeductionAmount) > 0) {
+          deductionsList.push({
+            name: "Loss of Pay (LOP)",
+            amount: Number(p.breakdown.lopDeductionAmount),
+          });
+        }
+
+        const maxRows = Math.max(earningsList.length, deductionsList.length, 1);
+
+        let tableRowsHtml = "";
+        for (let i = 0; i < maxRows; i++) {
+          const earn = earningsList[i];
+          const ded = deductionsList[i];
+          tableRowsHtml += `
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+              <td style="padding: 8px 12px; color: #334155; font-size: 12px;">${earn ? earn.name : ""}</td>
+              <td style="padding: 8px 12px; text-align: right; font-weight: 600; color: #0f172a; font-size: 12px; border-right: 1px solid #cbd5e1;">${earn ? "&#8377; " + Math.round(earn.amount).toLocaleString("en-IN") : ""}</td>
+              <td style="padding: 8px 12px; color: #334155; font-size: 12px;">${ded ? ded.name : ""}</td>
+              <td style="padding: 8px 12px; text-align: right; font-weight: 600; color: #dc2626; font-size: 12px;">${ded ? "-&#8377; " + Math.round(ded.amount).toLocaleString("en-IN") : ""}</td>
+            </tr>
+          `;
+        }
+
+        // Clean Official PDF Template (Exact match with frontend View sheet)
         const pdfHtml = `
           <!DOCTYPE html>
           <html>
           <head>
+            <meta charset="utf-8" />
             <style>
-              body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #1e293b; background: white; margin: 0; }
-              .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 3px solid #0c2340; padding-bottom: 20px; }
-              .logo { max-height: 50px; }
-              .company-info { text-align: right; font-size: 11px; color: #475569; line-height: 1.5; }
-              .company-info h1 { margin: 0; color: #0c2340; font-size: 20px; font-weight: 800; letter-spacing: 0.5px; }
-              .title-strip { background-color: #0c2340; color: white; text-align: center; padding: 12px; font-weight: bold; letter-spacing: 2px; font-size: 14px; margin-bottom: 30px; text-transform: uppercase; }
+              body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #1e293b; background: white; margin: 0; }
+              .header { border-bottom: 1px solid #cbd5e1; padding-bottom: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+              .header-title h1 { margin: 0; font-size: 18px; color: #0c2340; font-weight: 700; }
+              .header-title p { margin: 4px 0 0 0; font-size: 12px; color: #64748b; font-weight: 500; }
+              .header img { max-height: 40px; }
               
-              .emp-grid { display: flex; gap: 20px; margin-bottom: 30px; }
-              .emp-col { flex: 1; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; }
-              .emp-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 12px; }
-              .emp-row:last-child { margin-bottom: 0; }
-              .label { color: #64748b; font-weight: 600; }
-              .value { color: #0f172a; font-weight: 700; text-align: right; }
+              .info-table { width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; margin-bottom: 20px; font-size: 12px; }
+              .info-table td { padding: 8px 12px; border: 1px solid #cbd5e1; }
+              .info-label { background-color: #f8fafc; color: #64748b; font-weight: 500; width: 25%; }
+              .info-val { color: #0f172a; font-weight: 600; width: 25%; }
 
-              .salary-container { display: flex; gap: 20px; margin-bottom: 30px; }
-              .salary-box { flex: 1; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
-              .box-title { background: #0c2340; color: white; padding: 12px 15px; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
-              .box-title.deduct { background: #be123c; }
-              .s-table { width: 100%; border-collapse: collapse; }
-              .s-table td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
-              .s-table tr:nth-child(even) { background: #f8fafc; }
-              .s-table .amt { text-align: right; font-weight: 600; }
-              .s-total { background: #f1f5f9; font-weight: 800; }
+              .salary-table { width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; margin-bottom: 20px; }
+              .salary-table th { background-color: #f8fafc; color: #0c2340; font-weight: 700; font-size: 12px; padding: 8px 12px; border-bottom: 1px solid #cbd5e1; }
+              .salary-table tfoot td { background-color: #f8fafc; border-top: 1px solid #cbd5e1; font-weight: 700; font-size: 12px; padding: 8px 12px; }
               
-              .net-pay-section { display: flex; justify-content: space-between; align-items: center; background: #ecfdf5; border: 1px solid #10b981; padding: 20px 30px; border-radius: 8px; margin-bottom: 40px; }
-              .net-label { font-size: 14px; font-weight: 700; color: #065f46; text-transform: uppercase; letter-spacing: 1px; }
-              .net-words { font-size: 12px; color: #047857; margin-top: 5px; }
-              .net-amount { font-size: 32px; font-weight: 900; color: #065f46; }
-
-              .footer { text-align: center; color: #94a3b8; font-size: 10px; border-top: 1px dashed #cbd5e1; padding-top: 20px; }
-              .signature-area { margin-top: 50px; text-align: right; margin-bottom: 20px; }
-              .signature-area div { display: inline-block; text-align: center; }
-              .signature-area .line { border-top: 1px solid #000; width: 150px; margin-bottom: 5px; }
-              .signature-area .role { font-size: 11px; color: #64748b; font-weight: bold; }
+              .net-bar { border: 1px solid #cbd5e1; background-color: #f8fafc; border-radius: 4px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
+              .net-label { font-size: 11px; font-weight: 700; color: #0c2340; text-transform: uppercase; }
+              .net-words { font-size: 11.5px; color: #475569; font-style: italic; margin-top: 2px; }
+              .net-amt { font-size: 18px; font-weight: 700; color: #047857; text-align: right; }
             </style>
           </head>
           <body>
             <div class="header">
-              ${logoUrlForHtml ? `<img src="${logoUrlForHtml}" class="logo" />` : '<div style="width: 50px;"></div>'}
-              <div class="company-info">
+              <div class="header-title">
                 <h1>${estName}</h1>
-                <div>Payslip generated through iComply HR</div>
+                <p>Payslip for ${monthYear}</p>
               </div>
+              ${logoUrlForHtml ? `<img src="${logoUrlForHtml}" alt="Logo" />` : ""}
             </div>
 
-            <div class="title-strip">Payslip for the month of ${monthYear}</div>
+            <table class="info-table">
+              <tr>
+                <td class="info-label">Employee Name</td>
+                <td class="info-val">${p.employeeName}</td>
+                <td class="info-label">Employee Code</td>
+                <td class="info-val">${p.employeeCode || emp.employeeCode || "-"}</td>
+              </tr>
+              <tr>
+                <td class="info-label">Designation</td>
+                <td class="info-val">${emp.designationName || "-"}</td>
+                <td class="info-label">Monthly CTC</td>
+                <td class="info-val">&#8377; ${Math.round(p.ctc || 0).toLocaleString("en-IN")}</td>
+              </tr>
+              <tr>
+                <td class="info-label">Working / Present</td>
+                <td class="info-val">${p.breakdown?.workingDays || 30} / ${p.breakdown?.daysPresent || 0} Days</td>
+                <td class="info-label">Payable Days</td>
+                <td class="info-val">${p.breakdown?.payableDays || p.breakdown?.daysPresent || 0} Days</td>
+              </tr>
+            </table>
 
-            <div class="emp-grid">
-              <div class="emp-col">
-                <div class="emp-row"><span class="label">Employee Name</span><span class="value">${p.employeeName}</span></div>
-                <div class="emp-row"><span class="label">Employee ID</span><span class="value">${p.employeeCode || p.employeeId}</span></div>
-                <div class="emp-row"><span class="label">Designation</span><span class="value">${emp.designationName || '-'}</span></div>
-                <div class="emp-row"><span class="label">Date of Joining</span><span class="value">${emp.details?.dateOfJoining || '-'}</span></div>
-              </div>
-              <div class="emp-col">
-                <div class="emp-row"><span class="label">UAN Number</span><span class="value">${emp.details?.uan || '-'}</span></div>
-                <div class="emp-row"><span class="label">PF Number</span><span class="value">${emp.details?.pfNumber || '-'}</span></div>
-                <div class="emp-row"><span class="label">PAN Number</span><span class="value">${emp.details?.panNumber || '-'}</span></div>
-                <div class="emp-row"><span class="label">Bank A/C</span><span class="value">${emp.details?.bankAccountNumber || '-'}</span></div>
-              </div>
-            </div>
+            <table class="salary-table">
+              <thead>
+                <tr>
+                  <th style="text-align: left; width: 40%;">Earnings</th>
+                  <th style="text-align: right; width: 15%; border-right: 1px solid #cbd5e1;">Amount</th>
+                  <th style="text-align: left; width: 30%;">Deductions</th>
+                  <th style="text-align: right; width: 15%;">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tableRowsHtml}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td style="color: #0c2340;">Gross Earnings</td>
+                  <td style="text-align: right; border-right: 1px solid #cbd5e1; color: #0c2340;">&#8377; ${Math.round(p.grossPay).toLocaleString("en-IN")}</td>
+                  <td style="color: #be123c;">Total Deductions</td>
+                  <td style="text-align: right; color: #be123c;">-&#8377; ${Math.round(p.deductions).toLocaleString("en-IN")}</td>
+                </tr>
+              </tfoot>
+            </table>
 
-            <div class="salary-container">
-              <!-- Earnings -->
-              <div class="salary-box">
-                <div class="box-title">Earnings</div>
-                <table class="s-table">
-                  ${p.breakdown && p.breakdown.components ? Object.entries(p.breakdown.components).map(([k,v]) => `<tr><td>${k}</td><td class="amt">&#8377; ${Math.round(v).toLocaleString("en-IN")}</td></tr>`).join('') : ''}
-                  <tr class="s-total"><td>Gross Earnings</td><td class="amt">&#8377; ${Math.round(p.grossPay).toLocaleString("en-IN")}</td></tr>
-                </table>
-              </div>
-
-              <!-- Deductions -->
-              <div class="salary-box">
-                <div class="box-title deduct">Deductions</div>
-                <table class="s-table">
-                  ${p.breakdown && p.breakdown.statutory ? Object.entries(p.breakdown.statutory).map(([k,v]) => `<tr><td>${k}</td><td class="amt">&#8377; ${Math.round(v).toLocaleString("en-IN")}</td></tr>`).join('') : '<tr><td colspan="2" style="text-align:center; color:#94a3b8;">No Deductions</td></tr>'}
-                  <tr class="s-total"><td>Total Deductions</td><td class="amt" style="color:#be123c;">&#8377; ${Math.round(p.deductions).toLocaleString("en-IN")}</td></tr>
-                </table>
-              </div>
-            </div>
-
-            <div class="net-pay-section">
+            <div class="net-bar">
               <div>
-                <div class="net-label">Net In-Hand Salary</div>
+                <div class="net-label">Net Salary</div>
                 <div class="net-words">Rupees ${numberToWords(Math.round(p.netPay))}</div>
               </div>
-              <div class="net-amount">&#8377; ${Math.round(p.netPay).toLocaleString("en-IN")}</div>
-            </div>
-
-            <div class="signature-area">
-              <div>
-                <div class="line"></div>
-                <div class="role">Authorized Signatory</div>
-              </div>
-            </div>
-
-            <div class="footer">
-              This is a computer-generated document and does not require a signature.
+              <div class="net-amt">&#8377; ${Math.round(p.netPay).toLocaleString("en-IN")}</div>
             </div>
           </body>
           </html>

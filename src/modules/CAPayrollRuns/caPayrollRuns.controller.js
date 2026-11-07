@@ -43,6 +43,7 @@ export const caPayrollRunsController = {
         establishmentName,
         month,
         year,
+        runBy,
         payslips // array of { employeeId, employeeName, employeeCode, grossPay, netPay, deductions, ctc, breakdown }
       } = req.body;
 
@@ -50,9 +51,11 @@ export const caPayrollRunsController = {
         throw new AppError("Missing required fields: establishmentId, month, year, payslips", 400);
       }
 
+      const runByName = runBy || req.user?.name || req.user?.email || "Company Admin";
+
       // Upsert run (delete old if exists)
       const run = await caPayrollRunsRepository.upsertRun(
-        req.companyId, establishmentId, establishmentName || "", month, year
+        req.companyId, establishmentId, establishmentName || "", month, year, runByName
       );
 
       // Insert all payslips
@@ -183,6 +186,12 @@ export const caPayrollRunsController = {
         });
         return {
            ...run,
+           employeeCount: payslips.length,
+           totalMonthlyCtc: payslips.reduce((sum, p) => sum + Number(p.ctc || 0), 0),
+           totalEarnings: payslips.reduce((sum, p) => sum + Number(p.grossPay || 0), 0),
+           totalGrossPay: payslips.reduce((sum, p) => sum + Number(p.grossPay || 0), 0),
+           totalDeductions: payslips.reduce((sum, p) => sum + Number(p.deductions || 0), 0),
+           totalNetPay: payslips.reduce((sum, p) => sum + Number(p.netPay || 0), 0),
            totalEPF,
            totalEPS,
            totalEmployerEPF,

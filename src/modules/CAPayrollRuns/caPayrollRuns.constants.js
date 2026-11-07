@@ -46,6 +46,7 @@ export const mapPayrollRun = (row) => ({
   esicChallanUrl: row.esic_challan_url || null,
   ptChallanUrl: row.pt_challan_url || null,
   lwfChallanUrl: row.lwf_challan_url || null,
+  runBy: row.run_by || "Company Admin",
   createdAt: row.created_at,
 });
 
