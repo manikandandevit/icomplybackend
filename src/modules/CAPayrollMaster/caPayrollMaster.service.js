@@ -8,12 +8,16 @@ export const caPayrollMasterService = {
 
   async create(companyId, payload) {
     if (!payload.name?.trim()) throw new AppError("Component name is required", 422, "VALIDATION_ERROR");
-    if (payload.calculationType === "Fixed Amount") {
+    if (payload.type === "Deduction") {
+      payload.percentage = Number(payload.percentage) || 0;
+      payload.fixedAmount = Number(payload.fixedAmount) || 0;
+      if (!payload.dependsOn?.trim()) payload.dependsOn = "CTC";
+    } else if (payload.calculationType === "Fixed Amount") {
       if (payload.fixedAmount == null || isNaN(Number(payload.fixedAmount))) {
         throw new AppError("Fixed Amount is required", 422, "VALIDATION_ERROR");
       }
       payload.percentage = 0;
-      payload.dependsOn = "CTC";
+      if (!payload.dependsOn?.trim()) payload.dependsOn = "CTC";
     } else {
       if (payload.percentage == null || isNaN(Number(payload.percentage))) {
         throw new AppError("Percentage is required", 422, "VALIDATION_ERROR");
@@ -28,12 +32,16 @@ export const caPayrollMasterService = {
 
   async update(id, companyId, payload) {
     if (!payload.name?.trim()) throw new AppError("Component name is required", 422, "VALIDATION_ERROR");
-    if (payload.calculationType === "Fixed Amount") {
+    if (payload.type === "Deduction") {
+      payload.percentage = Number(payload.percentage) || 0;
+      payload.fixedAmount = Number(payload.fixedAmount) || 0;
+      if (!payload.dependsOn?.trim()) payload.dependsOn = "CTC";
+    } else if (payload.calculationType === "Fixed Amount") {
       if (payload.fixedAmount == null || isNaN(Number(payload.fixedAmount))) {
         throw new AppError("Fixed Amount is required", 422, "VALIDATION_ERROR");
       }
       payload.percentage = 0;
-      payload.dependsOn = "CTC";
+      if (!payload.dependsOn?.trim()) payload.dependsOn = "CTC";
     } else {
       if (payload.percentage == null || isNaN(Number(payload.percentage))) {
         throw new AppError("Percentage is required", 422, "VALIDATION_ERROR");
