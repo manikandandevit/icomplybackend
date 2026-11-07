@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS public.ca_offers (
   req_id VARCHAR(100),
   document_name VARCHAR(255),
   document_url TEXT,
+  email VARCHAR(255),
+  phone VARCHAR(50),
   documents JSONB DEFAULT '[]'::jsonb
 );
 `;
@@ -39,6 +41,8 @@ export const ALLOWED_OFFER_FIELDS = [
   "approval_status",
   "document_name",
   "document_url",
+  "email",
+  "phone",
   "documents",
 ];
 

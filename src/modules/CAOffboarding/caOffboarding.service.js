@@ -2,6 +2,7 @@ import { caOffboardingRepository } from "./caOffboarding.repository.js";
 import { caEmployeesRepository } from "../CAEmployees/caEmployees.repository.js";
 import { caOnboardingRepository } from "../CAOnboarding/caOnboarding.repository.js";
 import { sendMail } from "../../core/mail/mailer.js";
+import { db } from "../../core/db/pool.js";
 
 export const caOffboardingService = {
   async listExits(companyId) {
@@ -165,6 +166,8 @@ export const caOffboardingService = {
     }
 
     // 1. Create Exit record in ca_offboarding_exits (status = 'In Progress')
+    const rDate = new Date().toISOString().split("T")[0];
+    const lwd = lastWorkingDay || rDate;
     const exit = await caOffboardingRepository.create(companyId, {
       employeeId: employee.id,
       employeeCode: employee.employeeCode,
@@ -173,12 +176,38 @@ export const caOffboardingService = {
       department: employee.departmentName || "",
       countryCode,
       countryName,
-      resignationDate: new Date().toISOString().split("T")[0],
-      lastWorkingDay: lastWorkingDay || new Date().toISOString().split("T")[0],
+      resignationDate: rDate,
+      lastWorkingDay: lwd,
       reason: reason || "",
       sections: exitSections,
       isUrgent: false,
     });
+
+    // 2. Also keep ca_employees details synchronized
+    try {
+      await db.query(
+        `UPDATE public.ca_employees
+         SET details = jsonb_set(
+               jsonb_set(
+                 COALESCE(details, '{}'::jsonb),
+                 '{resignationDate}',
+                 $1::jsonb
+               ),
+               '{lastWorkingDay}',
+               $2::jsonb
+             ),
+             updated_at = NOW()
+         WHERE id = $3 AND created_by_company_id = $4`,
+        [
+          JSON.stringify(rDate),
+          JSON.stringify(lwd),
+          employee.id,
+          companyId,
+        ]
+      );
+    } catch (empSyncErr) {
+      console.warn("Could not sync resignation info to employee details:", empSyncErr);
+    }
 
     return exit;
   },
@@ -201,6 +230,10 @@ export const caOffboardingService = {
     }
 
     return completed;
+  },
+
+  async withdrawExit(exitId, companyId) {
+    return caOffboardingRepository.withdrawExit(exitId, companyId);
   },
 
   async getTemplates(companyId) {

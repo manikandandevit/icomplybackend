@@ -36,6 +36,14 @@ caOffboardingRouter.post(
   caOffboardingController.completeExit
 );
 
+// POST /api/ca-offboarding/exits/:id/withdraw
+caOffboardingRouter.post(
+  "/exits/:id/withdraw",
+  authenticateToken,
+  requireCompanyAdmin,
+  caOffboardingController.withdrawExit
+);
+
 // GET /api/ca-offboarding/templates
 caOffboardingRouter.get(
   "/templates",

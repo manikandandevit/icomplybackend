@@ -36,6 +36,7 @@ import { caOffersRouter } from "./modules/CAOffers/index.js";
 import { caEcrSlabsRouter } from "./modules/CAEcrSlabs/index.js";
 import { caOnboardingRouter } from "./modules/CAOnboarding/index.js";
 import { caOffboardingRouter } from "./modules/CAOffboarding/index.js";
+import { caSeparationRouter } from "./modules/CASeparation/index.js";
 import { hirePilotRouter } from "./modules/HirePilot/index.js";
 import { caNotificationsRouter } from "./modules/CANotifications/index.js";
 
@@ -91,6 +92,7 @@ export const createApp = () => {
   app.use("/api/ca-onboarding", caOnboardingRouter);
   app.use("/api/ca-ecr-slabs", caEcrSlabsRouter);
   app.use("/api/ca-offboarding", caOffboardingRouter);
+  app.use("/api/ca-separation", caSeparationRouter);
   app.use("/api/hirepilot", hirePilotRouter);
   app.use("/api/countries", countryRouter);
   app.use("/api/pricing", pricingRouter);

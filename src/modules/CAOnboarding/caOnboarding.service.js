@@ -134,14 +134,13 @@ export const caOnboardingService = {
 
     // 1. Look up assignee details in DB
     const assigneeDetails = await caOnboardingRepository.findAssigneeDetails(companyId, assigneeName);
-    let assigneeEmail = assigneeDetails?.email;
+    const assigneeEmail = assigneeDetails?.email || null;
 
-    // Default fallback email pattern if no explicit DB email found
     if (!assigneeEmail) {
-      assigneeEmail = `${assigneeName.toLowerCase().replace(/[^a-z0-9]/g, ".")}@icomply.com`;
+      return { assigneeEmail: null, sent: false, inAppCreated: true };
     }
 
-    const effectiveCompanyId = Number(companyId) || assigneeDetails?.companyId || 4;
+    const effectiveCompanyId = Number(companyId) || assigneeDetails?.companyId || null;
 
     // Task assignment notifications removed as per user requirement (tasks are tracked directly in Dashboard Assigned/Pending Tasks)
 
@@ -238,18 +237,15 @@ export const caOnboardingService = {
     const assigneeEntries = Object.entries(grouped);
     const results = await Promise.all(
       assigneeEntries.map(async ([assigneeName, userTasks]) => {
-        let assigneeEmail = await caOnboardingRepository.findAssigneeEmail(companyId, assigneeName);
+        const assigneeEmail = await caOnboardingRepository.findAssigneeEmail(companyId, assigneeName);
 
-        const isDummyDomain =
-          !assigneeEmail ||
-          assigneeEmail.includes("@test.com") ||
-          assigneeEmail.includes("@example.com") ||
-          assigneeEmail.includes("@icomply.com");
-
-        if (isDummyDomain && config.smtp?.email) {
-          assigneeEmail = config.smtp.email;
-        } else if (!assigneeEmail) {
-          assigneeEmail = `${assigneeName.toLowerCase().replace(/[^a-z0-9]/g, ".")}@icomply.com`;
+        if (!assigneeEmail) {
+          return {
+            assigneeName,
+            assigneeEmail: null,
+            tasksCount: userTasks.length,
+            sent: false,
+          };
         }
 
         const sent = await sendConsolidatedTasksEmail({

@@ -16,6 +16,8 @@ const ensureTable = () => {
       await db.query(`ALTER TABLE public.ca_offers ADD COLUMN IF NOT EXISTS hiring_manager VARCHAR(255);`);
       await db.query(`ALTER TABLE public.ca_offers ADD COLUMN IF NOT EXISTS approval_status VARCHAR(50) DEFAULT 'Draft';`);
       await db.query(`ALTER TABLE public.ca_offers ADD COLUMN IF NOT EXISTS documents JSONB DEFAULT '[]'::jsonb;`);
+      await db.query(`ALTER TABLE public.ca_offers ADD COLUMN IF NOT EXISTS email VARCHAR(255);`);
+      await db.query(`ALTER TABLE public.ca_offers ADD COLUMN IF NOT EXISTS phone VARCHAR(50);`);
       await db.query(`ALTER TABLE public.ca_candidates ADD COLUMN IF NOT EXISTS documents JSONB DEFAULT '[]'::jsonb;`);
     })();
   }
@@ -77,7 +79,7 @@ export const caOffersRepository = {
       FROM public.ca_offers o
       LEFT JOIN public.ca_candidates c ON o.candidate_id = c.id
       LEFT JOIN LATERAL (
-        SELECT jr.req_id, jr.id AS job_id, jr.location, jr.hiring_manager
+        SELECT jr.req_id, jr.id AS job_id, jr.location, jr.hiring_manager, jr.establishment_id, jr.establishment_name
         FROM public.ca_job_requisitions jr
         WHERE jr.created_by_company_id = o.created_by_company_id
           AND LOWER(TRIM(jr.position)) = LOWER(TRIM(COALESCE(c.role, o.role)))
@@ -289,7 +291,7 @@ export const caOffersRepository = {
       FROM public.ca_offers o
       LEFT JOIN public.ca_candidates c ON o.candidate_id = c.id
       LEFT JOIN LATERAL (
-        SELECT jr.req_id, jr.id AS job_id, jr.location, jr.hiring_manager
+        SELECT jr.req_id, jr.id AS job_id, jr.location, jr.hiring_manager, jr.establishment_id, jr.establishment_name
         FROM public.ca_job_requisitions jr
         WHERE jr.created_by_company_id = o.created_by_company_id
           AND LOWER(TRIM(jr.position)) = LOWER(TRIM(COALESCE(c.role, o.role)))

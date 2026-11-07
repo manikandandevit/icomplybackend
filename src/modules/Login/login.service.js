@@ -15,34 +15,6 @@ const employeeSubject = (id) => `employee:${id}`;
 
 const INACTIVE_ACCOUNT_MESSAGE = "Contact admin your account is inactive";
 
-const users = [
-  {
-    id: "usr-1002",
-    name: "Raj Kumar",
-    email: "payroll@icomply.in",
-    passwordHash: bcrypt.hashSync("Pay@123", 10),
-    role: "Payroll Manager",
-    department: "Payroll",
-  },
-  {
-    id: "usr-1003",
-    name: "Priya S",
-    email: "compliance@icomply.in",
-    passwordHash: bcrypt.hashSync("Comply@123", 10),
-    role: "Compliance Manager",
-    department: "Compliance",
-  },
-];
-
-const toPublicUser = (user) => ({
-  id: user.id,
-  name: user.name,
-  email: user.email,
-  role: user.role,
-  department: user.department,
-  imageUrl: user.imageUrl ?? null,
-});
-
 const toPublicSuperAdmin = (row) => ({
   id: String(row.id),
   name: row.User_Name,
@@ -283,12 +255,7 @@ export const loginService = {
       );
     }
 
-    const user = users.find((entry) => entry.email === email);
-    if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
-      throw new AppError("Invalid email or password", 401, "INVALID_CREDENTIALS");
-    }
-
-    return sessionFor(toPublicUser(user));
+    throw new AppError("Invalid email or password", 401, "INVALID_CREDENTIALS");
   },
 
   async getProfile(tokenUser) {
@@ -363,12 +330,7 @@ export const loginService = {
       }
     }
 
-    const user = users.find((entry) => entry.id === raw);
-    if (!user) {
-      throw new AppError("User session is no longer valid", 401, "UNAUTHORIZED");
-    }
-
-    return toPublicUser(user);
+    throw new AppError("User session is no longer valid", 401, "UNAUTHORIZED");
   },
 
   async resetPassword(userPayload, { password }) {
