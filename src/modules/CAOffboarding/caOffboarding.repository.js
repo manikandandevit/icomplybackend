@@ -318,7 +318,10 @@ export const caOffboardingRepository = {
         updated_at
       FROM public.ca_offboarding_exits
       WHERE created_by_company_id = $1
-      ORDER BY id DESC
+      ORDER BY 
+        CASE WHEN status = 'Completed' THEN 1 ELSE 0 END ASC,
+        last_working_day ASC NULLS LAST,
+        id DESC
       `,
       [cid]
     );
@@ -335,6 +338,7 @@ export const caOffboardingRepository = {
       countryName: r.country_name || "India",
       resignationDate: r.resignation_date ? new Date(r.resignation_date).toISOString().split("T")[0] : "",
       lastDay: r.last_working_day ? new Date(r.last_working_day).toISOString().split("T")[0] : "",
+      createdAt: r.created_at,
       reason: r.reason || "",
       status: r.status,
       isUrgent: Boolean(r.is_urgent),
@@ -354,6 +358,26 @@ export const caOffboardingRepository = {
     const cid = parseRowId(companyId);
     const empId = parseRowId(payload.employeeId);
     if (!cid || !empId) return null;
+
+    // Reuse existing In Progress exit if already present
+    const existing = await db.query(
+      `SELECT id FROM public.ca_offboarding_exits WHERE created_by_company_id = $1 AND employee_id = $2 AND status = 'In Progress' LIMIT 1`,
+      [cid, empId]
+    );
+
+    if (existing.rows.length > 0) {
+      const exitId = existing.rows[0].id;
+      const { rows } = await db.query(
+        `UPDATE public.ca_offboarding_exits
+         SET last_working_day = COALESCE($1::date, last_working_day),
+             reason = COALESCE(NULLIF($2, ''), reason),
+             updated_at = NOW()
+         WHERE id = $3
+         RETURNING id`,
+        [payload.lastWorkingDay || null, payload.reason || "", exitId]
+      );
+      return rows[0] || existing.rows[0];
+    }
 
     const { rows } = await db.query(
       `
@@ -400,16 +424,31 @@ export const caOffboardingRepository = {
   async updateSections(id, companyId, sections) {
     await ensureTable();
     const cid = parseRowId(companyId);
-    const exitId = parseRowId(String(id).replace("EXIT-", ""));
+    const rawStr = String(id ?? "").replace(/^exit-/i, "").trim();
+    const exitId = parseRowId(rawStr) || parseInt(rawStr.replace(/\D/g, ""), 10) || null;
     if (!cid || !exitId) return false;
+
+    // Calculate completion progress
+    let totalTasks = 0;
+    let completedTasks = 0;
+    (sections || []).forEach((sec) => {
+      (sec.tasks || []).forEach((t) => {
+        totalTasks++;
+        if (t.completed) completedTasks++;
+      });
+    });
+
+    const isAllCompleted = totalTasks > 0 && completedTasks === totalTasks;
 
     const { rowCount } = await db.query(
       `
       UPDATE public.ca_offboarding_exits
-      SET sections = $3::jsonb, updated_at = NOW()
+      SET sections = $3::jsonb,
+          status = CASE WHEN $4 = TRUE THEN 'Completed' ELSE 'In Progress' END,
+          updated_at = NOW()
       WHERE (id = $1 OR employee_id = $1) AND created_by_company_id = $2
       `,
-      [exitId, cid, JSON.stringify(sections)]
+      [exitId, cid, JSON.stringify(sections), isAllCompleted]
     );
 
     return rowCount > 0;
@@ -469,6 +508,48 @@ export const caOffboardingRepository = {
         }
       } catch (e) {
         console.warn("Could not mark employee Inactive on exit completion:", e);
+      }
+    }
+
+    return rows[0] || null;
+  },
+
+  async withdrawExit(id, companyId) {
+    await ensureTable();
+    const cid = parseRowId(companyId);
+    const cleanId = String(id || "").replace(/^EXIT-/i, "").trim();
+    const { rows } = await db.query(
+      `
+      UPDATE public.ca_offboarding_exits
+      SET status = 'Withdrawn', updated_at = NOW()
+      WHERE (id::text = $1 OR employee_id::text = $1)
+        ${cid ? "AND created_by_company_id = $2" : ""}
+      RETURNING *
+      `,
+      cid ? [cleanId, cid] : [cleanId]
+    );
+
+    const empId = rows[0]?.employee_id || cleanId;
+    if (empId) {
+      try {
+        await db.query(
+          `UPDATE public.ca_offboarding_exits
+           SET status = 'Withdrawn', updated_at = NOW()
+           WHERE employee_id::text = $1 ${cid ? "AND created_by_company_id = $2" : ""}`,
+          cid ? [String(empId), cid] : [String(empId)]
+        );
+        await db.query(
+          `UPDATE public.ca_employees
+           SET details = details - 'lastWorkingDay' - 'resignationDate' - 'resignationReason',
+               last_working_day = NULL,
+               resignation_date = NULL,
+               resignation_reason = NULL,
+               updated_at = NOW()
+           WHERE (id::text = $1) ${cid ? "AND created_by_company_id = $2" : ""}`,
+          cid ? [String(empId), cid] : [String(empId)]
+        );
+      } catch (e) {
+        console.warn("Could not clean employee separation details:", e);
       }
     }
 

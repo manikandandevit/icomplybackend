@@ -72,6 +72,21 @@ export const caOffboardingController = {
     }
   },
 
+  async withdrawExit(req, res) {
+    try {
+      const companyId = req.companyId || req.user?.companyId;
+      const withdrawn = await caOffboardingService.withdrawExit(req.params.id, companyId);
+      return success(res, {
+        message: "Separation request withdrawn successfully",
+        data: { exit: withdrawn },
+      });
+    } catch (err) {
+      console.error("Error withdrawing exit:", err);
+      const status = err.statusCode || 500;
+      return fail(res, { message: err.message || "Failed to withdraw request", status });
+    }
+  },
+
   async getTemplates(req, res) {
     try {
       const companyId = req.companyId || req.user?.companyId;

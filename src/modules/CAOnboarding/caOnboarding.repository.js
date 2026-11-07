@@ -2,6 +2,8 @@ import { db } from "../../core/db/pool.js";
 import {
   caOnboardingTemplateTableSql,
   caOnboardingJoinerProgressTableSql,
+  ESSENTIAL_INDIA_ONBOARDING_SECTIONS,
+  ESSENTIAL_SINGAPORE_ONBOARDING_SECTIONS,
 } from "./caOnboarding.constants.js";
 
 let ready = null;
@@ -63,40 +65,6 @@ export const caOnboardingRepository = {
           };
         }
       }
-
-      // 3. Global fallback for employees across any company (e.g. Sneha Iyer, Priya Menon)
-      const globalEmpRes = await db.query(
-        `SELECT id, email, name, company_id FROM public.ca_employees 
-         WHERE lower(name) ILIKE $1
-         LIMIT 1`,
-        [`%${cleanName}%`]
-      );
-      if (globalEmpRes.rows.length > 0 && globalEmpRes.rows[0].email) {
-        return {
-          id: globalEmpRes.rows[0].id,
-          name: globalEmpRes.rows[0].name,
-          email: globalEmpRes.rows[0].email,
-          userType: "employee",
-          companyId: globalEmpRes.rows[0].company_id,
-        };
-      }
-
-      // 4. Global fallback for users
-      const globalUserRes = await db.query(
-        `SELECT id, email, name, role, created_by_company_id FROM public.ca_users 
-         WHERE lower(name) ILIKE $1
-         LIMIT 1`,
-        [`%${cleanName}%`]
-      );
-      if (globalUserRes.rows.length > 0 && globalUserRes.rows[0].email) {
-        return {
-          id: globalUserRes.rows[0].id,
-          name: globalUserRes.rows[0].name,
-          email: globalUserRes.rows[0].email,
-          userType: "admin",
-          companyId: globalUserRes.rows[0].created_by_company_id,
-        };
-      }
     } catch (dbErr) {
       console.warn("Could not find assignee in DB:", dbErr);
     }
@@ -120,27 +88,43 @@ export const caOnboardingRepository = {
     rows.rows.forEach((r) => {
       templates[r.template_key] = r.sections;
     });
+
+    // If company does not have templates configured yet in DB, dynamically initialize essentials in DB for this company
+    let needsSave = false;
+    if (templates["India"] === undefined || !Array.isArray(templates["India"]) || templates["India"].length === 0) {
+      templates["India"] = ESSENTIAL_INDIA_ONBOARDING_SECTIONS;
+      needsSave = true;
+    }
+    if (templates["Singapore"] === undefined) {
+      templates["Singapore"] = ESSENTIAL_SINGAPORE_ONBOARDING_SECTIONS;
+      needsSave = true;
+    }
+    for (const [key, sec] of Object.entries(templates)) {
+      if ((key.toLowerCase().includes("india") || key.toLowerCase().includes("madurai")) && (!Array.isArray(sec) || sec.length === 0)) {
+        templates[key] = ESSENTIAL_INDIA_ONBOARDING_SECTIONS;
+        needsSave = true;
+      }
+    }
+
+    if (needsSave && companyId) {
+      for (const [key, secList] of Object.entries(templates)) {
+        await db.query(
+          `INSERT INTO public.ca_onboarding_templates (company_id, template_key, sections, updated_at)
+           VALUES ($1, $2, $3::jsonb, CURRENT_TIMESTAMP)
+           ON CONFLICT (company_id, template_key)
+           DO UPDATE SET sections = EXCLUDED.sections, updated_at = CURRENT_TIMESTAMP`,
+          [companyId, key, JSON.stringify(secList)]
+        ).catch(() => {});
+      }
+    }
+
     return templates;
   },
 
   async saveTemplates(companyId, { templates, templateKey, sections }) {
     await ensureTables();
 
-    // Case 1: Bulk object { templates: { India: [...], Singapore: [...] } }
-    if (templates && typeof templates === "object") {
-      for (const [key, sec] of Object.entries(templates)) {
-        await db.query(
-          `INSERT INTO public.ca_onboarding_templates (company_id, template_key, sections, updated_at)
-           VALUES ($1, $2, $3::jsonb, CURRENT_TIMESTAMP)
-           ON CONFLICT (company_id, template_key)
-           DO UPDATE SET sections = EXCLUDED.sections, updated_at = CURRENT_TIMESTAMP`,
-          [companyId, key, JSON.stringify(sec)]
-        );
-      }
-      return true;
-    }
-
-    // Case 2: Specific single templateKey { templateKey: "India__MDS Tech", sections: [...] }
+    // 1. If explicit templateKey & sections provided, always upsert it directly
     if (templateKey && Array.isArray(sections)) {
       await db.query(
         `INSERT INTO public.ca_onboarding_templates (company_id, template_key, sections, updated_at)
@@ -149,10 +133,23 @@ export const caOnboardingRepository = {
          DO UPDATE SET sections = EXCLUDED.sections, updated_at = CURRENT_TIMESTAMP`,
         [companyId, templateKey, JSON.stringify(sections)]
       );
-      return true;
     }
 
-    return false;
+    // 2. Also upsert all keys in templates map
+    if (templates && typeof templates === "object") {
+      for (const [key, sec] of Object.entries(templates)) {
+        if (!Array.isArray(sec)) continue;
+        await db.query(
+          `INSERT INTO public.ca_onboarding_templates (company_id, template_key, sections, updated_at)
+           VALUES ($1, $2, $3::jsonb, CURRENT_TIMESTAMP)
+           ON CONFLICT (company_id, template_key)
+           DO UPDATE SET sections = EXCLUDED.sections, updated_at = CURRENT_TIMESTAMP`,
+          [companyId, key, JSON.stringify(sec)]
+        );
+      }
+    }
+
+    return true;
   },
 
   async getProgress(companyId) {

@@ -5,7 +5,6 @@ import { caEstablishmentsRepository } from "../CAEstablishments/caEstablishments
 import { companiesRepository } from "../Companies/companies.repository.js";
 import { caPermissionsService } from "../CAPermissions/caPermissions.service.js";
 import { caEmployeesRepository } from "./caEmployees.repository.js";
-import { caOffboardingRepository } from "../CAOffboarding/caOffboarding.repository.js";
 
 export const DEFAULT_EMPLOYEE_PASSWORD = "Employee@123";
 
@@ -188,14 +187,6 @@ export const caEmployeesService = {
     }
     await caEstablishmentsRepository.syncEmployeeCount(updated.establishmentId);
 
-    if (options.resignationDate || options.lastWorkingDay || options.resignationReason) {
-      try {
-        await caOffboardingRepository.syncFromEmployee(companyId, updated, options);
-      } catch (offbErr) {
-        console.warn("Could not sync employee to offboarding exits:", offbErr);
-      }
-    }
-
     return updated;
   },
 
@@ -251,16 +242,6 @@ export const caEmployeesService = {
       await caEstablishmentsRepository.syncEmployeeCount(oldEst);
       if (newEst && newEst !== oldEst) {
         await caEstablishmentsRepository.syncEmployeeCount(newEst);
-      }
-
-      // Auto-sync to offboarding exits if resignation details provided
-      const empDetails = (payload.details && typeof payload.details === "object") ? payload.details : {};
-      if (empDetails.resignationDate || empDetails.lastWorkingDay) {
-        try {
-          await caOffboardingRepository.syncFromEmployee(companyId, employee, empDetails);
-        } catch (offbErr) {
-          console.warn("Could not sync employee to offboarding exits:", offbErr);
-        }
       }
 
       return employee;

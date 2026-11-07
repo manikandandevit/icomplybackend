@@ -12,6 +12,8 @@ export const caOnboardingController = {
       try {
         await db.query(`ALTER TABLE public.ca_candidates ADD COLUMN IF NOT EXISTS department VARCHAR(255);`);
         await db.query(`ALTER TABLE public.ca_offers ADD COLUMN IF NOT EXISTS department VARCHAR(255);`);
+        await db.query(`ALTER TABLE public.ca_offers ADD COLUMN IF NOT EXISTS email VARCHAR(255);`);
+        await db.query(`ALTER TABLE public.ca_offers ADD COLUMN IF NOT EXISTS phone VARCHAR(50);`);
 
         const acceptedCandidates = await db.query(
           `SELECT c.id as candidate_id, COALESCE(c.name, o.candidate_name) as name, COALESCE(c.email, o.email) as email,
