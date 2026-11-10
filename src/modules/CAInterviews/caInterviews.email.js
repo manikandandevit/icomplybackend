@@ -4,6 +4,8 @@ import {
   resolvePositionCompany,
   sendCandidateRejectionEmail,
 } from "../CACandidates/caCandidates.email.js";
+import { caFcmRepository } from "../CANotifications/caFcm.repository.js";
+import { caFcmService } from "../CANotifications/caFcm.service.js";
 
 /**
  * Builds the responsive, MNC-grade HTML email template for interview notifications
@@ -520,6 +522,368 @@ export const sendInterviewFeedbackEmail = async ({
     return sent;
   } catch (err) {
     console.error("[Interview Feedback Email] Error sending feedback email:", err.message);
+    return false;
+  }
+};
+
+/**
+ * Builds the responsive HTML email template for the assigned interviewer/employee.
+ */
+export const buildInterviewerAssignmentEmailHtml = ({
+  interviewerName,
+  candidateName,
+  jobRole,
+  companyName,
+  logoUrl,
+  initials,
+  displayRound,
+  displayDatetime,
+  displayMode,
+  cleanMeetingLink,
+  hrefMeetingLink,
+  venue,
+}) => {
+  const logoHtml = logoUrl
+    ? `<img src="${logoUrl}" alt="${companyName}" width="44" height="44" style="display: block; width: 44px; height: 44px; border-radius: 8px; border: 1px solid #e2e8f0; object-fit: contain; background: #ffffff;" />`
+    : `<table cellpadding="0" cellspacing="0" border="0" style="width: 44px; height: 44px; border-radius: 8px; background: #0f172a; text-align: center;"><tr><td align="center" valign="middle" style="color: #ffffff; font-size: 16px; font-weight: 700; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">${initials || "TA"}</td></tr></table>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Interview Assignment – ${displayRound} for ${jobRole} | ${companyName}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #1e293b;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f1f5f9; padding: 40px 16px; margin: 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" class="email-card" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);">
+          <tr>
+            <td class="email-header" style="padding: 24px 32px; border-bottom: 1px solid #f1f5f9; background-color: #ffffff;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td valign="middle" style="padding-right: 14px;">${logoHtml}</td>
+                  <td valign="middle">
+                    <h1 style="margin: 0; font-size: 19px; font-weight: 700; color: #0f172a; line-height: 1.25; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">${companyName}</h1>
+                    <div style="margin-top: 3px; font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.08em; text-transform: uppercase;">TALENT ACQUISITION &bull; INTERVIEW ASSIGNMENT</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td class="email-body" style="padding: 32px 32px 28px 32px;">
+              <div style="display: inline-block; padding: 4px 12px; border-radius: 9999px; background-color: #e0f2fe; color: #0369a1; font-size: 12px; font-weight: 700; text-transform: uppercase; margin-bottom: 16px;">
+                New Interview Task
+              </div>
+              <h2 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 700; color: #0f172a; line-height: 1.35;">You Have Been Assigned as Interviewer</h2>
+              <p style="margin: 0 0 14px 0; font-size: 15px; color: #334155; line-height: 1.65;">
+                Hello <strong>${interviewerName}</strong>,
+              </p>
+              <p style="margin: 0 0 20px 0; font-size: 15px; color: #334155; line-height: 1.65;">
+                You have been assigned to conduct an interview for candidate <strong>${candidateName}</strong> applying for the position of <strong>${jobRole}</strong>.
+              </p>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0 24px 0; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;">
+                <tr>
+                  <td style="padding: 18px 20px;">
+                    <div style="font-size: 13px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;">Interview Details</div>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size: 14px;">
+                      <tr>
+                        <td style="padding: 6px 0; color: #64748b; width: 130px; font-weight: 500;">Candidate</td>
+                        <td style="padding: 6px 0; color: #0f172a; font-weight: 700; text-align: right;">${candidateName}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px 0; color: #64748b; font-weight: 500;">Position</td>
+                        <td style="padding: 6px 0; color: #0f172a; font-weight: 600; text-align: right;">${jobRole}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px 0; color: #64748b; font-weight: 500;">Interview Round</td>
+                        <td style="padding: 6px 0; color: #0f172a; font-weight: 600; text-align: right;">${displayRound}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px 0; color: #64748b; font-weight: 500;">Scheduled Time</td>
+                        <td style="padding: 6px 0; color: #0f172a; font-weight: 600; text-align: right;">${displayDatetime}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px 0; color: #64748b; font-weight: 500;">Mode</td>
+                        <td style="padding: 6px 0; color: #0f172a; font-weight: 600; text-align: right;">${displayMode}</td>
+                      </tr>
+                      ${cleanMeetingLink ? `
+                      <tr>
+                        <td colspan="2" style="padding-top: 14px;">
+                          <div style="font-weight: 600; color: #2563eb; margin-bottom: 4px; font-size: 14px;">Interview Meeting Link:</div>
+                          <a href="${hrefMeetingLink}" target="_blank" style="color: #2563eb; text-decoration: underline; font-size: 14px; word-break: break-all; font-weight: 500;">${cleanMeetingLink}</a>
+                        </td>
+                      </tr>` : (venue ? `
+                      <tr>
+                        <td style="padding: 6px 0; color: #64748b; font-weight: 500;">Venue</td>
+                        <td style="padding: 6px 0; color: #0f172a; font-weight: 600; text-align: right;">${venue}</td>
+                      </tr>` : "")}
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0 0 16px 0; font-size: 14px; color: #475569; line-height: 1.6;">
+                <strong>Next Steps:</strong> Please join on time. Once the interview is concluded, submit your feedback, evaluation rating, and recommendation in the <strong>iComply</strong> portal.
+              </p>
+
+              <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+
+              <p style="margin: 0; font-size: 14px; color: #64748b;">
+                Best regards,<br />
+                <strong style="color: #0f172a;">Talent Acquisition Team</strong><br />
+                ${companyName}
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+};
+
+/**
+ * Triggers notification (In-App, FCM Push, and Email) to the assigned employee/interviewer.
+ */
+export const sendInterviewerAssignmentNotification = async ({
+  companyId,
+  candidateId,
+  interviewId,
+  role: directRole,
+  interviewer: directInterviewer,
+  interviewerEmployeeId: directEmpId,
+  interviewerEmail: directEmpEmail,
+  type: directType,
+  roundName: directRoundName,
+  datetime: directDatetime,
+  mode: directMode,
+  meetingLink: directMeetingLink,
+  venue: directVenue,
+  candidateName: directName,
+}) => {
+  try {
+    let candidateName = directName || "Candidate";
+    let candidateRole = directRole || "Position";
+    let establishmentName = "";
+    let activeCompanyId = companyId;
+
+    let interviewer = directInterviewer || null;
+    let roundName = directRoundName || directType || "Interview Round";
+    let datetime = directDatetime || "To be communicated";
+    let mode = directMode || "Online";
+    let meetingLink = directMeetingLink || null;
+    let venue = directVenue || null;
+
+    // 1. Fetch Candidate from DB if candidateId exists
+    if (candidateId && Number(candidateId) > 0) {
+      const { rows } = await db.query(
+        `SELECT name, email, role, establishment_name, created_by_company_id 
+         FROM public.ca_candidates WHERE id = $1`,
+        [Number(candidateId)]
+      );
+      if (rows[0]) {
+        candidateName = rows[0].name || candidateName;
+        candidateRole = rows[0].role || candidateRole;
+        establishmentName = rows[0].establishment_name || "";
+        activeCompanyId = rows[0].created_by_company_id || activeCompanyId;
+      }
+    }
+
+    // 2. Fetch Interview Details from DB if interviewId exists
+    let interviewRow = null;
+    if (interviewId && Number(interviewId) > 0) {
+      const { rows } = await db.query(
+        `SELECT * FROM public.ca_interviews WHERE id = $1`,
+        [Number(interviewId)]
+      );
+      if (rows[0]) {
+        interviewRow = rows[0];
+        if (!interviewer) interviewer = interviewRow.interviewer;
+        if (!roundName) roundName = interviewRow.round_name || interviewRow.type;
+        if (!datetime) datetime = interviewRow.datetime;
+        if (!mode) mode = interviewRow.mode;
+        if (!meetingLink) meetingLink = interviewRow.meeting_link;
+        if (!venue) venue = interviewRow.venue;
+        if (interviewRow.role) candidateRole = interviewRow.role;
+      }
+    }
+
+    if (!interviewer && !directEmpId && !directEmpEmail) {
+      console.log("[Interviewer Notification] No interviewer specified, skipping.");
+      return false;
+    }
+
+    const displayRound = roundName || "Interview Round";
+    const displayMode = (mode === "Video" || mode === "Online") ? "Online" : (mode || "Online");
+    const displayDatetime = datetime || "To be communicated";
+    const cleanMeetingLink = meetingLink ? String(meetingLink).trim() : "";
+    const hrefMeetingLink = cleanMeetingLink
+      ? (/^https?:\/\//i.test(cleanMeetingLink) ? cleanMeetingLink : `https://${cleanMeetingLink}`)
+      : "";
+
+    // Deduplication check: Avoid sending duplicate assignment notifications for same interview round & time
+    const dedupeKey = `Assigned:${displayRound}:${displayDatetime}:${interviewer || directEmpId}`;
+    if (interviewRow?.last_interviewer_email_sent === dedupeKey) {
+      console.log(`[Interviewer Notification] Notification already sent for interview ${interviewId} (${dedupeKey}). Skipping duplicate.`);
+      return false;
+    }
+
+    // 3. Resolve Interviewer Employee / User
+    let resolvedEmployee = null;
+    let userType = "employee";
+
+    // a. Check ca_employees by ID if directEmpId provided
+    if (directEmpId && Number(directEmpId) > 0) {
+      const { rows } = await db.query(
+        `SELECT id, name, email FROM public.ca_employees WHERE company_id = $1 AND id = $2 LIMIT 1`,
+        [activeCompanyId, Number(directEmpId)]
+      );
+      if (rows[0]) resolvedEmployee = rows[0];
+    }
+
+    // b. Check ca_employees by Email if directEmpEmail provided
+    if (!resolvedEmployee && directEmpEmail) {
+      const { rows } = await db.query(
+        `SELECT id, name, email FROM public.ca_employees WHERE company_id = $1 AND LOWER(TRIM(email)) = LOWER(TRIM($2)) LIMIT 1`,
+        [activeCompanyId, directEmpEmail]
+      );
+      if (rows[0]) resolvedEmployee = rows[0];
+    }
+
+    // c. Check ca_employees by interviewer name or email
+    if (!resolvedEmployee && interviewer) {
+      const { rows } = await db.query(
+        `SELECT id, name, email FROM public.ca_employees 
+         WHERE company_id = $1 AND (LOWER(TRIM(name)) = LOWER(TRIM($2)) OR LOWER(TRIM(email)) = LOWER(TRIM($2)))
+         ORDER BY id ASC LIMIT 1`,
+        [activeCompanyId, interviewer.trim()]
+      );
+      if (rows[0]) resolvedEmployee = rows[0];
+    }
+
+    // d. If not found in ca_employees, check ca_users (Admin / HR user assigned as interviewer)
+    if (!resolvedEmployee && interviewer) {
+      const { rows } = await db.query(
+        `SELECT id, name, email FROM public.ca_users 
+         WHERE created_by_company_id = $1 AND (LOWER(TRIM(name)) = LOWER(TRIM($2)) OR LOWER(TRIM(email)) = LOWER(TRIM($2)))
+         ORDER BY id ASC LIMIT 1`,
+        [activeCompanyId, interviewer.trim()]
+      );
+      if (rows[0]) {
+        resolvedEmployee = rows[0];
+        userType = "admin";
+      }
+    }
+
+    const interviewerName = resolvedEmployee?.name || interviewer || "Interviewer";
+    const interviewerEmail = resolvedEmployee?.email || directEmpEmail || null;
+    const interviewerUserId = resolvedEmployee?.id ? String(resolvedEmployee.id) : null;
+
+    // 4. Save In-App Notification & Push Alert
+    const notifTitle = "New Interview Assigned";
+    const notifBody = `You have been assigned to interview ${candidateName} for ${candidateRole} (${displayRound}) on ${displayDatetime}.`;
+
+    try {
+      await caFcmRepository.saveInAppNotification({
+        companyId: activeCompanyId,
+        targetUserType: userType,
+        targetUserId: interviewerUserId,
+        title: notifTitle,
+        body: notifBody,
+        data: {
+          type: "INTERVIEW_ASSIGNED",
+          interviewId: String(interviewId || ""),
+          candidateId: String(candidateId || ""),
+          candidateName,
+          role: candidateRole,
+          datetime: displayDatetime,
+          mode: displayMode,
+          meetingLink: cleanMeetingLink,
+          venue: venue || "",
+          url: "/companyadmin/talent-acquisition?tab=interviews",
+        },
+      });
+
+      // Send FCM push if tokens are available
+      if (interviewerUserId) {
+        const tokens = userType === "employee"
+          ? await caFcmRepository.getEmployeeTokens(activeCompanyId, interviewerUserId)
+          : await caFcmRepository.getAdminTokens(activeCompanyId);
+
+        if (tokens.length > 0) {
+          await caFcmService.sendPushNotification(tokens, {
+            title: notifTitle,
+            body: notifBody,
+            data: {
+              type: "INTERVIEW_ASSIGNED",
+              interviewId: String(interviewId || ""),
+              candidateId: String(candidateId || ""),
+              candidateName,
+              role: candidateRole,
+              datetime: displayDatetime,
+              url: "/companyadmin/talent-acquisition?tab=interviews",
+            },
+          });
+        }
+      }
+    } catch (fcmErr) {
+      console.warn("[Interviewer Notification] Failed to store in-app/FCM notification:", fcmErr.message);
+    }
+
+    // 5. Send Assignment Email to Interviewer
+    if (interviewerEmail) {
+      const { companyName, logoUrl, initials } = await resolvePositionCompany({
+        role: candidateRole,
+        establishmentName,
+        companyId: activeCompanyId,
+      });
+
+      const html = buildInterviewerAssignmentEmailHtml({
+        interviewerName,
+        candidateName,
+        jobRole: candidateRole,
+        companyName,
+        logoUrl,
+        initials,
+        displayRound,
+        displayDatetime,
+        displayMode,
+        cleanMeetingLink,
+        hrefMeetingLink,
+        venue,
+      });
+
+      const emailSubject = `Interview Assignment: ${displayRound} with ${candidateName} (${candidateRole}) | ${companyName}`;
+
+      await sendMail({
+        to: interviewerEmail,
+        subject: emailSubject,
+        html,
+        fromName: `${companyName} Talent Acquisition`,
+      });
+
+      console.log(`[Interviewer Notification] Successfully sent interview assignment email to ${interviewerEmail} (${interviewerName})`);
+    }
+
+    // Record dedupe in ca_interviews table
+    if (interviewId && Number(interviewId) > 0) {
+      await db.query(
+        `UPDATE public.ca_interviews 
+         SET last_interviewer_email_sent = $2, updated_at = NOW() 
+         WHERE id = $1`,
+        [Number(interviewId), dedupeKey]
+      ).catch(() => {});
+    }
+
+    return true;
+  } catch (err) {
+    console.error("[Interviewer Notification] Error sending notification to interviewer:", err.message);
     return false;
   }
 };

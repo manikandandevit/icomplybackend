@@ -1,6 +1,10 @@
 import { caInterviewsRepository } from "./caInterviews.repository.js";
 import { caCandidatesRepository } from "../CACandidates/caCandidates.repository.js";
-import { sendInterviewFeedbackEmail, sendInterviewShortlistedEmail } from "./caInterviews.email.js";
+import {
+  sendInterviewFeedbackEmail,
+  sendInterviewShortlistedEmail,
+  sendInterviewerAssignmentNotification,
+} from "./caInterviews.email.js";
 import { sendHiringManagerDocumentCollectionRequest } from "../CACandidates/caWorkflow.email.js";
 
 export const caInterviewsService = {
@@ -85,6 +89,23 @@ export const caInterviewsService = {
         candidateEmail: payload?.candidateEmail || payload?.email,
         candidateName: payload?.candidateName || payload?.name,
       }).catch((e) => console.error("Failed to trigger shortlisted interview email on create:", e));
+
+      void sendInterviewerAssignmentNotification({
+        candidateId: payload?.candidateId,
+        interviewId: interview?.id,
+        companyId,
+        role: payload?.role,
+        interviewer: payload?.interviewer,
+        interviewerEmployeeId: payload?.interviewerEmployeeId,
+        interviewerEmail: payload?.interviewerEmail,
+        type: payload?.type,
+        roundName: payload?.roundName || payload?.type,
+        datetime: payload?.datetime,
+        mode: payload?.mode,
+        meetingLink: payload?.meetingLink || payload?.meeting_link,
+        venue: payload?.venue,
+        candidateName: payload?.candidateName || payload?.name,
+      }).catch((e) => console.error("Failed to trigger interviewer notification on create:", e));
     }
 
     return interview;
@@ -118,6 +139,23 @@ export const caInterviewsService = {
           candidateEmail: payload?.candidateEmail || payload?.email,
           candidateName: interview.candidate || payload?.candidateName,
         }).catch((e) => console.error("Failed to trigger email on interview update:", e));
+
+        void sendInterviewerAssignmentNotification({
+          interviewId: id,
+          companyId,
+          candidateId: interview.candidateId || payload?.candidateId,
+          role: interview.role || payload?.role,
+          interviewer: interview.interviewer || payload?.interviewer,
+          interviewerEmployeeId: payload?.interviewerEmployeeId,
+          interviewerEmail: payload?.interviewerEmail,
+          type: interview.roundName || interview.type || payload?.type,
+          roundName: interview.roundName || payload?.roundName || payload?.type,
+          datetime: interview.datetime || payload?.datetime,
+          mode: interview.mode || payload?.mode,
+          meetingLink: interview.meetingLink || payload?.meetingLink || payload?.meeting_link,
+          venue: interview.venue || payload?.venue,
+          candidateName: interview.candidate || payload?.candidateName,
+        }).catch((e) => console.error("Failed to trigger interviewer notification on update:", e));
       }
     }
     return interview;
@@ -246,6 +284,23 @@ export const caInterviewsService = {
         meetingLink,
         venue,
       });
+
+      void sendInterviewerAssignmentNotification({
+        interviewId: interview?.id || id,
+        companyId,
+        candidateId,
+        role,
+        interviewer,
+        interviewerEmployeeId: payload?.interviewerEmployeeId,
+        interviewerEmail: payload?.interviewerEmail,
+        type: roundName,
+        roundName,
+        datetime,
+        mode,
+        meetingLink,
+        venue,
+        candidateName,
+      }).catch((e) => console.error("Failed to notify interviewer on sendInvite:", e));
     } catch (err) {
       console.error("Failed to send shortlisted email on sendInvite:", err);
     }
