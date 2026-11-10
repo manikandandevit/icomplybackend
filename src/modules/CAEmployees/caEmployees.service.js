@@ -5,6 +5,7 @@ import { caEstablishmentsRepository } from "../CAEstablishments/caEstablishments
 import { companiesRepository } from "../Companies/companies.repository.js";
 import { caPermissionsService } from "../CAPermissions/caPermissions.service.js";
 import { caEmployeesRepository } from "./caEmployees.repository.js";
+import { offloadEmployeeDocuments } from "../../core/storage/employeeDocuments.js";
 
 export const DEFAULT_EMPLOYEE_PASSWORD = "Employee@123";
 
@@ -150,8 +151,11 @@ export const caEmployeesService = {
 
     try {
       const passwordHash = await bcrypt.hash(DEFAULT_EMPLOYEE_PASSWORD, 10);
+      // Move base64 documents to S3 so only URLs are stored in the database.
+      const details = await offloadEmployeeDocuments(payload.details);
       const employee = await caEmployeesRepository.create(companyId, {
         ...payload,
+        details,
         passwordHash,
         mustResetPassword: true,
       });
@@ -232,6 +236,8 @@ export const caEmployeesService = {
     }
 
     try {
+      // Move base64 documents to S3 so only URLs are stored in the database.
+      payload.details = await offloadEmployeeDocuments(payload.details);
       const employee = await caEmployeesRepository.update(id, companyId, payload);
       if (!employee) {
         throw new AppError("Unable to update employee", 500, "EMPLOYEE_UPDATE_FAILED");
