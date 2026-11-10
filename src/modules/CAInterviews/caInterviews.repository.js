@@ -28,12 +28,14 @@ export const caInterviewsRepository = {
     const isInviteSent = !!payload.inviteSent;
     const meetingLink = payload.meetingLink || payload.meeting_link || null;
     const venue = payload.venue || null;
+    const interviewerEmployeeId = payload.interviewerEmployeeId ? Number(payload.interviewerEmployeeId) : null;
+    const interviewerEmail = payload.interviewerEmail || null;
     const { rows } = await db.query(
       `INSERT INTO public.ca_interviews (
-        created_by_company_id, candidate_id, role, interviewer, type, datetime, mode, status, invite_sent, invite_sent_at, round_name, meeting_link, venue
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $9 THEN NOW() ELSE NULL END, $10, $11, $12) RETURNING *`,
+        created_by_company_id, candidate_id, role, interviewer, type, datetime, mode, status, invite_sent, invite_sent_at, round_name, meeting_link, venue, interviewer_employee_id, interviewer_email
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $9 THEN NOW() ELSE NULL END, $10, $11, $12, $13, $14) RETURNING *`,
       [
-        companyId, payload.candidateId, payload.role, payload.interviewer, payload.type, payload.datetime, payload.mode, payload.status || 'Scheduled', isInviteSent, payload.roundName || payload.type || null, meetingLink, venue
+        companyId, payload.candidateId, payload.role, payload.interviewer, payload.type, payload.datetime, payload.mode, payload.status || 'Scheduled', isInviteSent, payload.roundName || payload.type || null, meetingLink, venue, interviewerEmployeeId, interviewerEmail
       ]
     );
     return mapCAInterview(rows[0]);
@@ -45,6 +47,8 @@ export const caInterviewsRepository = {
     if (numId > 0) {
       const meetingLink = payload.meetingLink !== undefined ? payload.meetingLink : (payload.meeting_link !== undefined ? payload.meeting_link : null);
       const venue = payload.venue !== undefined ? payload.venue : null;
+      const interviewerEmployeeId = payload.interviewerEmployeeId !== undefined ? (payload.interviewerEmployeeId ? Number(payload.interviewerEmployeeId) : null) : null;
+      const interviewerEmail = payload.interviewerEmail !== undefined ? (payload.interviewerEmail || null) : null;
       const { rows } = await db.query(
         `UPDATE public.ca_interviews 
          SET candidate_id = COALESCE($1, candidate_id),
@@ -54,8 +58,10 @@ export const caInterviewsRepository = {
              datetime = COALESCE($5, datetime),
              mode = COALESCE($6, mode),
              meeting_link = COALESCE($7, meeting_link),
-             venue = COALESCE($8, venue)
-         WHERE id = $9 AND created_by_company_id = $10
+             venue = COALESCE($8, venue),
+             interviewer_employee_id = COALESCE($9, interviewer_employee_id),
+             interviewer_email = COALESCE($10, interviewer_email)
+         WHERE id = $11 AND created_by_company_id = $12
          RETURNING *`,
         [
           payload.candidateId || null,
@@ -66,6 +72,8 @@ export const caInterviewsRepository = {
           payload.mode || null,
           meetingLink,
           venue,
+          interviewerEmployeeId,
+          interviewerEmail,
           numId,
           companyId
         ]
@@ -181,8 +189,9 @@ export const caInterviewsRepository = {
     return null;
   },
 
-  async submitFeedback(id, companyId, { rating, feedback, outcomeStatus, statusReason, roundsCompleted, completedRound }) {
+  async submitFeedback(id, companyId, payload = {}) {
     await ensureTable();
+    const { rating, feedback, outcomeStatus, statusReason, roundsCompleted, completedRound, candidateId: payloadCandidateId } = payload;
     const finalStatus = outcomeStatus || (rating >= 3 ? 'Selected' : 'Rejected');
     const numId = Number(id);
 
@@ -207,19 +216,31 @@ export const caInterviewsRepository = {
       }
     }
 
-    const numRounds = roundsCompleted !== undefined 
-      ? Number(roundsCompleted) 
+    const numRounds = roundsCompleted !== undefined
+      ? Number(roundsCompleted)
       : (finalStatus === "First Round Shortlisted" ? 1 : (finalStatus === "Second Round Shortlisted" || finalStatus === "Final Round Shortlisted") ? 2 : (finalStatus === "HR Round" || finalStatus === "Selected") ? 3 : 1);
 
     if (numId > 0) {
-      const { rows } = await db.query(
+      let { rows } = await db.query(
         `UPDATE public.ca_interviews 
          SET rating = $1, feedback = $2, status_reason = $3, rounds_completed = $4, completed_round = $9, is_frozen = TRUE, status = $5,
              feedback_history = COALESCE(feedback_history, '[]'::jsonb) || $8::jsonb
-         WHERE id = $6 AND created_by_company_id = $7 
+         WHERE id = $6 AND ($7::int IS NULL OR created_by_company_id = $7::int) 
          RETURNING *`,
-        [rating, feedback, statusReason || null, numRounds, finalStatus, numId, companyId, JSON.stringify([{ round: finalStatus, rating, feedback, reason: statusReason, roundsCompleted: numRounds, completedRound: roundText, date: new Date().toLocaleDateString('en-GB') }]), roundText]
+        [rating, feedback, statusReason || null, numRounds, finalStatus, numId, companyId || null, JSON.stringify([{ round: finalStatus, rating, feedback, reason: statusReason, roundsCompleted: numRounds, completedRound: roundText, date: new Date().toLocaleDateString('en-GB') }]), roundText]
       );
+
+      if (!rows[0]) {
+        const fallbackRes = await db.query(
+          `UPDATE public.ca_interviews 
+           SET rating = $1, feedback = $2, status_reason = $3, rounds_completed = $4, completed_round = $7, is_frozen = TRUE, status = $5,
+               feedback_history = COALESCE(feedback_history, '[]'::jsonb) || $6::jsonb
+           WHERE id = $8
+           RETURNING *`,
+          [rating, feedback, statusReason || null, numRounds, finalStatus, JSON.stringify([{ round: finalStatus, rating, feedback, reason: statusReason, roundsCompleted: numRounds, completedRound: roundText, date: new Date().toLocaleDateString('en-GB') }]), roundText, numId]
+        );
+        if (fallbackRes.rows[0]) rows = fallbackRes.rows;
+      }
 
       if (rows[0]) {
         const updated = mapCAInterview(rows[0]);
@@ -263,7 +284,7 @@ export const caInterviewsRepository = {
               [estId ? Number(estId) : null, companyId ? Number(companyId) : null]
             );
             if (empRes.rows[0]) estEmpName = empRes.rows[0].name;
-          } catch (e) {}
+          } catch (e) { }
 
           await db.query(`
             UPDATE public.ca_candidates
@@ -273,11 +294,11 @@ export const caInterviewsRepository = {
             ), updated_at = NOW()
             WHERE id = $2
           `, [JSON.stringify([
-            { id: "workflow-doc-collection", type: "workflow", stageKey: "document_collection", title: "Document collection", status: "Pending", assignedTo: estEmpName, canMarkDone: true },
-            { id: "workflow-offer-gen", type: "workflow", stageKey: "offer_generated", title: "Offer generated", status: "Pending", assignedTo: estEmpName, canMarkDone: false },
-            { id: "workflow-offer-approval", type: "workflow", stageKey: "offer_approval", title: "Offer approval", status: "Pending", assignedTo: estEmpName, canMarkDone: false },
-            { id: "workflow-offer-release", type: "workflow", stageKey: "offer_release", title: "Offer release", status: "Pending", assignedTo: estEmpName, canMarkDone: false },
-            { id: "workflow-offer-acceptance", type: "workflow", stageKey: "offer_acceptance", title: "Offer acceptance", status: "Pending", assignedTo: estEmpName, canMarkDone: false }
+            { id: "workflow-doc-collection", type: "workflow", stageKey: "document_collection", title: "Document collection", status: "Pending", assignedTo: "", canMarkDone: true },
+            { id: "workflow-offer-gen", type: "workflow", stageKey: "offer_generated", title: "Offer generated", status: "Pending", assignedTo: "", canMarkDone: false },
+            { id: "workflow-offer-approval", type: "workflow", stageKey: "offer_approval", title: "Offer approval", status: "Pending", assignedTo: "", canMarkDone: false },
+            { id: "workflow-offer-release", type: "workflow", stageKey: "offer_release", title: "Offer release", status: "Pending", assignedTo: "", canMarkDone: false },
+            { id: "workflow-offer-acceptance", type: "workflow", stageKey: "offer_acceptance", title: "Offer acceptance", status: "Pending", assignedTo: "", canMarkDone: false }
           ]), updated.candidateId]);
         }
 
@@ -287,7 +308,6 @@ export const caInterviewsRepository = {
     }
 
     // If dummy ID or not found in DB, upsert as frozen record
-    const { candidateId: payloadCandidateId } = payload;
     const absId = Math.abs(numId) || 1;
     const defaults = {
       1: { candidate: "Arjun Mehta", role: "Senior Software Engineer", interviewer: "Rajesh Kumar", type: "Technical", datetime: "16 Sep 2026 · 10:00 AM", mode: "Video" },
@@ -384,7 +404,7 @@ export const caInterviewsRepository = {
           [estId ? Number(estId) : null, companyId ? Number(companyId) : null]
         );
         if (empRes.rows[0]) estEmpName = empRes.rows[0].name;
-      } catch (e) {}
+      } catch (e) { }
 
       await db.query(`
         UPDATE public.ca_candidates

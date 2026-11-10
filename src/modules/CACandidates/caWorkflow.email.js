@@ -3,6 +3,8 @@ import { config } from "../../config/index.js";
 import { db } from "../../core/db/pool.js";
 import { sendMail } from "../../core/mail/mailer.js";
 import { generateOfferPdfBuffer } from "../CAOffers/caOffers.pdf.js";
+import { caFcmRepository } from "../CANotifications/caFcm.repository.js";
+import { caFcmService } from "../CANotifications/caFcm.service.js";
 
 /**
  * Resolves all relevant participants (Candidate, Hiring Manager, Approver, Company)
@@ -118,11 +120,34 @@ export const resolveWorkflowParticipants = async ({ candidateId, companyId, stag
     }
   }
 
-  // 6. Look up manager / approver emails in ca_users if not resolved yet
+  let hiringManagerEmployeeId = null;
+  let approverEmployeeId = null;
+  let hiringManagerUserType = "employee";
+  let approverUserType = "employee";
+
+  // 6. Look up manager / approver emails in ca_employees first, then ca_users
   if (!hiringManagerEmail && hiringManagerName && companyId) {
     try {
       const { rows } = await db.query(
-        `SELECT email, name FROM public.ca_users 
+        `SELECT id, email, name FROM public.ca_employees 
+         WHERE company_id = $1 
+           AND (LOWER(TRIM(name)) = LOWER(TRIM($2)) OR LOWER(TRIM(name)) LIKE '%' || LOWER(TRIM($2)) || '%')
+           AND (status IS NULL OR status != 'Inactive')
+         ORDER BY id ASC LIMIT 1`,
+        [companyId, hiringManagerName]
+      );
+      if (rows[0]?.email) {
+        hiringManagerEmail = rows[0].email;
+        hiringManagerEmployeeId = rows[0].id;
+        hiringManagerUserType = "employee";
+      }
+    } catch (e) {}
+  }
+
+  if (!hiringManagerEmail && hiringManagerName && companyId) {
+    try {
+      const { rows } = await db.query(
+        `SELECT id, email, name FROM public.ca_users 
          WHERE (created_by_company_id = $1 OR created_by_company_id IS NULL)
            AND LOWER(TRIM(name)) LIKE '%' || LOWER(TRIM($2)) || '%'
          LIMIT 1`,
@@ -130,6 +155,8 @@ export const resolveWorkflowParticipants = async ({ candidateId, companyId, stag
       );
       if (rows[0]?.email) {
         hiringManagerEmail = rows[0].email;
+        hiringManagerEmployeeId = rows[0].id;
+        hiringManagerUserType = "admin";
       }
     } catch (e) {}
   }
@@ -137,7 +164,25 @@ export const resolveWorkflowParticipants = async ({ candidateId, companyId, stag
   if (!approverEmail && approverName && companyId) {
     try {
       const { rows } = await db.query(
-        `SELECT email, name FROM public.ca_users 
+        `SELECT id, email, name FROM public.ca_employees 
+         WHERE company_id = $1 
+           AND (LOWER(TRIM(name)) = LOWER(TRIM($2)) OR LOWER(TRIM(name)) LIKE '%' || LOWER(TRIM($2)) || '%')
+           AND (status IS NULL OR status != 'Inactive')
+         ORDER BY id ASC LIMIT 1`,
+        [companyId, approverName]
+      );
+      if (rows[0]?.email) {
+        approverEmail = rows[0].email;
+        approverEmployeeId = rows[0].id;
+        approverUserType = "employee";
+      }
+    } catch (e) {}
+  }
+
+  if (!approverEmail && approverName && companyId) {
+    try {
+      const { rows } = await db.query(
+        `SELECT id, email, name FROM public.ca_users 
          WHERE (created_by_company_id = $1 OR created_by_company_id IS NULL)
            AND LOWER(TRIM(name)) LIKE '%' || LOWER(TRIM($2)) || '%'
          LIMIT 1`,
@@ -145,6 +190,8 @@ export const resolveWorkflowParticipants = async ({ candidateId, companyId, stag
       );
       if (rows[0]?.email) {
         approverEmail = rows[0].email;
+        approverEmployeeId = rows[0].id;
+        approverUserType = "admin";
       }
     } catch (e) {}
   }
@@ -153,7 +200,7 @@ export const resolveWorkflowParticipants = async ({ candidateId, companyId, stag
   if (!hiringManagerEmail && companyId) {
     try {
       const { rows } = await db.query(
-        `SELECT email, name FROM public.ca_users 
+        `SELECT id, email, name FROM public.ca_users 
          WHERE (created_by_company_id = $1 OR created_by_company_id IS NULL)
            AND email IS NOT NULL AND email != ''
          ORDER BY id ASC LIMIT 1`,
@@ -161,6 +208,8 @@ export const resolveWorkflowParticipants = async ({ candidateId, companyId, stag
       );
       if (rows[0]?.email) {
         hiringManagerEmail = rows[0].email;
+        hiringManagerEmployeeId = rows[0].id;
+        hiringManagerUserType = "admin";
         if (!hiringManagerName || hiringManagerName === "Hiring Manager") {
           hiringManagerName = rows[0].name || "Hiring Manager";
         }
@@ -170,6 +219,8 @@ export const resolveWorkflowParticipants = async ({ candidateId, companyId, stag
 
   if (!approverEmail) {
     approverEmail = hiringManagerEmail;
+    approverEmployeeId = hiringManagerEmployeeId;
+    approverUserType = hiringManagerUserType;
   }
 
   // 8. Final fallback to company general email
@@ -189,8 +240,12 @@ export const resolveWorkflowParticipants = async ({ candidateId, companyId, stag
     companyEmail,
     hiringManagerName,
     hiringManagerEmail,
+    hiringManagerEmployeeId,
+    hiringManagerUserType,
     approverName,
     approverEmail,
+    approverEmployeeId,
+    approverUserType,
     offer,
     offerId: offer?.id || null,
     companyId,
@@ -209,62 +264,328 @@ export { sendCandidateSelectionEmail } from "./caCandidates.email.js";
 
 
 /**
- * 1B. Send Document Collection Request to Hiring Manager
+ * 1B. Generic Workflow Task Assignment Notification
+ * Delivers:
+ * 1. In-App Notification (Notification Tray)
+ * 2. Mobile / Web Push Notification (FCM)
+ * 3. Branded HTML Email to the Assigned Employee
  */
-export const sendHiringManagerDocumentCollectionRequest = async ({ candidateId, companyId }) => {
+export const sendWorkflowTaskAssignmentNotification = async ({
+  candidateId,
+  companyId,
+  stageKey = "document_collection",
+  assignedTo: directAssignedTo,
+  assignedEmployeeId: directEmpId,
+  assignedEmail: directEmpEmail,
+}) => {
   try {
-    const p = await resolveWorkflowParticipants({ candidateId, companyId, stageKey: "document_collection" });
-    if (!p.hiringManagerEmail) {
-      console.log("[HM Doc Collection Email] No hiring manager email found.");
+    const p = await resolveWorkflowParticipants({ candidateId, companyId, stageKey });
+    const activeCompanyId = companyId || p.companyId;
+
+    let targetEmployee = null;
+    let userType = "employee";
+
+    // 1. If directEmpId provided, query ca_employees
+    if (directEmpId && Number(directEmpId) > 0) {
+      const { rows } = await db.query(
+        `SELECT id, name, email, designation_name, mobile FROM public.ca_employees 
+         WHERE (company_id = $1 OR $1 IS NULL) AND id = $2 LIMIT 1`,
+        [activeCompanyId, Number(directEmpId)]
+      );
+      if (rows[0]) targetEmployee = rows[0];
+    }
+
+    // 2. If directEmpEmail provided, query ca_employees
+    if (!targetEmployee && directEmpEmail) {
+      const { rows } = await db.query(
+        `SELECT id, name, email, designation_name, mobile FROM public.ca_employees 
+         WHERE (company_id = $1 OR $1 IS NULL) AND LOWER(TRIM(email)) = LOWER(TRIM($2)) LIMIT 1`,
+        [activeCompanyId, directEmpEmail]
+      );
+      if (rows[0]) targetEmployee = rows[0];
+    }
+
+    // 3. Resolve by assignedTo name (stripping designation)
+    const rawName = directAssignedTo || p.hiringManagerName;
+    const cleanName = rawName ? String(rawName).replace(/\s*\(.*?\)\s*/g, "").trim() : "";
+
+    if (!targetEmployee && cleanName) {
+      const { rows } = await db.query(
+        `SELECT id, name, email, designation_name, mobile FROM public.ca_employees 
+         WHERE (company_id = $1 OR $1 IS NULL) 
+           AND (LOWER(TRIM(name)) = LOWER(TRIM($2)) OR LOWER(TRIM(name)) LIKE '%' || LOWER(TRIM($2)) || '%')
+           AND (status IS NULL OR status != 'Inactive')
+         ORDER BY id ASC LIMIT 1`,
+        [activeCompanyId, cleanName]
+      );
+      if (rows[0]) targetEmployee = rows[0];
+    }
+
+    // 4. Fallback to ca_users if not found in ca_employees
+    if (!targetEmployee && cleanName) {
+      const { rows } = await db.query(
+        `SELECT id, name, email FROM public.ca_users 
+         WHERE (created_by_company_id = $1 OR created_by_company_id IS NULL) 
+           AND (LOWER(TRIM(name)) = LOWER(TRIM($2)) OR LOWER(TRIM(name)) LIKE '%' || LOWER(TRIM($2)) || '%')
+         LIMIT 1`,
+        [activeCompanyId, cleanName]
+      );
+      if (rows[0]) {
+        targetEmployee = rows[0];
+        userType = "admin";
+      }
+    }
+
+    // 5. Final fallback to resolved hiring manager details
+    const employeeName = targetEmployee?.name || cleanName || p.hiringManagerName || "Team Member";
+    const employeeEmail = targetEmployee?.email || directEmpEmail || p.hiringManagerEmail;
+    const employeeUserId = targetEmployee?.id
+      ? String(targetEmployee.id)
+      : (p.hiringManagerEmployeeId ? String(p.hiringManagerEmployeeId) : null);
+    const resolvedUserType = targetEmployee ? userType : p.hiringManagerUserType;
+
+    if (!employeeEmail && !employeeUserId) {
+      console.log(`[Workflow Task Notification] No valid recipient found for ${stageKey}`);
       return false;
     }
 
-    const brandColor = "#0c2340";
-    const subject = `Action Required: Candidate Selected - Please Collect Documents for ${p.candidateName} (${p.role})`;
-    const html = `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-        <div style="border-bottom: 2px solid #f1f5f9; padding-bottom: 16px; margin-bottom: 20px;">
-          <span style="font-size: 11px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; color: #f97316;">Recruitment Workflow</span>
-          <h2 style="color: ${brandColor}; margin: 6px 0 0 0; font-size: 20px; font-weight: 700;">Collect Candidate Documents</h2>
+    const STAGE_META = {
+      document_collection: {
+        stageTitle: "Document Collection",
+        actionTitle: "Collect Candidate Documents",
+        notifTitle: "New Task Assigned: Document Collection",
+        notifBody: `You have been assigned to collect and verify onboarding documents for ${p.candidateName} (${p.role}).`,
+        emailSubject: `Task Assigned: Document Collection for ${p.candidateName} (${p.role}) | ${p.companyName}`,
+        badgeColor: "#ea580c",
+        badgeBg: "#fff7ed",
+        actionDescription: `Candidate <strong>${p.candidateName}</strong> has completed the interview rounds and been selected for <strong>${p.role}</strong>. You have been assigned to collect and verify their onboarding documents.`,
+        checklist: [
+          "Government ID Proof (Aadhaar Card, Passport, or PAN Card)",
+          "Educational Certificates & Marksheets (Degree / Diploma / 10th / 12th)",
+          "Prior Employment Relieving Letters & Experience Certificates",
+          "Recent 3 Months Payslips & Bank Statements",
+          "Passport Size Photograph",
+        ],
+        buttonText: "Open Candidate 360 & Collect Docs",
+      },
+      offer_generated: {
+        stageTitle: "Generate Offer",
+        actionTitle: "Generate Candidate Offer Letter",
+        notifTitle: "New Task Assigned: Generate Offer Letter",
+        notifBody: `You have been assigned to generate the offer letter for ${p.candidateName} (${p.role}).`,
+        emailSubject: `Task Assigned: Generate Offer for ${p.candidateName} (${p.role}) | ${p.companyName}`,
+        badgeColor: "#0284c7",
+        badgeBg: "#f0f9ff",
+        actionDescription: `Documents for <strong>${p.candidateName}</strong> have been verified. You have been assigned to prepare and generate the official offer letter.`,
+        checklist: [
+          "Verify proposed CTC and compensation breakdown",
+          "Confirm Department, Designation, and Reporting Manager",
+          "Set the expected Date of Joining (DOJ)",
+          "Generate and preview the Offer Letter PDF",
+        ],
+        buttonText: "Generate Offer Letter",
+      },
+      offer_approval: {
+        stageTitle: "Offer Approval",
+        actionTitle: "Review & Approve Offer Letter",
+        notifTitle: "New Task Assigned: Approve Offer Letter",
+        notifBody: `You have been assigned to review and approve the offer letter for ${p.candidateName} (${p.role}).`,
+        emailSubject: `Task Assigned: Review & Approve Offer for ${p.candidateName} (${p.role}) | ${p.companyName}`,
+        badgeColor: "#7c3aed",
+        badgeBg: "#f5f3ff",
+        actionDescription: `An offer letter has been generated for <strong>${p.candidateName}</strong> (${p.role}). Please review the terms and approve the offer.`,
+        checklist: [
+          "Review Compensation details and joining bonus",
+          "Confirm employment terms and conditions",
+          "Approve the offer letter in Candidate 360 View",
+        ],
+        buttonText: "Review & Approve Offer",
+      },
+      offer_release: {
+        stageTitle: "Offer Release",
+        actionTitle: "Release Offer Letter to Candidate",
+        notifTitle: "New Task Assigned: Release Offer",
+        notifBody: `You have been assigned to release the approved offer to ${p.candidateName} (${p.role}).`,
+        emailSubject: `Task Assigned: Release Offer to ${p.candidateName} (${p.role}) | ${p.companyName}`,
+        badgeColor: "#059669",
+        badgeBg: "#ecfdf5",
+        actionDescription: `The offer letter for <strong>${p.candidateName}</strong> is approved. Please release the offer to the candidate via email.`,
+        checklist: [
+          "Confirm candidate email address",
+          "Verify the attached Offer PDF",
+          "Click 'Release Offer' to email the formal letter to the candidate",
+        ],
+        buttonText: "Release Offer Letter",
+      },
+      offer_acceptance: {
+        stageTitle: "Offer Acceptance",
+        actionTitle: "Confirm Offer Acceptance & DOJ",
+        notifTitle: "New Task Assigned: Confirm Acceptance",
+        notifBody: `You have been assigned to track offer acceptance and confirm DOJ for ${p.candidateName} (${p.role}).`,
+        emailSubject: `Task Assigned: Track Acceptance for ${p.candidateName} (${p.role}) | ${p.companyName}`,
+        badgeColor: "#16a34a",
+        badgeBg: "#f0fdf4",
+        actionDescription: `Offer letter released to <strong>${p.candidateName}</strong>. Please follow up on signed acceptance and confirm Date of Joining.`,
+        checklist: [
+          "Follow up on candidate signed acceptance copy",
+          "Confirm final Date of Joining (DOJ)",
+          "Initiate pre-onboarding formalities",
+        ],
+        buttonText: "Confirm Acceptance & DOJ",
+      },
+    };
+
+    const meta = STAGE_META[stageKey] || STAGE_META.document_collection;
+    const clientUrl = config?.clientUrl || "http://localhost:5173";
+    const candidateLink = `${clientUrl}/companyadmin/talent-acquisition?tab=candidates&candidateId=${candidateId}`;
+
+    // A. Save In-App Notification
+    try {
+      await caFcmRepository.saveInAppNotification({
+        companyId: activeCompanyId,
+        targetUserType: resolvedUserType,
+        targetUserId: employeeUserId,
+        title: meta.notifTitle,
+        body: meta.notifBody,
+        data: {
+          type: "WORKFLOW_TASK_ASSIGNED",
+          stageKey,
+          candidateId: String(candidateId),
+          candidateName: p.candidateName,
+          role: p.role,
+          assignedTo: employeeName,
+          url: `/companyadmin/talent-acquisition?tab=candidates&candidateId=${candidateId}`,
+        },
+      });
+      console.log(`[Workflow Task Notification] In-app notification saved for ${employeeName} (ID: ${employeeUserId})`);
+    } catch (inAppErr) {
+      console.warn("[Workflow Task Notification] Failed to save in-app notification:", inAppErr.message);
+    }
+
+    // B. Send FCM Push Notification
+    if (employeeUserId) {
+      try {
+        const tokens = resolvedUserType === "employee"
+          ? await caFcmRepository.getEmployeeTokens(activeCompanyId, employeeUserId)
+          : await caFcmRepository.getAdminTokens(activeCompanyId);
+
+        if (tokens && tokens.length > 0) {
+          await caFcmService.sendPushNotification(tokens, {
+            title: meta.notifTitle,
+            body: meta.notifBody,
+            data: {
+              type: "WORKFLOW_TASK_ASSIGNED",
+              stageKey,
+              candidateId: String(candidateId),
+              candidateName: p.candidateName,
+              role: p.role,
+              url: `/companyadmin/talent-acquisition?tab=candidates&candidateId=${candidateId}`,
+            },
+          });
+          console.log(`[Workflow Task Notification] Push sent to ${tokens.length} devices for ${employeeName}`);
+        }
+      } catch (pushErr) {
+        console.warn("[Workflow Task Notification] Failed to send push:", pushErr.message);
+      }
+    }
+
+    // C. Send Branded Email
+    if (employeeEmail) {
+      const brandColor = "#0c2340";
+      const html = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+          <div style="border-bottom: 2px solid #f1f5f9; padding-bottom: 16px; margin-bottom: 20px;">
+            <div style="margin-bottom: 8px;">
+              <span style="font-size: 11px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; color: ${meta.badgeColor}; background: ${meta.badgeBg}; padding: 4px 10px; border-radius: 6px; border: 1px solid ${meta.badgeColor}33;">
+                ${meta.stageTitle} • Task Assigned
+              </span>
+            </div>
+            <h2 style="color: ${brandColor}; margin: 8px 0 0 0; font-size: 20px; font-weight: 700;">${meta.actionTitle}</h2>
+          </div>
+
+          <p style="font-size: 15px; margin-top: 0;">Hello <strong>${employeeName}</strong>,</p>
+
+          <p style="font-size: 14px; color: #334155;">
+            ${meta.actionDescription}
+          </p>
+
+          <div style="margin: 20px 0; padding: 18px 20px; background-color: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0;">
+            <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 10px;">
+              Candidate Details
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <tr>
+                <td style="padding: 4px 0; color: #64748b; width: 140px;">Candidate Name:</td>
+                <td style="padding: 4px 0; font-weight: 700; color: #0c2340;">${p.candidateName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 0; color: #64748b;">Applied Role:</td>
+                <td style="padding: 4px 0; font-weight: 600; color: #0c2340;">${p.role}</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 0; color: #64748b;">Candidate Email:</td>
+                <td style="padding: 4px 0; color: #0c2340;">${p.candidateEmail || "On file"}</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 0; color: #64748b;">Contact Number:</td>
+                <td style="padding: 4px 0; color: #0c2340;">${p.candidate?.phone || p.candidate?.mobile || "On file"}</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 0; color: #64748b;">Branch / Establishment:</td>
+                <td style="padding: 4px 0; color: #0c2340;">${p.establishmentName || p.candidate?.establishment_name || p.companyName}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="margin: 20px 0;">
+            <div style="font-size: 13px; font-weight: 700; color: #0c2340; margin-bottom: 8px;">
+              Required Action Checklist:
+            </div>
+            <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #334155; line-height: 1.8;">
+              ${meta.checklist.map((item) => `<li>${item}</li>`).join("")}
+            </ul>
+          </div>
+
+          <div style="text-align: center; margin: 28px 0 20px 0;">
+            <a href="${candidateLink}" 
+               style="display: inline-block; background-color: #0c2340; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-size: 14px; font-weight: 700; box-shadow: 0 2px 4px rgba(12, 35, 64, 0.15);">
+              ${meta.buttonText} →
+            </a>
+          </div>
+
+          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0 16px 0;" />
+
+          <p style="font-size: 12px; color: #64748b; margin: 0; text-align: center;">
+            iComply Recruitment Automation · ${p.companyName}
+          </p>
         </div>
+      `;
 
-        <p style="font-size: 15px; margin-top: 0;">Hello <strong>${p.hiringManagerName}</strong>,</p>
+      await sendMail({
+        to: employeeEmail,
+        subject: meta.emailSubject,
+        html,
+        fromName: "iComply Recruitment Workflow",
+      });
+      console.log(`[Workflow Task Notification] Email sent to ${employeeEmail}`);
+    }
 
-        <p style="font-size: 14px; color: #334155;">
-          Candidate <strong>${p.candidateName}</strong> has been successfully <strong>Selected</strong> for the position of <strong>${p.role}</strong>.
-        </p>
-
-        <div style="margin-top: 18px; padding: 16px 20px; background-color: #f8fafc; border-radius: 8px; border-left: 4px solid #f97316; font-size: 13px;">
-          <p style="margin: 0 0 6px 0;"><strong>Candidate:</strong> ${p.candidateName}</p>
-          <p style="margin: 0 0 6px 0;"><strong>Candidate Email:</strong> ${p.candidateEmail || "On file"}</p>
-          <p style="margin: 0 0 6px 0;"><strong>Role:</strong> ${p.role}</p>
-          <p style="margin: 0;"><strong>Current Stage:</strong> Document Collection (Pending)</p>
-        </div>
-
-        <p style="font-size: 14px; color: #334155; margin-top: 20px;">
-          <strong>Action Required:</strong> Please initiate the collection of required onboarding documents (ID proof, education certificates, prior experience letters, and recent payslips). Once documents are verified, open Candidate 360 View and click <strong>"Mark done"</strong> on the Document Collection stage.
-        </p>
-
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0 20px 0;" />
-
-        <p style="font-size: 12px; color: #64748b; margin: 0;">
-          iComply Recruitment Automation · ${p.companyName}
-        </p>
-      </div>
-    `;
-
-    const sent = await sendMail({
-      to: p.hiringManagerEmail,
-      subject,
-      html,
-      fromName: "iComply Workflow",
-    });
-    console.log(`[HM Doc Collection Email] Sent to ${p.hiringManagerEmail}: ${sent}`);
-    return sent;
+    return true;
   } catch (err) {
-    console.error("[HM Doc Collection Email] Error:", err.message);
+    console.error("[sendWorkflowTaskAssignmentNotification] Error:", err.message);
     return false;
   }
+};
+
+/**
+ * 1B. Send Document Collection Request to Hiring Manager / Assigned Employee
+ */
+export const sendHiringManagerDocumentCollectionRequest = async ({ candidateId, companyId }) => {
+  return sendWorkflowTaskAssignmentNotification({
+    candidateId,
+    companyId,
+    stageKey: "document_collection",
+  });
 };
 
 // -------------------------------------------------------------

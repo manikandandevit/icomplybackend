@@ -28,6 +28,9 @@ export const caInterviewsTableSql = `
   ALTER TABLE public.ca_interviews ADD COLUMN IF NOT EXISTS meeting_link TEXT;
   ALTER TABLE public.ca_interviews ADD COLUMN IF NOT EXISTS venue TEXT;
   ALTER TABLE public.ca_interviews ADD COLUMN IF NOT EXISTS last_status_email_sent VARCHAR(255);
+  ALTER TABLE public.ca_interviews ADD COLUMN IF NOT EXISTS interviewer_employee_id INTEGER;
+  ALTER TABLE public.ca_interviews ADD COLUMN IF NOT EXISTS interviewer_email VARCHAR(255);
+  ALTER TABLE public.ca_interviews ADD COLUMN IF NOT EXISTS last_interviewer_email_sent VARCHAR(255);
   ALTER TABLE public.ca_interviews ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
   ALTER TABLE public.ca_interviews ALTER COLUMN type TYPE VARCHAR(255);
   ALTER TABLE IF EXISTS public.ca_candidates ALTER COLUMN initials DROP NOT NULL;
@@ -55,6 +58,9 @@ export const mapCAInterview = (row) => ({
   roundName: row.round_name || row.type || "Interview Round",
   meetingLink: row.meeting_link || "",
   venue: row.venue || "",
+  interviewerEmployeeId: row.interviewer_employee_id ? Number(row.interviewer_employee_id) : null,
+  interviewerEmail: row.interviewer_email || "",
+  lastInterviewerEmailSent: row.last_interviewer_email_sent || "",
   lastStatusEmailSent: row.last_status_email_sent || "",
   createdAt: row.created_at,
   companyId: row.created_by_company_id,
