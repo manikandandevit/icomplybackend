@@ -17,6 +17,7 @@ import {
   sendHiringManagerReleaseOfferRequest,
   sendCandidateOfferReleaseNotification,
   sendHiringManagerOfferAcceptedRevert,
+  sendWorkflowTaskAssignmentNotification,
 } from "./caWorkflow.email.js";
 
 export const caCandidatesService = {
@@ -213,7 +214,21 @@ export const caCandidatesService = {
 
   async updateWorkflowStep(id, companyId, payload = {}) {
     const result = await caCandidatesRepository.updateWorkflowStep(id, companyId, payload);
-    const { stageKey, status, joiningDate } = payload;
+    const { stageKey, status, assignedTo, assignedEmployeeId, assignedEmail, joiningDate } = payload;
+
+    // 1. If assignedTo is provided/updated, notify the assigned employee immediately!
+    if (assignedTo) {
+      void sendWorkflowTaskAssignmentNotification({
+        candidateId: id,
+        companyId,
+        stageKey,
+        assignedTo,
+        assignedEmployeeId,
+        assignedEmail,
+      }).catch((e) =>
+        console.error(`[Workflow Assignee Notification] Error sending notification for ${stageKey}:`, e.message)
+      );
+    }
 
     if (status === "Completed") {
       // Step 2: Document collection marked done -> Mail to Hiring Manager to generate offer

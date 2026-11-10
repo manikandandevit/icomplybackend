@@ -299,8 +299,8 @@ export const caCandidatesRepository = {
         created_by_company_id
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22) RETURNING *`,
       [
-        payload.name, payload.initials, payload.details, payload.role, payload.match, payload.stage, 
-        payload.source, payload.applied, payload.assessmentCount || 0, 
+        payload.name, payload.initials, payload.details, payload.role, payload.match, payload.stage,
+        payload.source, payload.applied, payload.assessmentCount || 0,
         cleanEmail, cleanPhone, payload.experience || null, payload.location || null,
         payload.skills ? JSON.stringify(payload.skills) : '[]',
         establishmentId || null, establishmentName || null,
@@ -339,11 +339,11 @@ export const caCandidatesRepository = {
     await ensureTable();
     const initials = payload.name
       ? payload.name
-          .split(' ')
-          .map(w => w[0])
-          .join('')
-          .slice(0, 4)
-          .toUpperCase()
+        .split(' ')
+        .map(w => w[0])
+        .join('')
+        .slice(0, 4)
+        .toUpperCase()
       : undefined;
 
     const details = (payload.experience !== undefined || payload.location !== undefined)
@@ -463,7 +463,7 @@ export const caCandidatesRepository = {
                role = COALESCE($4, role)
            WHERE (candidate_id = $1 OR candidate_id = $1::text) AND (created_by_company_id = $2 OR created_by_company_id IS NULL)`,
           [id, companyId, updated.name, updated.role]
-        ).catch(() => {});
+        ).catch(() => { });
       } catch (err) {
         console.warn("Could not sync updated candidate to interviews/offers:", err.message);
       }
@@ -473,7 +473,7 @@ export const caCandidatesRepository = {
 
   async updateStage(id, companyId, stage, assessmentCount) {
     await ensureTable();
-    
+
     let candidate = null;
     if (assessmentCount !== undefined) {
       const { rows } = await db.query(
@@ -549,7 +549,7 @@ export const caCandidatesRepository = {
             if (empRes.rows[0]) {
               defaultAssignee = empRes.rows[0].name;
             }
-          } catch (e) {}
+          } catch (e) { }
 
           const allCompletedStages = [
             { id: "workflow-doc-collection", type: "workflow", stageKey: "document_collection", title: "Document collection", status: "Completed", date: todayStr, assignedTo: defaultAssignee, canMarkDone: false },
@@ -700,7 +700,6 @@ export const caCandidatesRepository = {
         FROM public.ca_interviews i 
         LEFT JOIN public.ca_candidates c ON i.candidate_id = c.id
         WHERE (i.candidate_id = $1 OR i.candidate_id = ($1 + 100000))
-          AND LOWER(COALESCE(i.interviewer, '')) != 'gowri'
         ORDER BY i.id ASC
       `;
       params = [candidate.id];
@@ -710,7 +709,6 @@ export const caCandidatesRepository = {
         FROM public.ca_interviews i 
         LEFT JOIN public.ca_candidates c ON i.candidate_id = c.id
         WHERE (i.candidate_id = $1 OR (c.name IS NOT NULL AND LOWER(TRIM(c.name)) = LOWER(TRIM($2))))
-          AND LOWER(COALESCE(i.interviewer, '')) != 'gowri'
         ORDER BY i.id ASC
       `;
       params = [candidate.id, candidate.name || ''];
@@ -885,7 +883,7 @@ export const caCandidatesRepository = {
       if (empRes.rows[0]) {
         estEmployeeName = empRes.rows[0].name;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     const defaultWorkflowStages = [
       {
@@ -894,7 +892,7 @@ export const caCandidatesRepository = {
         stageKey: "document_collection",
         title: "Document collection",
         status: "Pending",
-        assignedTo: estEmployeeName,
+        assignedTo: "",
         canMarkDone: true,
       },
       {
@@ -903,7 +901,7 @@ export const caCandidatesRepository = {
         stageKey: "offer_generated",
         title: "Offer generated",
         status: "Pending",
-        assignedTo: estEmployeeName,
+        assignedTo: "",
         canMarkDone: false,
       },
       {
@@ -912,7 +910,7 @@ export const caCandidatesRepository = {
         stageKey: "offer_approval",
         title: "Offer approval",
         status: "Pending",
-        assignedTo: estEmployeeName,
+        assignedTo: "",
         canMarkDone: false,
       },
       {
@@ -921,7 +919,7 @@ export const caCandidatesRepository = {
         stageKey: "offer_release",
         title: "Offer release",
         status: "Pending",
-        assignedTo: estEmployeeName,
+        assignedTo: "",
         canMarkDone: false,
       },
       {
@@ -930,7 +928,7 @@ export const caCandidatesRepository = {
         stageKey: "offer_acceptance",
         title: "Offer acceptance",
         status: "Pending",
-        assignedTo: estEmployeeName,
+        assignedTo: "",
         canMarkDone: false,
       },
     ];
@@ -972,7 +970,7 @@ export const caCandidatesRepository = {
         if (found) {
           const item = { ...def, ...found };
           if (!item.assignedTo || isDummyAssignee(item.assignedTo)) {
-            item.assignedTo = estEmployeeName;
+            item.assignedTo = "";
           }
           return item;
         }
@@ -1047,7 +1045,7 @@ export const caCandidatesRepository = {
       if (empRes.rows[0]) {
         estEmployeeName = empRes.rows[0].name;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     const isDummyAssignee = (name) => {
       if (!name || typeof name !== "string") return false;
@@ -1070,7 +1068,7 @@ export const caCandidatesRepository = {
         stageKey: "document_collection",
         title: "Document collection",
         status: "Pending",
-        assignedTo: estEmployeeName,
+        assignedTo: "",
         canMarkDone: true,
       },
       {
@@ -1079,7 +1077,7 @@ export const caCandidatesRepository = {
         stageKey: "offer_generated",
         title: "Offer generated",
         status: "Pending",
-        assignedTo: estEmployeeName,
+        assignedTo: "",
         canMarkDone: false,
       },
       {
@@ -1088,7 +1086,7 @@ export const caCandidatesRepository = {
         stageKey: "offer_approval",
         title: "Offer approval",
         status: "Pending",
-        assignedTo: estEmployeeName,
+        assignedTo: "",
         canMarkDone: false,
       },
       {
@@ -1097,7 +1095,7 @@ export const caCandidatesRepository = {
         stageKey: "offer_release",
         title: "Offer release",
         status: "Pending",
-        assignedTo: estEmployeeName,
+        assignedTo: "",
         canMarkDone: false,
       },
       {
@@ -1106,16 +1104,16 @@ export const caCandidatesRepository = {
         stageKey: "offer_acceptance",
         title: "Offer acceptance",
         status: "Pending",
-        assignedTo: estEmployeeName,
+        assignedTo: "",
         canMarkDone: false,
       },
     ];
 
     const currentStages = (candidate?.workflowStages && candidate.workflowStages.length > 0)
       ? candidate.workflowStages.map((s) => ({
-          ...s,
-          assignedTo: (!s.assignedTo || isDummyAssignee(s.assignedTo)) ? estEmployeeName : s.assignedTo,
-        }))
+        ...s,
+        assignedTo: (!s.assignedTo || isDummyAssignee(s.assignedTo)) ? "" : s.assignedTo,
+      }))
       : [...defaultWorkflowStages];
 
     const idx = currentStages.findIndex((s) => s.stageKey === stageKey || s.title?.toLowerCase() === stageKey?.toLowerCase());
@@ -1200,7 +1198,7 @@ export const caCandidatesRepository = {
             SELECT 1 FROM public.ca_offers WHERE candidate_id = $2 AND created_by_company_id = $1
           )`,
           [companyId, numId, c?.name || "Candidate", c?.role || "Software Engineer", todayStr]
-        ).catch(() => {});
+        ).catch(() => { });
       }
 
       // 3. If there are active interviews in ca_interviews, update/freeze the latest one without creating new interviews
@@ -1213,17 +1211,17 @@ export const caCandidatesRepository = {
              updated_at = NOW()
          WHERE candidate_id = $3 AND created_by_company_id = $4 AND status = 'Scheduled'`,
         [outcomeStatus === "Rejected" ? "Cancelled" : outcomeStatus, statusReason || null, numId, companyId]
-      ).catch(() => {});
+      ).catch(() => { });
 
       if (outcomeStatus === "Rejected") {
         await db.query(
           `DELETE FROM public.ca_offers WHERE candidate_id = $1 AND (created_by_company_id = $2 OR $2 IS NULL)`,
           [numId, companyId]
-        ).catch(() => {});
+        ).catch(() => { });
         await db.query(
           `UPDATE public.ca_candidates SET workflow_stages = '[]'::jsonb WHERE id = $1`,
           [numId]
-        ).catch(() => {});
+        ).catch(() => { });
       }
 
       if (rows[0]) {
@@ -1274,7 +1272,7 @@ export const caCandidatesRepository = {
       await db.query(
         `UPDATE public.ca_offers SET documents = $2::jsonb, updated_at = NOW() WHERE candidate_id = $1 AND (created_by_company_id = $3 OR $3 IS NULL)`,
         [numId, docJson, companyId]
-      ).catch(() => {});
+      ).catch(() => { });
 
       // If document collection step exists in workflow_stages, mark it completed and unlock offer generation!
       if (rows[0]) {
