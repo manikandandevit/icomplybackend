@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS public.ca_hr_masters (
   carry_forward_max TEXT,
   sandwich TEXT DEFAULT 'no',
   prorate TEXT DEFAULT 'yes',
+  experience TEXT,
   created_by_company_id INTEGER NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -78,6 +79,7 @@ ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS carry_forward TEXT;
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS carry_forward_max TEXT;
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS sandwich TEXT DEFAULT 'no';
 ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS prorate TEXT DEFAULT 'yes';
+ALTER TABLE public.ca_hr_masters ADD COLUMN IF NOT EXISTS experience TEXT;
 `;
 
 export const caHrMastersBackfillSql = `
@@ -208,8 +210,8 @@ export const mapCAHrMaster = (row) => {
   };
 
   if (row.master_type === "designation") {
-    values.departmentId = row.related_id != null ? String(row.related_id) : "";
-    values.departmentName = row.related_name || "";
+    values.departmentId = row.related_id != null ? String(row.related_id) : "all";
+    values.departmentName = row.related_name || (row.related_id != null ? "" : "All");
   }
 
   if (row.master_type === "shift-type") {
@@ -237,6 +239,7 @@ export const mapCAHrMaster = (row) => {
     values.carryForwardMax = row.carry_forward_max || "";
     values.sandwich = String(row.sandwich || "no").trim().toLowerCase() === "yes" ? "yes" : "no";
     values.prorate = String(row.prorate || "yes").trim().toLowerCase() === "no" ? "no" : "yes";
+    values.experience = row.experience || "";
   }
 
   return {
