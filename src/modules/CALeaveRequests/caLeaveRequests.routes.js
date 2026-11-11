@@ -9,7 +9,7 @@ const requireLeaveApply = async (req, _res, next) => {
   try {
     await caPermissionsService.assertAccess(
       req.companyId,
-      { isOwner: Boolean(req.isCompanyOwner), designationId: req.designationId, designationName: req.designationName },
+      { isOwner: Boolean(req.isCompanyOwner), designationId: req.designationId, designationName: req.designationName, establishmentId: req.establishmentId || null, employeeId: req.employeeId || null },
       "leave-apply",
       "access",
     );
@@ -33,7 +33,7 @@ const requireLeaveReview = async (req, _res, next) => {
   try {
     await caPermissionsService.assertAccess(
       req.companyId,
-      { isOwner: Boolean(req.isCompanyOwner), designationId: req.designationId, designationName: req.designationName },
+      { isOwner: Boolean(req.isCompanyOwner), designationId: req.designationId, designationName: req.designationName, establishmentId: req.establishmentId || null, employeeId: req.employeeId || null },
       "leave-requests",
       "access",
     );

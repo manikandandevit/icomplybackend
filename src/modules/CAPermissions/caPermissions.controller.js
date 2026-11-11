@@ -30,6 +30,8 @@ export const caPermissionsController = {
       designationId: req.designationId,
       designationName: req.designationName,
       departmentId: req.departmentId,
+      establishmentId: req.establishmentId || null,
+      employeeId: req.employeeId || null,
       allowedModules: req.allowedModules || null,
     });
 
@@ -48,6 +50,7 @@ export const caPermissionsController = {
         req.companyId,
         req.body?.permissions,
         req.body?.designationId,
+        req.body?.establishmentId,
       );
       const message = "Permissions saved successfully";
       return success(res, {

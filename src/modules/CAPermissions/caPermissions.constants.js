@@ -117,13 +117,21 @@ CREATE TABLE IF NOT EXISTS public.ca_designation_permissions (
   scope VARCHAR(32) NOT NULL DEFAULT 'self',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (created_by_company_id, designation_id, nav_id)
+  establishment_id INTEGER NOT NULL DEFAULT 0
 );
 `;
 
 export const caDesignationPermissionsAlterSql = `
 ALTER TABLE public.ca_designation_permissions ADD COLUMN IF NOT EXISTS scope VARCHAR(32) NOT NULL DEFAULT 'self';
+ALTER TABLE public.ca_designation_permissions ADD COLUMN IF NOT EXISTS establishment_id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE public.ca_designation_permissions
+  DROP CONSTRAINT IF EXISTS ca_designation_permissions_created_by_company_id_designation_id_nav_id_key;
+CREATE UNIQUE INDEX IF NOT EXISTS ca_desig_perm_est_unique
+  ON public.ca_designation_permissions (created_by_company_id, establishment_id, designation_id, nav_id);
 `;
+
+/** establishment_id 0 = default for every establishment ("all"). */
+export const ALL_ESTABLISHMENTS = 0;
 
 export const caDesignationPermissionsIndexSql = `
 CREATE INDEX IF NOT EXISTS ca_desig_perm_company_idx
@@ -133,6 +141,7 @@ CREATE INDEX IF NOT EXISTS ca_desig_perm_designation_idx
 `;
 
 export const mapPermission = (row) => ({
+  establishmentId: Number(row.establishment_id) > 0 ? String(row.establishment_id) : "all",
   designationId: String(row.designation_id),
   navId: row.nav_id,
   view: Boolean(row.can_view),

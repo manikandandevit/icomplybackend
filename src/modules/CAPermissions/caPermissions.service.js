@@ -18,16 +18,47 @@ const asMap = (rows) => {
 
 const hasAccess = (perm) => Boolean(perm?.view || perm?.add || perm?.edit);
 
-const permissionsFor = async (companyId, { designationId, designationName }) => {
-  const byId = await caPermissionsRepository.listByDesignation(companyId, designationId);
-  const byName = await caPermissionsRepository.listByDesignationName(companyId, designationName);
-  return asMap([...byId, ...byName]);
+/**
+ * Permissions of a designation in an establishment: that establishment's own
+ * setting if saved, else the "all establishments" default. The same
+ * designation name in another establishment no longer leaks in.
+ */
+const pickForEstablishment = (rows, establishmentId) => {
+  const est = String(establishmentId || "");
+  if (est && est !== "0" && est !== "all") {
+    const own = rows.filter((r) => r.establishmentId === est);
+    if (own.length) return own;
+  }
+  const defaults = rows.filter((r) => r.establishmentId === "all");
+  if (defaults.length) return defaults;
+  // No establishment known (e.g. admin users): fall back to any saved setting.
+  return est && est !== "0" && est !== "all" ? [] : rows;
 };
+
+const permissionsFor = async (companyId, { designationId, designationName, establishmentId, employeeId }) => {
+  let est = establishmentId;
+  if (!est && employeeId) {
+    est = await caPermissionsRepository.establishmentOfEmployee(companyId, employeeId);
+  }
+  let rows = await caPermissionsRepository.listByDesignation(companyId, designationId);
+  if (!rows.length) {
+    // Older records: designation matched by name only when the id has nothing.
+    rows = await caPermissionsRepository.listByDesignationName(companyId, designationName);
+  }
+  return asMap(pickForEstablishment(rows, est));
+};
+
+const actorScope = (actor = {}) => ({
+  designationId: actor.designationId,
+  designationName: actor.designationName,
+  establishmentId: actor.establishmentId,
+  employeeId: actor.employeeId,
+});
 
 export const caPermissionsService = {
   list: (companyId) => caPermissionsRepository.listByCompany(companyId),
 
-  async mine(companyId, { isOwner, designationId, designationName, allowedModules, departmentId }) {
+  async mine(companyId, { isOwner, designationId, designationName, allowedModules, departmentId, establishmentId, employeeId }) {
     if (isOwner || allowedModules?.includes("all")) {
       return {
         isOwner: true,
@@ -60,23 +91,20 @@ export const caPermissionsService = {
       allowedModules: [],
       designationId: designationId ? String(designationId) : null,
       departmentId: departmentId ? String(departmentId) : null,
-      permissions: await permissionsFor(companyId, { designationId, designationName }),
+      permissions: await permissionsFor(companyId, { designationId, designationName, establishmentId, employeeId }),
     };
   },
 
-  async save(companyId, permissions, designationId = null) {
+  async save(companyId, permissions, designationId = null, establishmentId = null) {
     const rows = Array.isArray(permissions) ? permissions : [];
-    return caPermissionsRepository.replaceAll(companyId, rows, designationId);
+    return caPermissionsRepository.replaceAll(companyId, rows, designationId, establishmentId);
   },
 
   async getScope(companyId, actor = {}, navId) {
     if (actor.isOwner || actor.allowedModules?.includes("all")) {
       return "all";
     }
-    const map = await permissionsFor(companyId, {
-      designationId: actor.designationId,
-      designationName: actor.designationName,
-    });
+    const map = await permissionsFor(companyId, actorScope(actor));
     const perm = map[navId] || (navId === "religion" ? map["gender"] : undefined);
     return perm?.scope || "self";
   },
@@ -85,10 +113,7 @@ export const caPermissionsService = {
     if (actor.isOwner || actor.allowedModules?.includes("all")) {
       return true;
     }
-    const map = await permissionsFor(companyId, {
-      designationId: actor.designationId,
-      designationName: actor.designationName,
-    });
+    const map = await permissionsFor(companyId, actorScope(actor));
     const perm = map[navId] || (navId === "religion" ? map["gender"] : undefined);
     if (!perm) {
       if (navId === "religion") return true;
@@ -102,12 +127,13 @@ export const caPermissionsService = {
     return Boolean(perm.view || perm.add || perm.edit);
   },
 
-  async assertAccess(companyId, { isOwner, designationId, designationName, allowedModules }, navId, action) {
+  async assertAccess(companyId, actor, navId, action) {
+    const { isOwner, allowedModules } = actor || {};
     if (isOwner || allowedModules?.includes("all")) {
       return true;
     }
 
-    const map = await permissionsFor(companyId, { designationId, designationName });
+    const map = await permissionsFor(companyId, actorScope(actor));
     const perm = map[navId] || (navId === "religion" ? map["gender"] : undefined);
 
     if (!perm) {
