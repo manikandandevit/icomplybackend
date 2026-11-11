@@ -113,6 +113,25 @@ export const caFcmService = {
           body,
         },
         data: stringifiedData,
+        // Mobile app (Android): high priority + the app's channel, so it pops up with sound.
+        android: {
+          priority: "high",
+          notification: {
+            channelId: "ihrconnectz_default",
+            sound: "default",
+            icon: "ic_stat_notify",
+            color: "#1E3463",
+          },
+        },
+        // Mobile app (iOS): sound + banner even when the app is closed.
+        apns: {
+          headers: { "apns-priority": "10" },
+          payload: {
+            aps: {
+              sound: "default",
+            },
+          },
+        },
         webpush: {
           notification: {
             title,
@@ -539,6 +558,120 @@ export const caFcmService = {
       }
     } catch (error) {
       console.error("[FCM] notifyEmployeeOfOtStatus error:", error?.message || error);
+    }
+  },
+  /** Revoke applied → reporting manager + company admin (in-app + push). */
+  async notifyApproversOfRevokeRequest({ companyId, employee, revoke }) {
+    try {
+      const employeeName = employee?.name || revoke?.employeeName || "Employee";
+      const empCode = employee?.employeeCode || revoke?.employeeCode;
+      const leaveTypeName = revoke?.leaveTypeName || "leave";
+      const days = revoke?.days || "1";
+      const startDate = revoke?.startDate ? String(revoke.startDate).slice(0, 10) : "";
+      const endDate = revoke?.endDate ? String(revoke.endDate).slice(0, 10) : "";
+      const datesText = formatLeaveDates(revoke) || (startDate === endDate ? startDate : `${startDate} to ${endDate}`);
+      const reportingToId = revoke?.reportingToId || employee?.details?.reportingToId || null;
+
+      const body = `${employeeName}${empCode ? ` (${empCode})` : ""} has requested to revoke ${days} day(s) ${leaveTypeName} (${datesText}).`;
+      const data = {
+        type: "REVOKE_REQUEST",
+        requestId: String(revoke?.id || ""),
+        employeeId: String(employee?.id || revoke?.employeeId || ""),
+        employeeName,
+        url: "/companyadmin/leave",
+      };
+
+      if (reportingToId) {
+        const title = "Leave Revoke Request From Team";
+        await caFcmRepository.saveInAppNotification({
+          companyId,
+          targetUserType: "employee",
+          targetUserId: String(reportingToId),
+          title,
+          body,
+          data,
+        });
+        const managerTokens = await caFcmRepository.getEmployeeTokens(companyId, reportingToId);
+        if (managerTokens.length > 0) {
+          await this.sendPushNotification(managerTokens, { title, body, data });
+        }
+      }
+
+      const adminTitle = "New Leave Revoke Request";
+      await caFcmRepository.saveInAppNotification({ companyId, targetUserType: "admin", title: adminTitle, body, data });
+      const adminTokens = await caFcmRepository.getAdminTokens(companyId);
+      if (adminTokens.length > 0) {
+        await this.sendPushNotification(adminTokens, { title: adminTitle, body, data });
+      }
+    } catch (error) {
+      console.error("[FCM] notifyApproversOfRevokeRequest error:", error?.message || error);
+    }
+  },
+
+  /** Revoke approved / rejected → the employee (in-app + push). */
+  async notifyEmployeeOfRevokeStatus({ companyId, revoke, status, reviewedByName, rejectReason }) {
+    try {
+      const employeeId = revoke?.employeeId;
+      if (!employeeId) return;
+      const isApproved = status === "Approved";
+      const title = isApproved ? "Leave Revoke Approved" : "Leave Revoke Rejected";
+      const startDate = revoke?.startDate ? String(revoke.startDate).slice(0, 10) : "";
+      const endDate = revoke?.endDate ? String(revoke.endDate).slice(0, 10) : "";
+      const datesText = formatLeaveDates(revoke) || (startDate === endDate ? startDate : `${startDate} - ${endDate}`);
+      const body = `Your ${revoke?.leaveTypeName || "leave"} revoke request (${datesText}) has been ${status.toLowerCase()} by ${reviewedByName || "Approver"}.${isApproved ? " The days are back in your leave balance." : ""}${rejectReason ? ` Reason: "${rejectReason}"` : ""}`;
+      const data = { type: "REVOKE_STATUS_UPDATE", status, requestId: String(revoke?.id || ""), url: "/companyadmin/leave" };
+
+      await caFcmRepository.saveInAppNotification({
+        companyId,
+        targetUserType: "employee",
+        targetUserId: String(employeeId),
+        title,
+        body,
+        data,
+      });
+      const employeeTokens = await caFcmRepository.getEmployeeTokens(companyId, employeeId);
+      if (employeeTokens.length > 0) {
+        await this.sendPushNotification(employeeTokens, { title, body, data });
+      }
+    } catch (error) {
+      console.error("[FCM] notifyEmployeeOfRevokeStatus error:", error?.message || error);
+    }
+  },
+
+  /** Payroll saved: tell each employee their payslip for that month is ready. */
+  async notifyEmployeesOfPayslips({ companyId, run, payslips = [] }) {
+    const monthYear = `${run?.month || ""} ${run?.year || ""}`.trim();
+    const title = "Payslip Ready";
+    for (const p of payslips) {
+      try {
+        const employeeId = p?.employeeId;
+        if (!employeeId) continue;
+        const net = Math.round(Number(p.netPay) || 0).toLocaleString("en-IN");
+        const body = `Your payslip for ${monthYear} is ready. Net pay: \u20B9${net}.`;
+        const data = {
+          type: "PAYSLIP_READY",
+          payslipId: String(p.id || ""),
+          runId: String(run?.id || ""),
+          month: String(run?.month || ""),
+          year: String(run?.year || ""),
+          url: "/companyadmin/payroll",
+        };
+
+        await caFcmRepository.saveInAppNotification({
+          companyId,
+          targetUserType: "employee",
+          targetUserId: String(employeeId),
+          title,
+          body,
+          data,
+        });
+        const employeeTokens = await caFcmRepository.getEmployeeTokens(companyId, employeeId);
+        if (employeeTokens.length > 0) {
+          await this.sendPushNotification(employeeTokens, { title, body, data });
+        }
+      } catch (error) {
+        console.error("[FCM] notifyEmployeesOfPayslips error:", error?.message || error);
+      }
     }
   },
 };

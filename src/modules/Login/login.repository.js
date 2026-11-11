@@ -190,6 +190,7 @@ export const loginRepository = {
         e.created_by_company_id, e.company_id, e.company_name, e.company_source,
         e.department_id, e.department_name, e.designation_id, e.designation_name,
         e.establishment_id, e.establishment_name,
+        to_jsonb(e)->>'photo_key' AS photo_key,
         COALESCE(NULLIF(TRIM(e.details->>'countryId'), ''), est.country_id::text) AS country_id,
         COALESCE(NULLIF(TRIM(est.country_name), ''), '') AS country_name
       FROM public.ca_employees e
@@ -212,6 +213,7 @@ export const loginRepository = {
         e.created_by_company_id, e.company_id, e.company_name, e.company_source,
         e.department_name, e.designation_id, e.designation_name,
         e.establishment_id, e.establishment_name,
+        to_jsonb(e)->>'photo_key' AS photo_key,
         COALESCE(NULLIF(TRIM(e.details->>'countryId'), ''), est.country_id::text) AS country_id,
         COALESCE(NULLIF(TRIM(est.country_name), ''), '') AS country_name
       FROM public.ca_employees e

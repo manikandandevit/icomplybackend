@@ -80,6 +80,12 @@ export const caFcmController = {
     const companyId = req.companyId;
 
     await caFcmRepository.markInAppNotificationRead(id, companyId);
+    // Keep only the latest 10 read.
+    await caFcmRepository.pruneReadNotifications(
+      companyId,
+      req.employeeId ? "employee" : "admin",
+      req.employeeId || null
+    );
     return success(res, {
       status: 200,
       message: "Notification marked as read",
@@ -93,6 +99,8 @@ export const caFcmController = {
     const userId = req.employeeId || null;
 
     const count = await caFcmRepository.markAllInAppNotificationsRead(companyId, userType, userId);
+    // Keep only the latest 10 read.
+    await caFcmRepository.pruneReadNotifications(companyId, userType, userId);
     return success(res, {
       status: 200,
       message: "All notifications marked as read",

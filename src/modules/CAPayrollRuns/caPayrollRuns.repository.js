@@ -1,6 +1,14 @@
 import { db } from "../../core/db/pool.js";
 import { caPayrollRunsTableSql, caPayslipsTableSql, mapPayrollRun, mapPayslip } from "./caPayrollRuns.constants.js";
 
+const mapEmployeePayslip = (row) => ({
+  ...mapPayslip(row),
+  runMonth: row.run_month,
+  runYear: row.run_year,
+  establishmentName: row.establishment_name || "",
+  runCreatedAt: row.run_created_at,
+});
+
 let ready = null;
 
 const ensureTable = () => {
@@ -100,6 +108,36 @@ export const caPayrollRunsRepository = {
       [companyId, runId]
     );
     return rows.map(mapPayslip);
+  },
+
+  /** All payslips of one employee, with their run's month / year. */
+  async getEmployeePayslips(companyId, employeeId) {
+    await ensureTable();
+    const { rows } = await db.query(
+      `SELECT p.*, r.run_month, r.run_year, r.establishment_name, r.created_at AS run_created_at
+       FROM public.ca_payslips p
+       JOIN public.ca_payroll_runs r ON r.id = p.run_id
+       WHERE p.created_by_company_id = $1 AND p.employee_id = $2
+       ORDER BY p.id DESC`,
+      [companyId, employeeId]
+    );
+    return rows.map(mapEmployeePayslip);
+  },
+
+  /** One payslip, only if it belongs to this employee. */
+  async getEmployeePayslipById(companyId, employeeId, payslipId) {
+    await ensureTable();
+    const id = Number.parseInt(String(payslipId ?? ""), 10);
+    if (!Number.isInteger(id) || id <= 0) return null;
+    const { rows } = await db.query(
+      `SELECT p.*, r.run_month, r.run_year, r.establishment_name, r.created_at AS run_created_at
+       FROM public.ca_payslips p
+       JOIN public.ca_payroll_runs r ON r.id = p.run_id
+       WHERE p.created_by_company_id = $1 AND p.employee_id = $2 AND p.id = $3
+       LIMIT 1`,
+      [companyId, employeeId, id]
+    );
+    return rows[0] ? mapEmployeePayslip(rows[0]) : null;
   },
 
   async getPendingLeaves(companyId, establishmentId, month, year) {

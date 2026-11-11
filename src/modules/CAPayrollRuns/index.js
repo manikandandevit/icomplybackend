@@ -14,6 +14,11 @@ router.post("/send-payslip", caPayrollRunsController.sendPayslip);
 router.get("/history", caPayrollRunsController.getRunHistory);
 router.get("/history-by-year", caPayrollRunsController.getRunsByYear);
 
+// Employee (mobile): own payslips + PDF
+router.get("/my-payslips", caPayrollRunsController.getMyPayslips);
+router.get("/my-payslips/:id/pdf", caPayrollRunsController.getMyPayslipPdf);
+router.get("/my-payslips/:id/image", caPayrollRunsController.getMyPayslipImage);
+
 import multer from "multer";
 
 const upload = multer({

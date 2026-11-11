@@ -34,7 +34,7 @@ const selectColumns = `
   e.shift_type_id, e.shift_type_name,
   e.ot_applicable, e.ot_type_id, e.ot_type_name,
   e.gender_id, e.gender_name, e.marital_status_id, e.marital_status_name,
-  e.bank_details, e.details,
+  e.bank_details, e.details, e.photo_key,
   e.created_by_company_id, e.created_at,
   NULLIF(TRIM(mgr.name), '') AS live_reporting_to_name
 `;
@@ -526,6 +526,32 @@ export const caEmployeesRepository = {
       `,
       [cid, empId, name, empText],
     );
+  },
+
+  /** Saves the profile photo's S3 key. Returns the updated employee. */
+  async updatePhoto(id, companyId, photoKey) {
+    await ensureTable();
+    const rowId = parseRowId(id);
+    const cid = parseRowId(companyId);
+    if (!rowId || !cid) return null;
+    const { rowCount } = await db.query(
+      `UPDATE public.ca_employees SET photo_key = $3, updated_at = NOW() WHERE id = $1 AND created_by_company_id = $2`,
+      [rowId, cid, photoKey]
+    );
+    return rowCount ? this.findById(rowId, cid) : null;
+  },
+
+  /** S3 key of an employee's photo (same company only). */
+  async findPhotoKey(id, companyId) {
+    await ensureTable();
+    const rowId = parseRowId(id);
+    const cid = parseRowId(companyId);
+    if (!rowId || !cid) return null;
+    const { rows } = await db.query(
+      `SELECT photo_key FROM public.ca_employees WHERE id = $1 AND created_by_company_id = $2 LIMIT 1`,
+      [rowId, cid]
+    );
+    return rows[0]?.photo_key || null;
   },
 
   async delete(id, companyId) {
