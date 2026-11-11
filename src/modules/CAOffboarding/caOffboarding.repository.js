@@ -293,6 +293,42 @@ export const caOffboardingRepository = {
         const details = (emp.details && typeof emp.details === 'object') ? emp.details : {};
         await this.syncFromEmployee(cid, emp, details);
       }
+
+      // Auto-sync: Any completed exits MUST ensure the employee is Inactive and candidate is Alumni
+      await db.query(`
+        UPDATE public.ca_employees
+        SET status = 'Inactive', updated_at = NOW()
+        WHERE id IN (
+          SELECT employee_id FROM public.ca_offboarding_exits
+          WHERE status = 'Completed' AND created_by_company_id = $1
+        ) AND status = 'Active' AND created_by_company_id = $1
+      `, [cid]).catch(() => {});
+
+      await db.query(`
+        UPDATE public.ca_users u
+        SET status = 'Inactive', updated_at = NOW()
+        FROM public.ca_employees emp
+        JOIN public.ca_offboarding_exits e ON e.employee_id = emp.id
+        WHERE e.status = 'Completed'
+          AND e.created_by_company_id = $1
+          AND u.created_by_company_id = $1
+          AND u.status = 'Active'
+          AND (
+            (LENGTH(emp.email) > 3 AND LOWER(TRIM(u.email)) = LOWER(TRIM(emp.email)))
+            OR LOWER(TRIM(u.name)) = LOWER(TRIM(emp.name))
+          )
+      `, [cid]).catch(() => {});
+
+      await db.query(`
+        UPDATE public.ca_candidates c
+        SET stage = 'Alumni', updated_at = NOW()
+        FROM public.ca_offboarding_exits e
+        WHERE e.status = 'Completed'
+          AND e.created_by_company_id = $1
+          AND c.created_by_company_id = $1
+          AND LOWER(TRIM(c.name)) = LOWER(TRIM(e.employee_name))
+          AND LOWER(TRIM(COALESCE(c.stage, ''))) != 'alumni'
+      `, [cid]).catch(() => {});
     } catch (syncErr) {
       console.warn("Could not sync resigning employees to offboarding exits:", syncErr);
     }
@@ -440,24 +476,97 @@ export const caOffboardingRepository = {
 
     const isAllCompleted = totalTasks > 0 && completedTasks === totalTasks;
 
-    const { rowCount } = await db.query(
+    const { rows, rowCount } = await db.query(
       `
       UPDATE public.ca_offboarding_exits
       SET sections = $3::jsonb,
           status = CASE WHEN $4 = TRUE THEN 'Completed' ELSE 'In Progress' END,
           updated_at = NOW()
       WHERE (id = $1 OR employee_id = $1) AND created_by_company_id = $2
+      RETURNING *
       `,
       [exitId, cid, JSON.stringify(sections), isAllCompleted]
     );
 
+    // If all tasks are completed, automatically mark employee Inactive and candidate Alumni
+    if (isAllCompleted && rows[0] && rows[0].employee_id) {
+      await this.markExitAsCompletedAndInactive(rows[0], cid);
+    }
+
     return rowCount > 0;
+  },
+
+  async markExitAsCompletedAndInactive(exitRow, cid) {
+    if (!exitRow || !exitRow.employee_id) return;
+    const empId = parseRowId(exitRow.employee_id);
+    if (!empId) return;
+
+    try {
+      // 1. Mark employee Inactive in ca_employees
+      const empRes = await db.query(
+        `UPDATE public.ca_employees
+         SET status = 'Inactive', updated_at = NOW()
+         WHERE (id = $1 OR lower(employee_code) = lower($3) OR lower(name) = lower($4))
+           AND created_by_company_id = $2
+         RETURNING id, name, details, establishment_id`,
+        [empId, cid, exitRow.employee_code || "", exitRow.employee_name || ""]
+      );
+
+      const empName = empRes.rows[0]?.name || exitRow.employee_name;
+      const empEmail = empRes.rows[0]?.details?.officialEmail || empRes.rows[0]?.details?.personalEmail || "";
+
+      // 2. Mark ca_users login account Inactive
+      if (empEmail || empName) {
+        await db.query(
+          `UPDATE public.ca_users
+           SET status = 'Inactive', updated_at = NOW()
+           WHERE created_by_company_id = $1
+             AND (
+               (LENGTH($2) > 3 AND lower(trim(email)) = lower(trim($2)))
+               OR lower(trim(name)) = lower(trim($3))
+             )`,
+          [cid, empEmail, empName]
+        );
+      }
+
+      // 3. Mark Onboarding records Completed
+      if (empName) {
+        await db.query(
+          `UPDATE public.ca_onboarding
+           SET status = 'Completed', employee_id = $1, updated_at = NOW()
+           WHERE created_by_company_id = $2
+             AND (employee_id = $1 OR LOWER(TRIM(candidate_name)) = LOWER(TRIM($3)) OR LOWER(TRIM(candidate_name)) LIKE LOWER(TRIM($3)) || '%')`,
+          [empId, cid, empName]
+        );
+
+        // 4. Mark Offer records Completed
+        await db.query(
+          `UPDATE public.ca_offers
+           SET status = 'Completed', updated_at = NOW()
+           WHERE created_by_company_id = $1
+             AND (LOWER(TRIM(candidate_name)) = LOWER(TRIM($2)) OR LOWER(TRIM(candidate_name)) LIKE LOWER(TRIM($2)) || '%')`,
+          [cid, empName]
+        );
+
+        // 5. Mark Candidate stage to 'Alumni'
+        await db.query(
+          `UPDATE public.ca_candidates
+           SET stage = 'Alumni', updated_at = NOW()
+           WHERE created_by_company_id = $1
+             AND (LOWER(TRIM(name)) = LOWER(TRIM($2)) OR LOWER(TRIM(name)) LIKE LOWER(TRIM($2)) || '%' OR (LENGTH($3) > 3 AND LOWER(TRIM(email)) = LOWER(TRIM($3))))`,
+          [cid, empName, empEmail]
+        );
+      }
+    } catch (e) {
+      console.warn("Could not mark employee Inactive on exit completion:", e);
+    }
   },
 
   async completeExit(id, companyId) {
     await ensureTable();
     const cid = parseRowId(companyId);
-    const exitId = parseRowId(String(id).replace("EXIT-", ""));
+    const rawStr = String(id ?? "").replace(/^exit-/i, "").replace(/^emp-/i, "").trim();
+    const exitId = parseRowId(rawStr) || parseInt(rawStr.replace(/\D/g, ""), 10) || null;
     if (!cid || !exitId) return null;
 
     const { rows } = await db.query(
@@ -470,48 +579,16 @@ export const caOffboardingRepository = {
       [exitId, cid]
     );
 
-    if (rows[0] && rows[0].employee_id) {
-      try {
-        const empRes = await db.query(
-          `UPDATE public.ca_employees
-           SET status = 'Inactive', updated_at = NOW()
-           WHERE id = $1 AND created_by_company_id = $2
-           RETURNING name, details`,
-          [rows[0].employee_id, cid]
-        );
-        const empName = empRes.rows[0]?.name || rows[0].employee_name;
-        const empEmail = empRes.rows[0]?.details?.officialEmail || empRes.rows[0]?.details?.personalEmail || "";
+    const exitRow = rows[0] || (await db.query(
+      `SELECT * FROM public.ca_offboarding_exits WHERE (id = $1 OR employee_id = $1) AND created_by_company_id = $2 LIMIT 1`,
+      [exitId, cid]
+    )).rows[0];
 
-        // Also ensure any corresponding onboarding records, offers, and recruitment candidates are archived as Alumni
-        if (empName) {
-          await db.query(
-            `UPDATE public.ca_onboarding
-             SET status = 'Completed', employee_id = $1, updated_at = NOW()
-             WHERE created_by_company_id = $2
-               AND (employee_id = $1 OR LOWER(TRIM(candidate_name)) = LOWER(TRIM($3)) OR LOWER(TRIM(candidate_name)) LIKE LOWER(TRIM($3)) || '%')`,
-            [rows[0].employee_id, cid, empName]
-          );
-          await db.query(
-            `UPDATE public.ca_offers
-             SET status = 'Completed', updated_at = NOW()
-             WHERE created_by_company_id = $1
-               AND (LOWER(TRIM(candidate_name)) = LOWER(TRIM($2)) OR LOWER(TRIM(candidate_name)) LIKE LOWER(TRIM($2)) || '%')`,
-            [cid, empName]
-          );
-          await db.query(
-            `UPDATE public.ca_candidates
-             SET stage = 'Alumni', updated_at = NOW()
-             WHERE created_by_company_id = $1
-               AND (LOWER(TRIM(name)) = LOWER(TRIM($2)) OR LOWER(TRIM(name)) LIKE LOWER(TRIM($2)) || '%' OR (LENGTH($3) > 3 AND LOWER(TRIM(email)) = LOWER(TRIM($3))))`,
-            [cid, empName, empEmail]
-          );
-        }
-      } catch (e) {
-        console.warn("Could not mark employee Inactive on exit completion:", e);
-      }
+    if (exitRow && exitRow.employee_id) {
+      await this.markExitAsCompletedAndInactive(exitRow, cid);
     }
 
-    return rows[0] || null;
+    return exitRow || null;
   },
 
   async withdrawExit(id, companyId) {

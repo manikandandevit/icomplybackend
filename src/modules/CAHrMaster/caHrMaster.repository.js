@@ -47,7 +47,7 @@ const selectColumns = `
   m.multiplier, m.days, m.code, m.country_id, m.country_name,
   m.establishment_id, COALESCE(e.name, m.establishment_name) AS establishment_name,
   m.eligible_gender_id, m.min_hours, m.max_hours,
-  m.carry_forward, m.carry_forward_max, m.sandwich, m.prorate,
+  m.carry_forward, m.carry_forward_max, m.sandwich, m.prorate, m.experience,
   m.created_by_company_id, m.created_at,
   r.name AS related_name,
   g.name AS eligible_gender_name
@@ -70,6 +70,7 @@ const fromJoin = `
 const emptySelectRow = `
   SELECT id, master_type, name, related_id, start_time, end_time, total_hours, break_time, multiplier, days, code,
          country_id, country_name, establishment_id, establishment_name, eligible_gender_id, min_hours, max_hours, carry_forward, carry_forward_max,
+         sandwich, prorate, experience,
          created_by_company_id, created_at, NULL::text AS related_name, NULL::text AS eligible_gender_name
   FROM public.ca_hr_masters
 `;
@@ -353,9 +354,9 @@ export const caHrMasterRepository = {
       INSERT INTO public.ca_hr_masters (
         master_type, name, related_id, start_time, end_time, total_hours, break_time, multiplier, days, code,
         country_id, country_name, establishment_id, establishment_name, eligible_gender_id, min_hours, max_hours, carry_forward, carry_forward_max,
-        sandwich, prorate, created_by_company_id
+        sandwich, prorate, experience, created_by_company_id
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
       RETURNING id
       `,
       [
@@ -380,6 +381,7 @@ export const caHrMasterRepository = {
         payload.carryForwardMax || null,
         payload.sandwich || null,
         payload.prorate || null,
+        payload.experience || null,
         cid,
       ]
     );
@@ -429,8 +431,9 @@ export const caHrMasterRepository = {
         carry_forward_max = $18,
         sandwich = $19,
         prorate = $20,
+        experience = $21,
         updated_at = NOW()
-      WHERE id = $21 AND created_by_company_id = $22 AND master_type = $23
+      WHERE id = $22 AND created_by_company_id = $23 AND master_type = $24
       `,
       [
         payload.name,
@@ -453,6 +456,7 @@ export const caHrMasterRepository = {
         payload.carryForwardMax || null,
         payload.sandwich || null,
         payload.prorate || null,
+        payload.experience || null,
         rowId,
         cid,
         masterType,

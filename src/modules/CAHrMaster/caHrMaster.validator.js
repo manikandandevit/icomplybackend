@@ -29,6 +29,9 @@ export const validateMasterBody = (masterType, body = {}) => {
     maxHours: null,
     carryForward: null,
     carryForwardMax: null,
+    sandwich: null,
+    prorate: null,
+    experience: null,
     establishmentId: null,
     establishmentName: null,
   };
@@ -61,7 +64,7 @@ export const validateMasterBody = (masterType, body = {}) => {
   if (ESTABLISHMENT_SCOPED_TYPES.includes(masterType)) {
     const establishmentId = String(body.establishmentId ?? body.values?.establishmentId ?? "").trim();
     const establishmentName = normalizeText(body.establishmentName ?? body.values?.establishmentName);
-    if (!establishmentId || (masterType === "designation" && establishmentId.toLowerCase() === "all")) {
+    if (!establishmentId) {
       errors.establishmentId = "Establishment is required";
     } else if (establishmentId.toLowerCase() === "all") {
       value.establishmentId = null;
@@ -88,8 +91,10 @@ export const validateMasterBody = (masterType, body = {}) => {
 
   if (masterType === "designation") {
     const departmentId = String(body.departmentId ?? body.values?.departmentId ?? "").trim();
-    if (!departmentId || departmentId.toLowerCase() === "all") {
+    if (!departmentId) {
       errors.departmentId = "Department is required";
+    } else if (departmentId.toLowerCase() === "all") {
+      value.relatedId = null;
     } else {
       value.relatedId = departmentId;
     }
@@ -144,6 +149,9 @@ export const validateMasterBody = (masterType, body = {}) => {
 
     const prorate = String(body.prorate ?? body.values?.prorate ?? "no").trim().toLowerCase();
     value.prorate = prorate === "yes" ? "yes" : "no";
+
+    const experience = String(body.experience ?? body.values?.experience ?? "").trim();
+    value.experience = experience || null;
   }
 
   if (masterType === "shift-type") {
