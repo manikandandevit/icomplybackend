@@ -8,4 +8,5 @@ caOtRequestsRouter.get("/", authenticateToken, requireCompanyAdmin, caOtRequests
 caOtRequestsRouter.post("/", authenticateToken, requireCompanyAdmin, caOtRequestsController.create);
 caOtRequestsRouter.get("/:id", authenticateToken, requireCompanyAdmin, caOtRequestsController.getById);
 caOtRequestsRouter.put("/:id/approve", authenticateToken, requireCompanyAdmin, caOtRequestsController.approve);
+caOtRequestsRouter.put("/:id/cancel", authenticateToken, requireCompanyAdmin, caOtRequestsController.cancel);
 caOtRequestsRouter.put("/:id/reject", authenticateToken, requireCompanyAdmin, caOtRequestsController.reject);

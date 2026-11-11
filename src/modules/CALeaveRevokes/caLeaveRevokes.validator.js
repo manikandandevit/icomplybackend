@@ -1,5 +1,6 @@
 import { countCalendarDays, normalizeSession, SESSION_FULL } from "../../core/leave/workingDays.js";
 import { sanitizeAttachment } from "../../core/storage/leaveAttachments.js";
+import { normalizeLeaveDates, totalUnits } from "../../core/leave/leaveDates.js";
 
 const required = (value, label, errors, key) => {
   const next = String(value ?? "").trim();
@@ -12,6 +13,28 @@ const isIsoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 export const validateRevokeBody = (body = {}) => {
   const errors = {};
   const leaveRequestId = required(body.leaveRequestId, "Approved leave", errors, "leaveRequestId");
+
+  // Revoke specific dates of a day-line leave.
+  const { dates: leaveDates, error: datesError } = normalizeLeaveDates(body.leaveDates);
+  if (datesError) errors.leaveDates = datesError;
+  if (leaveDates.length) {
+    const reasonValue = required(body.reason, "Reason", errors, "reason");
+    return {
+      isValid: Object.keys(errors).length === 0,
+      errors,
+      value: {
+        leaveRequestId,
+        startDate: leaveDates[0].date,
+        endDate: leaveDates[leaveDates.length - 1].date,
+        reason: reasonValue,
+        session: SESSION_FULL,
+        days: totalUnits(leaveDates),
+        leaveDates,
+        ...sanitizeAttachment(body),
+      },
+    };
+  }
+
   const startDate = required(body.startDate, "Start date", errors, "startDate");
   const endDate = required(body.endDate, "End date", errors, "endDate");
   const reason = required(body.reason, "Reason", errors, "reason");
@@ -32,6 +55,6 @@ export const validateRevokeBody = (body = {}) => {
   return {
     isValid: Object.keys(errors).length === 0,
     errors,
-    value: { leaveRequestId, startDate, endDate, reason, session, days, ...sanitizeAttachment(body) },
+    value: { leaveRequestId, startDate, endDate, reason, session, days, leaveDates: [], ...sanitizeAttachment(body) },
   };
 };

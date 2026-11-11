@@ -6,6 +6,7 @@ import { companiesRepository } from "../Companies/companies.repository.js";
 import { caPermissionsService } from "../CAPermissions/caPermissions.service.js";
 import { caEmployeesRepository } from "./caEmployees.repository.js";
 import { offloadEmployeeDocuments } from "../../core/storage/employeeDocuments.js";
+import { formatDateToIST } from "../../core/utils/date.js";
 
 export const DEFAULT_EMPLOYEE_PASSWORD = "Employee@123";
 
@@ -57,7 +58,64 @@ const checkCountryQuota = async (companyId, establishmentId, excludeEmployeeId =
   }
 };
 
+/** Today's date in IST as { y, m, d }. */
+const todayIST = () => {
+  const [y, m, d] = formatDateToIST(new Date()).split("-").map(Number);
+  return { y, m, d };
+};
+
+/** Reads month and day from a stored date of birth (YYYY-MM-DD or a Date-parsable value). */
+const monthDayOf = (raw) => {
+  const text = String(raw || "").trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
+  const iso = match ? text.slice(0, 10) : formatDateToIST(text);
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+  if (!parts) return null;
+  const m = Number(parts[2]);
+  const d = Number(parts[3]);
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  return { m, d };
+};
+
+const isLeap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+const pad2 = (n) => String(n).padStart(2, "0");
+
+/** Next birthday on or after today. Feb 29 falls on Feb 28 in non-leap years. */
+const nextBirthday = ({ m, d }, today) => {
+  const build = (y) => ({ y, m, d: m === 2 && d === 29 && !isLeap(y) ? 28 : d });
+  let next = build(today.y);
+  if (next.m < today.m || (next.m === today.m && next.d < today.d)) next = build(today.y + 1);
+  return next;
+};
+
 export const caEmployeesService = {
+  /** Upcoming birthdays (today first), name and date only, for one establishment. */
+  async upcomingBirthdays(companyId, establishmentId, limit = 10) {
+    const rows = await caEmployeesRepository.listBirthdays(companyId, establishmentId);
+    const today = todayIST();
+    const todayKey = Date.UTC(today.y, today.m - 1, today.d);
+    const max = Math.min(Math.max(Number.parseInt(limit, 10) || 10, 1), 50);
+
+    return rows
+      .map((row) => {
+        const md = monthDayOf(row.date_of_birth);
+        if (!md) return null;
+        const next = nextBirthday(md, today);
+        const nextKey = Date.UTC(next.y, next.m - 1, next.d);
+        return {
+          id: String(row.id),
+          name: row.name || "",
+          designationName: row.designation_name || "",
+          birthDay: `${pad2(md.m)}-${pad2(md.d)}`,
+          nextDate: `${next.y}-${pad2(next.m)}-${pad2(next.d)}`,
+          daysAway: Math.round((nextKey - todayKey) / 86400000),
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.daysAway - b.daysAway || a.name.localeCompare(b.name))
+      .slice(0, max);
+  },
+
   /** Direct count from employee master — source of truth for headcount. */
   async counts(companyId) {
     const counts = await caEmployeesRepository.countsByCompany(companyId);

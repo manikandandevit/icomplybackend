@@ -282,4 +282,24 @@ export const caOtRequestsService = {
 
     return updated;
   },
+
+  /** Employee cancels their own Pending OT request (manual or auto). */
+  async cancel(id, companyId, actor = {}) {
+    const existing = await caOtRequestsRepository.getById(id, companyId);
+    if (!existing) throw new AppError("Overtime request not found", 404, "NOT_FOUND");
+    if (existing.status !== "Pending") {
+      throw new AppError(`Only pending overtime requests can be cancelled (this one is ${existing.status})`, 422, "INVALID_STATUS");
+    }
+    const isCompanyAdmin = Boolean(actor.isOwner || !actor.employeeId);
+    if (!isCompanyAdmin && String(existing.employeeId) !== String(actor.employeeId)) {
+      throw new AppError("You can only cancel your own overtime request", 403, "FORBIDDEN");
+    }
+    const updated = await caOtRequestsRepository.update(id, companyId, {
+      status: "Cancelled",
+      reviewedByName: actor.name || "Employee",
+      reviewedAt: new Date().toISOString(),
+    });
+    if (!updated) throw new AppError("Unable to cancel overtime request", 500, "OT_CANCEL_FAILED");
+    return updated;
+  },
 };

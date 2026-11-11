@@ -5,6 +5,7 @@ import { caEmployeesController } from "./caEmployees.controller.js";
 
 export const caEmployeesRouter = Router();
 
+caEmployeesRouter.get("/upcoming-birthdays", authenticateToken, requireCompanyAdmin, caEmployeesController.upcomingBirthdays);
 caEmployeesRouter.get("/counts", authenticateToken, requireCompanyAdmin, caEmployeesController.counts);
 caEmployeesRouter.get("/", authenticateToken, requireCompanyAdmin, caEmployeesController.list);
 caEmployeesRouter.get("/:id", authenticateToken, requireCompanyAdmin, caEmployeesController.get);

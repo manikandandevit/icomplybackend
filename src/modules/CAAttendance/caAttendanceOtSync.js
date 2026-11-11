@@ -3,6 +3,7 @@ import { caEmployeesRepository } from "../CAEmployees/caEmployees.repository.js"
 import { caAttendanceRepository } from "./caAttendance.repository.js";
 import { caOtRequestsRepository } from "../CAOvertime/caOtRequests.repository.js";
 import { caFcmService } from "../CANotifications/caFcm.service.js";
+import { OT_THRESHOLD_MINUTES } from "./caAttendance.window.js";
 
 const calculateOtHours = (row, employee) => {
   const isOtApplicable = employee?.otApplicable !== undefined ? Boolean(employee.otApplicable) : Boolean(employee?.details?.otApplicable ?? true);
@@ -49,7 +50,9 @@ const calculateOtHours = (row, employee) => {
   }
 
   const diffMs = out.getTime() - shiftEnd.getTime();
-  return diffMs > 0 ? Math.round((diffMs / 3600000) * 10) / 10 : 0;
+  // Up to 10 min after shift end is not OT; past it, OT counts from shift end.
+  if (diffMs <= OT_THRESHOLD_MINUTES * 60000) return 0;
+  return Math.round((diffMs / 3600000) * 10) / 10;
 };
 
 export const syncOtRequest = async (companyId, attendanceId) => {

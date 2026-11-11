@@ -3,6 +3,7 @@ import { getMessaging } from "firebase-admin/messaging";
 import fs from "fs";
 import path from "path";
 import { caFcmRepository } from "./caFcm.repository.js";
+import { formatLeaveDates } from "../../core/leave/leaveDates.js";
 
 let fcmApp = null;
 
@@ -295,7 +296,8 @@ export const caFcmService = {
       const reportingToId = request?.reportingToId || employee?.details?.reportingToId || null;
 
       const title = "New Leave Application";
-      const body = `${employeeName}${empCode ? ` (${empCode})` : ""} has applied for ${days} day(s) ${leaveTypeName} (${startDate} to ${endDate}).`;
+      const datesText = formatLeaveDates(request) || `${startDate} to ${endDate}`;
+      const body = `${employeeName}${empCode ? ` (${empCode})` : ""} has applied for ${days} day(s) ${leaveTypeName} (${datesText}).`;
 
       // 1. Notification to Reporting Manager (if assigned)
       if (reportingToId) {
@@ -370,14 +372,14 @@ export const caFcmService = {
     }
   },
 
-  async notifyEmployeeOfLeaveStatus({ companyId, employeeId, status, leaveTypeName, startDate, endDate, reviewedByName, rejectReason }) {
+  async notifyEmployeeOfLeaveStatus({ companyId, employeeId, status, leaveTypeName, startDate, endDate, reviewedByName, rejectReason, datesText }) {
     try {
       const employeeTokens = await caFcmRepository.getEmployeeTokens(companyId, employeeId);
       const isApproved = status === "Approved";
       const title = isApproved ? "Leave Request Approved" : "Leave Request Rejected";
       const formattedStart = startDate ? String(startDate).slice(0, 10) : "";
       const formattedEnd = endDate ? String(endDate).slice(0, 10) : "";
-      const dateRange = formattedStart === formattedEnd ? formattedStart : `${formattedStart} - ${formattedEnd}`;
+      const dateRange = datesText || (formattedStart === formattedEnd ? formattedStart : `${formattedStart} - ${formattedEnd}`);
       const body = `Your ${leaveTypeName || "leave"} request (${dateRange}) has been ${status.toLowerCase()} by ${reviewedByName || "Approver"}.${rejectReason ? ` Reason: "${rejectReason}"` : ""}`;
 
       // 1. In-app notification for employee

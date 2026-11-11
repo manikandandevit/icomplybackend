@@ -11,6 +11,15 @@ import {
   leaveActorFromReq,
 } from "../CALeaveRequests/caLeaveRequests.service.js";
 import { caLeaveRevokesRepository } from "./caLeaveRevokes.repository.js";
+import {
+  bridgedOffDays,
+  firstOverlap,
+  isSubset,
+  leaveDatesOf,
+  slotsOf,
+  subtractSlots,
+  totalUnits,
+} from "../../core/leave/leaveDates.js";
 
 export { leaveActorFromReq };
 
@@ -74,6 +83,112 @@ const applyApprovedRevoke = async (companyId, leave, revoke, reviewedByName, cal
   }
 };
 
+/**
+ * Approving a revoke on a day-line leave: the revoked dates (or halves) are
+ * removed from the leave. Nothing left → the leave becomes Revoked.
+ */
+const applyApprovedDateRevoke = async (companyId, leave, revoke, reviewedByName, calendar) => {
+  const remaining = subtractSlots(leaveDatesOf(leave), slotsOf(revoke));
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    if (remaining.length === 0) {
+      const revokedLeave = await caLeaveRequestsRepository.updateStatus(
+        leave.id,
+        companyId,
+        { status: "Revoked", reviewedByName },
+        client,
+      );
+      if (!revokedLeave) {
+        throw new AppError("Unable to revoke leave", 500, "LEAVE_REVOKE_FAILED");
+      }
+    } else {
+      const sandwichDays = leave.isSandwich ? bridgedOffDays(remaining, calendar).length : 0;
+      const updatedLeave = await caLeaveRequestsRepository.updateRange(
+        leave.id,
+        companyId,
+        {
+          startDate: remaining[0].date,
+          endDate: remaining[remaining.length - 1].date,
+          days: totalUnits(remaining) + sandwichDays,
+          session: SESSION_FULL,
+          status: "Approved",
+          leaveDates: remaining,
+        },
+        client,
+      );
+      if (!updatedLeave) {
+        throw new AppError("Unable to update remaining leave", 500, "LEAVE_REVOKE_FAILED");
+      }
+    }
+
+    const updated = await caLeaveRevokesRepository.updateStatus(
+      revoke.id,
+      companyId,
+      { status: "Approved", reviewedByName },
+      client,
+    );
+    if (!updated) {
+      throw new AppError("Unable to approve revoke request", 500, "REVOKE_UPDATE_FAILED");
+    }
+    await client.query("COMMIT");
+    return updated;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+/** Revoke request for chosen dates of a day-line leave. */
+const createDateRevoke = async (companyId, leave, payload) => {
+  const dates = payload.leaveDates || [];
+  if (!dates.length) {
+    throw new AppError("Select the dates to revoke", 422, "REVOKE_DATES_REQUIRED");
+  }
+  const revokeSlots = slotsOf({ leaveDates: dates });
+  if (!isSubset(revokeSlots, slotsOf(leave))) {
+    throw new AppError("Revoke dates must be within the approved leave", 422, "REVOKE_DATES_OUT_OF_RANGE");
+  }
+
+  const pending = await caLeaveRevokesRepository.listPendingForLeave(leave.id, companyId);
+  for (const item of pending) {
+    if (firstOverlap(revokeSlots, slotsOf(item))) {
+      throw new AppError("A revoke request is already pending for these dates", 422, "REVOKE_ALREADY_PENDING");
+    }
+  }
+
+  const employee = await caEmployeesRepository.findById(leave.employeeId, companyId);
+  const created = await caLeaveRevokesRepository.create(companyId, {
+    leaveRequestId: leave.id,
+    establishmentId: leave.establishmentId,
+    establishmentName: leave.establishmentName,
+    employeeId: leave.employeeId,
+    employeeName: leave.employeeName,
+    employeeCode: leave.employeeCode,
+    leaveTypeId: leave.leaveTypeId,
+    leaveTypeName: leave.leaveTypeName,
+    startDate: dates[0].date,
+    endDate: dates[dates.length - 1].date,
+    days: totalUnits(dates),
+    session: SESSION_FULL,
+    leaveDates: dates,
+    reason: payload.reason,
+    attachmentKey: payload.attachmentKey,
+    attachmentUrl: payload.attachmentUrl,
+    attachmentName: payload.attachmentName,
+    attachmentMime: payload.attachmentMime,
+    approverName: employee?.details?.reportingToName || leave.approverName || "",
+    reportingToId: leave.reportingToId || employee?.details?.reportingToId || "",
+  });
+  if (!created) {
+    throw new AppError("Unable to create revoke request", 500, "REVOKE_CREATE_FAILED");
+  }
+  void notifyLeaveSubmitted({ companyId, employee, request: created, kind: "revoke" });
+  return created;
+};
+
 export const caLeaveRevokesService = {
   list: (companyId, actor, scope) => caLeaveRevokesRepository.list(companyId, { scope, actor }),
 
@@ -87,6 +202,13 @@ export const caLeaveRevokesService = {
     }
     if (!isCompanyPrivileged(actor) && actor.employeeId && String(leave.employeeId) !== String(actor.employeeId)) {
       throw new AppError("You can only revoke your own leave", 403, "FORBIDDEN");
+    }
+
+    if (leaveDatesOf(leave).length) {
+      return createDateRevoke(companyId, leave, payload);
+    }
+    if (payload.leaveDates?.length) {
+      throw new AppError("This leave uses a date range. Select a start and end date to revoke.", 422, "REVOKE_RANGE_EXPECTED");
     }
     if (payload.startDate < leave.startDate || payload.endDate > leave.endDate) {
       throw new AppError("Revoke dates must be within the approved leave", 422, "REVOKE_DATES_OUT_OF_RANGE");
@@ -162,12 +284,14 @@ export const caLeaveRevokesService = {
     const employee = await caEmployeesRepository.findById(request.employeeId, companyId);
     assertCanReviewLeave({ ...request, employeeId: request.employeeId, reportingToId: request.reportingToId || leave.reportingToId }, actor, employee);
 
-    if (request.startDate < leave.startDate || request.endDate > leave.endDate) {
+    const isDateLeave = leaveDatesOf(leave).length > 0;
+    if (isDateLeave ? !isSubset(slotsOf(request), slotsOf(leave)) : request.startDate < leave.startDate || request.endDate > leave.endDate) {
       throw new AppError("Leave dates have changed. Cancel and apply revoke again", 422, "REVOKE_DATES_OUT_OF_RANGE");
     }
 
     const calendar = await leaveCalendarFor(companyId, employee);
-    return applyApprovedRevoke(companyId, leave, request, reviewedByName, calendar).then((updated) => {
+    const apply = isDateLeave ? applyApprovedDateRevoke : applyApprovedRevoke;
+    return apply(companyId, leave, request, reviewedByName, calendar).then((updated) => {
       void notifyLeaveStatus({
         companyId,
         employee,

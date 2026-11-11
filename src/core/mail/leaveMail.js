@@ -4,6 +4,7 @@ import { companiesStorage, LOGO_KEY_PATTERN } from "../../modules/Companies/comp
 import { caCompaniesRepository } from "../../modules/CACompanies/caCompanies.repository.js";
 import { caEmployeesRepository } from "../../modules/CAEmployees/caEmployees.repository.js";
 import { sessionLabel } from "../leave/workingDays.js";
+import { formatLeaveDates } from "../leave/leaveDates.js";
 
 const escapeHtml = (value) =>
   String(value ?? "")
@@ -74,8 +75,10 @@ const loadLogoAttachment = async (logoKey) => {
 
 const copyFor = (action, request) => {
   const days = `${request.days} day${Number(request.days) === 1 ? "" : "s"}`;
-  const dates = `${formatDate(request.startDate)} – ${formatDate(request.endDate)}`;
-  const session = sessionLabel(request.session);
+  // Day-line requests list each date with its session.
+  const dayLines = formatLeaveDates(request);
+  const dates = dayLines || `${formatDate(request.startDate)} – ${formatDate(request.endDate)}`;
+  const session = dayLines ? "per date" : sessionLabel(request.session);
   if (action === "submitted") {
     return {
       title: "Leave Request Submitted",
@@ -183,8 +186,8 @@ const buildHtml = ({ brand, copy, employee, request, reviewedByName, hasLogo, gr
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;border:1px solid #e8edf2;border-radius:12px;padding:4px 16px;">
                   ${row("Employee", `${escapeHtml(employee.name || request.employeeName)} ${employee.employeeCode || request.employeeCode ? `· ${escapeHtml(employee.employeeCode || request.employeeCode)}` : ""}`)}
                   ${row("Leave type", escapeHtml(request.leaveTypeName))}
-                  ${row("Dates", `${escapeHtml(formatDate(request.startDate))} – ${escapeHtml(formatDate(request.endDate))}`)}
-                  ${row("Session", escapeHtml(sessionLabel(request.session)))}
+                  ${row("Dates", escapeHtml(formatLeaveDates(request) || `${formatDate(request.startDate)} – ${formatDate(request.endDate)}`))}
+                  ${formatLeaveDates(request) ? "" : row("Session", escapeHtml(sessionLabel(request.session)))}
                   ${row("Days", `${escapeHtml(String(request.days))} day${Number(request.days) === 1 ? "" : "s"}`)}
                   ${request.reason && copy.badge !== "Revoked" ? row("Reason", escapeHtml(request.reason)) : ""}
                   ${rejectRow}
@@ -232,7 +235,7 @@ export const notifyLeaveStatus = async ({ companyId, employee, request, action, 
       `Dear ${employee.name || "Employee"},`,
       copy.intro.replace(/<[^>]+>/g, ""),
       `Leave type: ${request.leaveTypeName}`,
-      `Dates: ${formatDate(request.startDate)} – ${formatDate(request.endDate)}`,
+      `Dates: ${formatLeaveDates(request) || `${formatDate(request.startDate)} – ${formatDate(request.endDate)}`}`,
       `Days: ${request.days}`,
     ].join("\n");
 
@@ -282,8 +285,8 @@ export const notifyLeaveSubmitted = async ({ companyId, employee, request, kind 
       copy.intro.replace(/<[^>]+>/g, ""),
       `Employee: ${employee?.name || request.employeeName}`,
       `Leave type: ${request.leaveTypeName}`,
-      `Dates: ${formatDate(request.startDate)} – ${formatDate(request.endDate)}`,
-      `Session: ${sessionLabel(request.session)}`,
+      `Dates: ${formatLeaveDates(request) || `${formatDate(request.startDate)} – ${formatDate(request.endDate)}`}`,
+      `Session: ${formatLeaveDates(request) ? "per date" : sessionLabel(request.session)}`,
       `Days: ${request.days}`,
     ].join("\n");
 

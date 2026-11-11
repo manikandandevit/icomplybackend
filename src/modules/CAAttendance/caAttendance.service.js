@@ -6,6 +6,7 @@ import { caAttendanceRepository } from "./caAttendance.repository.js";
 import { syncOtRequest } from "./caAttendanceOtSync.js";
 import { caFcmService } from "../CANotifications/caFcm.service.js";
 import { caPermissionsService } from "../CAPermissions/caPermissions.service.js";
+import { assertCheckInOpen, punchWindowFor } from "./caAttendance.window.js";
 
 const todayIso = () => {
   const now = new Date();
@@ -66,6 +67,13 @@ async list(companyId, actor = {}) {
     });
   },
 
+  /** Check-in window for the signed-in employee (or ?employeeId= for admins). */
+  async punchWindow(companyId, actor = {}, employeeIdParam = null) {
+    const employeeId = !isPrivileged(actor) && actor.employeeId ? actor.employeeId : employeeIdParam || actor.employeeId;
+    const shift = employeeId ? await caAttendanceRepository.shiftForEmployee(companyId, employeeId) : null;
+    return punchWindowFor(shift);
+  },
+
   async punch(companyId, action, payload = {}, actor = {}) {
     const kind = String(action || "").toLowerCase() === "out" ? "out" : "in";
     let employeeId = String(payload.employeeId || "").trim();
@@ -88,6 +96,13 @@ async list(companyId, actor = {}) {
     if (kind === "in") {
       if (existing?.checkIn) {
         throw new AppError("Already checked in today", 422, "ALREADY_CHECKED_IN");
+      }
+      // Employee self check-in for today: only from shift start - 10 min until shift end.
+      // Admin punches and other dates are not restricted here.
+      const isToday = !payload.date || payload.date === todayIso() || payload.date === formatDateToIST(new Date());
+      if (!isPrivileged(actor) && isToday) {
+        const shift = await caAttendanceRepository.shiftForEmployee(companyId, employee.id);
+        assertCheckInOpen(punchWindowFor(shift));
       }
       if (!existing) {
         const created = await caAttendanceRepository.insert({
@@ -249,6 +264,10 @@ async list(companyId, actor = {}) {
     if (existing?.regularizationStatus === "Approved") {
       throw new AppError("Attendance for this date is already regularized and approved", 422, "ALREADY_APPROVED");
     }
+    // Nothing to fix: checked in within grace and checked out at / after shift end.
+    if (existing?.checkIn && existing?.checkOut && !existing.lateCheckIn && !existing.earlyCheckOut) {
+      throw new AppError("Attendance for this date is already correct. No regularization needed.", 422, "ALREADY_CORRECT");
+    }
 
     const patch = {
       requestedCheckIn,
@@ -288,6 +307,32 @@ async list(companyId, actor = {}) {
       }
     });
     return saved;
+  },
+
+  /** Employee cancels their own Pending regularization; the requested times are cleared. */
+  async cancelRegularization(id, companyId, actor = {}) {
+    const existing = await caAttendanceRepository.getById(id, companyId);
+    if (!existing) {
+      throw new AppError("Attendance record not found", 404, "ATTENDANCE_NOT_FOUND");
+    }
+    if (existing.regularizationStatus !== "Pending") {
+      throw new AppError("Only pending regularization requests can be cancelled", 422, "NOT_PENDING");
+    }
+    if (!isPrivileged(actor) && String(existing.employeeId) !== String(actor.employeeId)) {
+      throw new AppError("You can only cancel your own regularization request", 403, "FORBIDDEN");
+    }
+    const updated = await caAttendanceRepository.update(existing.id, companyId, {
+      regularizationStatus: "Cancelled",
+      regularizationReviewedBy: actor.actorName || "Employee",
+      requestedCheckIn: null,
+      requestedCheckOut: null,
+    });
+    if (!updated) {
+      throw new AppError("Unable to cancel regularization request", 500, "REGULARIZE_CANCEL_FAILED");
+    }
+    // Requested check-out may have created an auto OT request: recalculate.
+    void syncOtRequest(companyId, existing.id);
+    return updated;
   },
 
   async regularize(id, companyId, { status, reason, adminReply } = {}, actor = {}) {

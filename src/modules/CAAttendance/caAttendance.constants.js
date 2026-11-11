@@ -1,4 +1,5 @@
 import { formatDateToIST } from "../../core/utils/date.js";
+import { CHECK_IN_GRACE_MINUTES, OT_THRESHOLD_MINUTES } from "./caAttendance.window.js";
 export const caAttendanceTableSql = `
 CREATE TABLE IF NOT EXISTS public.ca_attendance (
   id SERIAL PRIMARY KEY,
@@ -84,7 +85,8 @@ export const mapCAAttendance = (row) => {
   const inMin = stampMinutesFromDate(date, row.check_in || row.requested_check_in);
   const outMin = stampMinutesFromDate(date, row.check_out || row.requested_check_out);
   const endMin = startMin != null && rawEndMin != null && rawEndMin <= startMin ? rawEndMin + 24 * 60 : rawEndMin;
-  const lateCheckIn = startMin != null && inMin != null && inMin > startMin;
+  // Late only after the 10-min grace (9:30 shift → late from 9:41).
+  const lateCheckIn = startMin != null && inMin != null && inMin > startMin + CHECK_IN_GRACE_MINUTES;
   const earlyCheckOut = endMin != null && outMin != null && outMin < endMin;
 
   let otMinutes = 0;
@@ -93,7 +95,8 @@ export const mapCAAttendance = (row) => {
     const isSunday = new Date(`${date}T00:00:00+05:30`).getDay() === 0;
     if (isSunday && inMin != null) {
       otMinutes = Math.max(0, outMin - inMin);
-    } else if (endMin != null && outMin > endMin) {
+    } else if (endMin != null && outMin > endMin + OT_THRESHOLD_MINUTES) {
+      // Up to 10 min after shift end is not OT; past it, OT counts from shift end.
       otMinutes = outMin - endMin;
     }
   }

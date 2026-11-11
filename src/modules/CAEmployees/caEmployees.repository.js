@@ -47,6 +47,29 @@ const fromJoined = `
 `;
 
 export const caEmployeesRepository = {
+  /** Active employees with a date of birth, for the upcoming birthdays card.
+   *  Returns only id, name, designation and the stored date of birth. */
+  async listBirthdays(companyId, establishmentId = null) {
+    await ensureTable();
+    const cid = parseRowId(companyId);
+    if (!cid) return [];
+    const params = [cid];
+    let sql = `
+      SELECT e.id, e.name, e.designation_name, e.details->>'dateOfBirth' AS date_of_birth
+      FROM public.ca_employees e
+      WHERE e.created_by_company_id = $1
+        AND COALESCE(e.status, 'Active') = 'Active'
+        AND NULLIF(TRIM(COALESCE(e.details->>'dateOfBirth', '')), '') IS NOT NULL
+    `;
+    const estId = parseRowId(establishmentId);
+    if (estId) {
+      params.push(estId);
+      sql += ` AND e.establishment_id = $${params.length}`;
+    }
+    const { rows } = await db.query(sql, params);
+    return rows;
+  },
+
   async list(companyId) {
     await ensureTable();
     const cid = parseRowId(companyId);

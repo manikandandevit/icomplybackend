@@ -50,6 +50,9 @@ ALTER TABLE public.ca_leave_revokes
 ALTER TABLE public.ca_leave_revokes
   ADD COLUMN IF NOT EXISTS attachment_mime TEXT;
 
+ALTER TABLE public.ca_leave_revokes
+  ADD COLUMN IF NOT EXISTS leave_dates JSONB;
+
 CREATE INDEX IF NOT EXISTS idx_ca_leave_revokes_reporting
   ON public.ca_leave_revokes (created_by_company_id, reporting_to_id);
 
@@ -92,6 +95,8 @@ export const mapCALeaveRevoke = (row) => ({
   reviewedByName: row.reviewed_by_name || "",
   reportingToId: row.reporting_to_id != null ? String(row.reporting_to_id) : "",
   session: row.session === "first-half" || row.session === "second-half" ? row.session : "full",
+  // Dates being revoked from a day-line leave: [{ date, session }].
+  leaveDates: Array.isArray(row.leave_dates) ? row.leave_dates : [],
   attachmentKey: row.attachment_key || "",
   attachmentUrl: row.attachment_url || "",
   attachmentName: row.attachment_name || "",
