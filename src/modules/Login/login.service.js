@@ -74,7 +74,7 @@ const toPublicEmployee = (row) => ({
   establishmentName: row.establishment_name || null,
   countryId: row.country_id != null ? String(row.country_id) : null,
   countryName: row.country_name || null,
-  imageUrl: employeePhotoUrl(row.id, row.photo_key),
+  imageUrl: employeePhotoUrl(row.id, row.photo_version),
 });
 
 const issueToken = (user, extra = {}) =>

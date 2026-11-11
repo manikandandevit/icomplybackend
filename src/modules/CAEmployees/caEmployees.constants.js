@@ -70,7 +70,13 @@ ALTER TABLE public.ca_employees
   ADD COLUMN IF NOT EXISTS ctc NUMERIC;
 
 ALTER TABLE public.ca_employees
-  ADD COLUMN IF NOT EXISTS photo_key TEXT;
+  ADD COLUMN IF NOT EXISTS photo_data BYTEA;
+
+ALTER TABLE public.ca_employees
+  ADD COLUMN IF NOT EXISTS photo_mime TEXT;
+
+ALTER TABLE public.ca_employees
+  ADD COLUMN IF NOT EXISTS photo_version TEXT;
 `;
 
 const dateFrom = (value) => {
@@ -154,8 +160,8 @@ export const mapCAEmployee = (row) => {
 
   return {
     id: String(row.id),
-    // Profile photo (S3, served by GET /ca-employees/:id/photo); null if none.
-    photoUrl: employeePhotoUrl(row.id, row.photo_key),
+    // Profile photo (stored in the DB, served by GET /ca-employees/:id/photo); null if none.
+    photoUrl: employeePhotoUrl(row.id, row.photo_version),
     employeeCode: row.employee_code || "",
     name: row.name || "",
     email: row.email || "",

@@ -1,5 +1,19 @@
 import { db } from "../../core/db/pool.js";
 
+let photoColumnReady = null;
+
+/** Employee photo version column (also created by CAEmployees). */
+const ensurePhotoColumn = () => {
+  if (!photoColumnReady) {
+    photoColumnReady = db
+      .query(`ALTER TABLE public.ca_employees ADD COLUMN IF NOT EXISTS photo_version TEXT`)
+      .catch(() => {
+        photoColumnReady = null;
+      });
+  }
+  return photoColumnReady;
+};
+
 export const loginRepository = {
   async findSuperAdminByEmail(email) {
     const { rows } = await db.query(
@@ -183,6 +197,7 @@ export const loginRepository = {
   },
 
   async findEmployeeByEmail(email) {
+    await ensurePhotoColumn();
     const { rows } = await db.query(
       `
       SELECT
@@ -190,7 +205,7 @@ export const loginRepository = {
         e.created_by_company_id, e.company_id, e.company_name, e.company_source,
         e.department_id, e.department_name, e.designation_id, e.designation_name,
         e.establishment_id, e.establishment_name,
-        to_jsonb(e)->>'photo_key' AS photo_key,
+        e.photo_version,
         COALESCE(NULLIF(TRIM(e.details->>'countryId'), ''), est.country_id::text) AS country_id,
         COALESCE(NULLIF(TRIM(est.country_name), ''), '') AS country_name
       FROM public.ca_employees e
@@ -206,6 +221,7 @@ export const loginRepository = {
   },
 
   async findEmployeeById(id) {
+    await ensurePhotoColumn();
     const { rows } = await db.query(
       `
       SELECT
@@ -213,7 +229,7 @@ export const loginRepository = {
         e.created_by_company_id, e.company_id, e.company_name, e.company_source,
         e.department_name, e.designation_id, e.designation_name,
         e.establishment_id, e.establishment_name,
-        to_jsonb(e)->>'photo_key' AS photo_key,
+        e.photo_version,
         COALESCE(NULLIF(TRIM(e.details->>'countryId'), ''), est.country_id::text) AS country_id,
         COALESCE(NULLIF(TRIM(est.country_name), ''), '') AS country_name
       FROM public.ca_employees e
