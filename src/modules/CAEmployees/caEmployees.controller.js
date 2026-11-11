@@ -36,6 +36,19 @@ export const caEmployeesController = {
     });
   }),
 
+  upcomingBirthdays: asyncHandler(async (req, res) => {
+    const isEmployee = Boolean(req.employeeId && !req.isCompanyOwner && !req.caUserId);
+    const establishmentId = isEmployee ? req.establishmentId : req.query?.establishmentId || null;
+    if (isEmployee && !establishmentId) {
+      return success(res, { message: "Upcoming birthdays loaded", data: { birthdays: [] } });
+    }
+    const birthdays = await caEmployeesService.upcomingBirthdays(req.companyId, establishmentId, req.query?.limit);
+    return success(res, {
+      message: "Upcoming birthdays loaded",
+      data: { birthdays },
+    });
+  }),
+
   list: asyncHandler(async (req, res) => {
     const employees = await caEmployeesService.list(req.companyId, req.companyAccess, employeeActorFromReq(req));
     return success(res, {

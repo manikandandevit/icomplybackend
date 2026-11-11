@@ -33,7 +33,8 @@ const selectColumns = `
   r.leave_type_id, r.leave_type_name, r.start_date, r.end_date, r.days, r.reason, r.reject_reason,
   COALESCE(NULLIF(TRIM(mgr.name), ''), r.approver_name) AS approver_name,
   r.reviewed_by_name, r.reporting_to_id, r.session,
-  r.attachment_key, r.attachment_url, r.attachment_name, r.attachment_mime, r.status, r.created_by_company_id, r.created_at
+  r.attachment_key, r.attachment_url, r.attachment_name, r.attachment_mime, r.status, r.created_by_company_id, r.created_at,
+  r.leave_dates
 `;
 
 const fromJoined = `
@@ -150,6 +151,35 @@ export const caLeaveRevokesRepository = {
     return rows[0] ? mapCALeaveRevoke(rows[0]) : null;
   },
 
+  /** Every pending revoke of a leave (overlap is checked per date in the service). */
+  async listPendingForLeave(leaveRequestId, companyId, excludeId = null) {
+    await ensureTable();
+    const leaveId = parseRowId(leaveRequestId);
+    const cid = parseRowId(companyId);
+    if (!leaveId || !cid) return [];
+    const params = [leaveId, cid];
+    let excludeSql = "";
+    if (excludeId) {
+      const skip = parseRowId(excludeId);
+      if (skip) {
+        excludeSql = " AND r.id <> $3";
+        params.push(skip);
+      }
+    }
+    const { rows } = await db.query(
+      `
+      SELECT ${selectColumns}
+      ${fromJoined}
+      WHERE r.leave_request_id = $1
+        AND r.created_by_company_id = $2
+        AND r.status = 'Pending'
+        ${excludeSql}
+      `,
+      params,
+    );
+    return rows.map(mapCALeaveRevoke);
+  },
+
   async retargetPending(fromLeaveId, toLeaveId, companyId, fromStartDate, client) {
     await ensureTable();
     const fromId = parseRowId(fromLeaveId);
@@ -213,9 +243,9 @@ export const caLeaveRevokesRepository = {
         leave_request_id, establishment_id, establishment_name, employee_id, employee_name, employee_code,
         leave_type_id, leave_type_name, start_date, end_date, days, reason, status,
         approver_name, reporting_to_id, session,
-        attachment_key, attachment_url, attachment_name, attachment_mime, created_by_company_id
+        attachment_key, attachment_url, attachment_name, attachment_mime, created_by_company_id, leave_dates
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'Pending',$13,$14,$15,$16,$17,$18,$19,$20)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'Pending',$13,$14,$15,$16,$17,$18,$19,$20,$21::jsonb)
       RETURNING id
       `,
       [
@@ -239,6 +269,7 @@ export const caLeaveRevokesRepository = {
         payload.attachmentName || null,
         payload.attachmentMime || null,
         cid,
+        Array.isArray(payload.leaveDates) && payload.leaveDates.length ? JSON.stringify(payload.leaveDates) : null,
       ],
     );
     return this.findById(rows[0].id, companyId);

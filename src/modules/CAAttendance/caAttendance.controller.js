@@ -9,6 +9,15 @@ list: asyncHandler(async (req, res) => {
     return success(res, { message: "Attendance loaded", data: { records } });
   }),
 
+  punchWindow: asyncHandler(async (req, res) => {
+    const window = await caAttendanceService.punchWindow(
+      req.companyId,
+      attendanceActorFromReq(req),
+      req.query?.employeeId || null,
+    );
+    return success(res, { message: "Check-in window loaded", data: { window } });
+  }),
+
   checkIn: asyncHandler(async (req, res) => {
     const record = await caAttendanceService.punch(req.companyId, "in", req.body, attendanceActorFromReq(req));
     return success(res, { message: "Checked in", data: { record } });
@@ -38,6 +47,15 @@ list: asyncHandler(async (req, res) => {
     const id = req.params.id || req.body.id || req.body.attendanceId;
     const record = await caAttendanceService.updateTimes(id, req.companyId, req.body, actor);
     return success(res, { message: "Attendance time updated", data: { record } });
+  }),
+
+  cancelRegularization: asyncHandler(async (req, res) => {
+    const record = await caAttendanceService.cancelRegularization(
+      req.params.id,
+      req.companyId,
+      attendanceActorFromReq(req),
+    );
+    return success(res, { message: "Regularization request cancelled", data: { record } });
   }),
 
   regularize: asyncHandler(async (req, res) => {

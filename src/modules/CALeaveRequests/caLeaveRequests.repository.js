@@ -34,7 +34,7 @@ const selectColumns = `
   COALESCE(NULLIF(TRIM(mgr.name), ''), r.approver_name) AS approver_name,
   r.reviewed_by_name, r.reporting_to_id, r.session,
   r.attachment_key, r.attachment_url, r.attachment_name, r.attachment_mime, r.status,
-  r.sandwich_days, r.paid_days, r.lop_days, r.is_sandwich, r.sandwich_details,
+  r.sandwich_days, r.paid_days, r.lop_days, r.is_sandwich, r.sandwich_details, r.leave_dates,
   r.created_by_company_id, r.created_at,
   e.company_source, e.company_id, e.company_name
 `;
@@ -182,6 +182,39 @@ export const caLeaveRequestsRepository = {
     return rows[0] ? mapCALeaveRequest(rows[0]) : null;
   },
 
+  /** Every request of the employee whose range touches [startDate, endDate]. */
+  async findInRange(companyId, employeeId, startDate, endDate, statuses = ["Pending", "Approved"], excludeId = null) {
+    await ensureTable();
+    const cid = parseRowId(companyId);
+    const empId = parseRowId(employeeId);
+    if (!cid || !empId || !startDate || !endDate) return [];
+    const allowed = Array.isArray(statuses) && statuses.length ? statuses : ["Pending", "Approved"];
+    const params = [cid, empId, startDate, endDate, allowed];
+    let excludeSql = "";
+    if (excludeId) {
+      const skip = parseRowId(excludeId);
+      if (skip) {
+        excludeSql = " AND r.id <> $6";
+        params.push(skip);
+      }
+    }
+    const { rows } = await db.query(
+      `
+      SELECT ${selectColumns}
+      ${fromJoined}
+      WHERE r.created_by_company_id = $1
+        AND r.employee_id = $2
+        AND r.start_date <= $4::date
+        AND r.end_date >= $3::date
+        AND r.status = ANY($5::text[])
+        ${excludeSql}
+      ORDER BY r.id DESC
+      `,
+      params,
+    );
+    return rows.map(mapCALeaveRequest);
+  },
+
   async usedDays(companyId, employeeId, leaveTypeId, year, statuses = ["Pending", "Approved"], excludeId = null) {
     await ensureTable();
     const cid = parseRowId(companyId);
@@ -232,7 +265,7 @@ export const caLeaveRequestsRepository = {
     return this.findById(rows[0].id, companyId, client);
   },
 
-  async updateRange(id, companyId, { startDate, endDate, days, status, session }, client) {
+  async updateRange(id, companyId, { startDate, endDate, days, status, session, leaveDates }, client) {
     await ensureTable();
     const rowId = parseRowId(id);
     const cid = parseRowId(companyId);
@@ -241,11 +274,14 @@ export const caLeaveRequestsRepository = {
       `
       UPDATE public.ca_leave_requests
       SET start_date = $3, end_date = $4, days = $5, status = COALESCE($6, status),
-          session = COALESCE($7, session), updated_at = NOW()
+          session = COALESCE($7, session),
+          leave_dates = COALESCE($8::jsonb, leave_dates),
+          paid_days = CASE WHEN $8::jsonb IS NULL THEN paid_days ELSE GREATEST($5::numeric - COALESCE(lop_days, 0), 0) END,
+          updated_at = NOW()
       WHERE id = $1 AND created_by_company_id = $2
       RETURNING id
       `,
-      [rowId, cid, startDate, endDate, days, status || null, session || null],
+      [rowId, cid, startDate, endDate, days, status || null, session || null, leaveDates ? JSON.stringify(leaveDates) : null],
     );
     if (!rows[0]) return null;
     return this.findById(rows[0].id, companyId, client);
@@ -315,9 +351,9 @@ export const caLeaveRequestsRepository = {
         approver_name, reporting_to_id, session,
         attachment_key, attachment_url, attachment_name, attachment_mime,
         sandwich_days, paid_days, lop_days, is_sandwich, sandwich_details,
-        created_by_company_id
+        created_by_company_id, leave_dates
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Pending',$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23::jsonb,$24)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Pending',$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23::jsonb,$24,$25::jsonb)
       RETURNING id
       `,
       [
@@ -345,6 +381,7 @@ export const caLeaveRequestsRepository = {
         Boolean(payload.isSandwich),
         JSON.stringify(payload.sandwichDetails || null),
         cid,
+        Array.isArray(payload.leaveDates) && payload.leaveDates.length ? JSON.stringify(payload.leaveDates) : null,
       ],
     );
     const { rows: created } = await db.query(

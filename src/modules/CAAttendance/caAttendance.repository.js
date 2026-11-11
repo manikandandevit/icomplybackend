@@ -50,6 +50,29 @@ const parseRowId = (id) => {
 };
 
 export const caAttendanceRepository = {
+  /** Shift timings of one employee (employee details first, then the shift master).
+   *  No default: null times mean "no shift assigned". */
+  async shiftForEmployee(companyId, employeeId) {
+    await ensureTable();
+    const cid = parseRowId(companyId);
+    const eid = parseRowId(employeeId);
+    if (!cid || !eid) return null;
+    const { rows } = await db.query(
+      `
+      SELECT
+        COALESCE(NULLIF(TRIM(e.details->>'shiftStartTime'), ''), NULLIF(TRIM(sm.start_time::text), '')) AS shift_start_time,
+        COALESCE(NULLIF(TRIM(e.details->>'shiftEndTime'), ''), NULLIF(TRIM(sm.end_time::text), '')) AS shift_end_time
+      FROM public.ca_employees e
+      LEFT JOIN public.ca_hr_masters sm
+        ON sm.id = e.shift_type_id AND sm.master_type = 'shift-type'
+      WHERE e.id = $1 AND e.created_by_company_id = $2
+      LIMIT 1
+      `,
+      [eid, cid]
+    );
+    return rows[0] || null;
+  },
+
   async list(companyId, filterOrEmployeeId = null) {
     await ensureTable();
     const cid = parseRowId(companyId);

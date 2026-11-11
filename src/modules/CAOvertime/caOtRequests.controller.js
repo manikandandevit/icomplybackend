@@ -36,6 +36,12 @@ export const caOtRequestsController = {
     return success(res, { message: "Overtime request approved", data: { request } });
   }),
 
+  cancel: asyncHandler(async (req, res) => {
+    const actor = otActorFromReq(req);
+    const request = await caOtRequestsService.cancel(req.params.id, req.companyId, actor);
+    return success(res, { message: "Overtime request cancelled", data: { request } });
+  }),
+
   reject: asyncHandler(async (req, res) => {
     const actor = otActorFromReq(req);
     const request = await caOtRequestsService.reject(req.params.id, req.companyId, req.body, actor);
