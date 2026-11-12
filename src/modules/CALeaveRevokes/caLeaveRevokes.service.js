@@ -11,6 +11,7 @@ import {
   leaveActorFromReq,
 } from "../CALeaveRequests/caLeaveRequests.service.js";
 import { caLeaveRevokesRepository } from "./caLeaveRevokes.repository.js";
+import { caFcmService } from "../CANotifications/caFcm.service.js";
 import {
   bridgedOffDays,
   firstOverlap,
@@ -186,6 +187,7 @@ const createDateRevoke = async (companyId, leave, payload) => {
     throw new AppError("Unable to create revoke request", 500, "REVOKE_CREATE_FAILED");
   }
   void notifyLeaveSubmitted({ companyId, employee, request: created, kind: "revoke" });
+  void caFcmService.notifyApproversOfRevokeRequest({ companyId, employee, revoke: created });
   return created;
 };
 
@@ -264,6 +266,7 @@ export const caLeaveRevokesService = {
       throw new AppError("Unable to create revoke request", 500, "REVOKE_CREATE_FAILED");
     }
     void notifyLeaveSubmitted({ companyId, employee, request: created, kind: "revoke" });
+    void caFcmService.notifyApproversOfRevokeRequest({ companyId, employee, revoke: created });
     return created;
   },
 
@@ -299,6 +302,12 @@ export const caLeaveRevokesService = {
         action: "revoked",
         reviewedByName,
       });
+      void caFcmService.notifyEmployeeOfRevokeStatus({
+        companyId,
+        revoke: { ...request, ...updated },
+        status: "Approved",
+        reviewedByName,
+      });
       return updated;
     });
   },
@@ -328,6 +337,13 @@ export const caLeaveRevokesService = {
     if (!updated) {
       throw new AppError("Unable to reject revoke request", 500, "REVOKE_UPDATE_FAILED");
     }
+    void caFcmService.notifyEmployeeOfRevokeStatus({
+      companyId,
+      revoke: { ...request, ...updated },
+      status: "Rejected",
+      reviewedByName,
+      rejectReason: reason,
+    });
     return updated;
   },
 

@@ -5,6 +5,13 @@ import { caOtRequestsRepository } from "../CAOvertime/caOtRequests.repository.js
 import { caFcmService } from "../CANotifications/caFcm.service.js";
 import { OT_THRESHOLD_MINUTES } from "./caAttendance.window.js";
 
+/** Weekday of a "YYYY-MM-DD" calendar date (0 = Sunday), same on any server timezone. */
+const weekdayOf = (dateKey) => {
+  const [y, m, d] = String(dateKey || "").slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+};
+
 const calculateOtHours = (row, employee) => {
   const isOtApplicable = employee?.otApplicable !== undefined ? Boolean(employee.otApplicable) : Boolean(employee?.details?.otApplicable ?? true);
   if (!isOtApplicable) return 0;
@@ -23,8 +30,7 @@ const calculateOtHours = (row, employee) => {
   if (Number.isNaN(dateObj.getTime())) return 0;
   const dateParts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(dateObj);
   const dateKey = `${dateParts.find(p => p.type === 'year').value}-${dateParts.find(p => p.type === 'month').value}-${dateParts.find(p => p.type === 'day').value}`;
-  const baseIsoDate = `${dateKey}T00:00:00+05:30`;
-  const isSunday = new Date(baseIsoDate).getDay() === 0;
+  const isSunday = weekdayOf(dateKey) === 0;
   if (isSunday && effectiveIn) {
     const inDate = new Date(effectiveIn);
     const diffMs = out.getTime() - inDate.getTime();

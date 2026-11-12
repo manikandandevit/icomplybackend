@@ -1,5 +1,6 @@
 import { db } from "../../core/db/pool.js";
 import {
+  ALL_ESTABLISHMENTS,
   caDesignationPermissionsAlterSql,
   caDesignationPermissionsIndexSql,
   caDesignationPermissionsTableSql,
@@ -18,7 +19,12 @@ const ensureTable = () => {
     ready = (async () => {
       try {
         await db.query(caDesignationPermissionsTableSql);
-        await db.query(caDesignationPermissionsAlterSql);
+        for (const statement of caDesignationPermissionsAlterSql
+          .split(";")
+          .map((sql) => sql.trim())
+          .filter(Boolean)) {
+          await db.query(statement);
+        }
         for (const statement of caDesignationPermissionsIndexSql
           .split(";")
           .map((sql) => sql.trim())
@@ -44,10 +50,10 @@ export const caPermissionsRepository = {
 
     const { rows } = await db.query(
       `
-      SELECT designation_id, nav_id, can_view, can_add, can_edit, scope
+      SELECT establishment_id, designation_id, nav_id, can_view, can_add, can_edit, scope
       FROM public.ca_designation_permissions
       WHERE created_by_company_id = $1
-      ORDER BY designation_id, nav_id
+      ORDER BY establishment_id, designation_id, nav_id
       `,
       [cid],
     );
@@ -65,7 +71,7 @@ export const caPermissionsRepository = {
 
     const { rows } = await db.query(
       `
-      SELECT designation_id, nav_id, can_view, can_add, can_edit, scope
+      SELECT establishment_id, designation_id, nav_id, can_view, can_add, can_edit, scope
       FROM public.ca_designation_permissions
       WHERE created_by_company_id = $1 AND designation_id = $2
       `,
@@ -85,7 +91,7 @@ export const caPermissionsRepository = {
 
     const { rows } = await db.query(
       `
-      SELECT p.designation_id, p.nav_id, p.can_view, p.can_add, p.can_edit, p.scope
+      SELECT p.establishment_id, p.designation_id, p.nav_id, p.can_view, p.can_add, p.can_edit, p.scope
       FROM public.ca_designation_permissions p
       INNER JOIN public.ca_hr_masters m
         ON m.id = p.designation_id
@@ -100,7 +106,27 @@ export const caPermissionsRepository = {
     return rows.map(mapPermission);
   },
 
-  async replaceAll(companyId, rows, designationId = null) {
+  /** Establishment of an employee (0 when unknown). */
+  async establishmentOfEmployee(companyId, employeeId) {
+    const cid = parseRowId(companyId);
+    const eid = parseRowId(employeeId);
+    if (!cid || !eid) return ALL_ESTABLISHMENTS;
+    try {
+      const { rows } = await db.query(
+        `SELECT establishment_id FROM public.ca_employees WHERE id = $1 AND created_by_company_id = $2 LIMIT 1`,
+        [eid, cid],
+      );
+      return parseRowId(rows[0]?.establishment_id) || ALL_ESTABLISHMENTS;
+    } catch {
+      return ALL_ESTABLISHMENTS;
+    }
+  },
+
+  /**
+   * Saves one designation's permissions for one establishment
+   * (establishmentId "all"/empty = the default for every establishment).
+   */
+  async replaceAll(companyId, rows, designationId = null, establishmentId = null) {
     await ensureTable();
     const cid = parseRowId(companyId);
     if (!cid) {
@@ -108,14 +134,16 @@ export const caPermissionsRepository = {
     }
 
     const did = parseRowId(designationId);
+    const est = parseRowId(establishmentId) || ALL_ESTABLISHMENTS;
 
     const client = await db.connect();
     try {
       await client.query("BEGIN");
       if (did) {
         await client.query(
-          `DELETE FROM public.ca_designation_permissions WHERE created_by_company_id = $1 AND designation_id = $2`,
-          [cid, did],
+          `DELETE FROM public.ca_designation_permissions
+           WHERE created_by_company_id = $1 AND designation_id = $2 AND establishment_id = $3`,
+          [cid, did, est],
         );
       } else {
         await client.query(`DELETE FROM public.ca_designation_permissions WHERE created_by_company_id = $1`, [cid]);
@@ -134,10 +162,10 @@ export const caPermissionsRepository = {
         await client.query(
           `
           INSERT INTO public.ca_designation_permissions (
-            created_by_company_id, designation_id, nav_id, can_view, can_add, can_edit, scope
+            created_by_company_id, designation_id, nav_id, can_view, can_add, can_edit, scope, establishment_id
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
-          ON CONFLICT (created_by_company_id, designation_id, nav_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (created_by_company_id, establishment_id, designation_id, nav_id)
           DO UPDATE SET
             can_view = EXCLUDED.can_view,
             can_add = EXCLUDED.can_add,
@@ -145,7 +173,7 @@ export const caPermissionsRepository = {
             scope = EXCLUDED.scope,
             updated_at = NOW()
           `,
-          [cid, rowDid, navId, Boolean(row.view), Boolean(row.add), Boolean(row.edit), validScope],
+          [cid, rowDid, navId, Boolean(row.view), Boolean(row.add), Boolean(row.edit), validScope, est],
         );
       }
 

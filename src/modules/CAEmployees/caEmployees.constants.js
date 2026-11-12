@@ -1,3 +1,5 @@
+import { employeePhotoUrl } from "./caEmployees.photoStorage.js";
+
 import { formatDateToIST } from "../../core/utils/date.js";
 export const caEmployeesTableSql = `
 CREATE TABLE IF NOT EXISTS public.ca_employees (
@@ -66,6 +68,15 @@ ALTER TABLE public.ca_employees
 
 ALTER TABLE public.ca_employees
   ADD COLUMN IF NOT EXISTS ctc NUMERIC;
+
+ALTER TABLE public.ca_employees
+  ADD COLUMN IF NOT EXISTS photo_data BYTEA;
+
+ALTER TABLE public.ca_employees
+  ADD COLUMN IF NOT EXISTS photo_mime TEXT;
+
+ALTER TABLE public.ca_employees
+  ADD COLUMN IF NOT EXISTS photo_version TEXT;
 `;
 
 const dateFrom = (value) => {
@@ -149,6 +160,8 @@ export const mapCAEmployee = (row) => {
 
   return {
     id: String(row.id),
+    // Profile photo (stored in the DB, served by GET /ca-employees/:id/photo); null if none.
+    photoUrl: employeePhotoUrl(row.id, row.photo_version),
     employeeCode: row.employee_code || "",
     name: row.name || "",
     email: row.email || "",

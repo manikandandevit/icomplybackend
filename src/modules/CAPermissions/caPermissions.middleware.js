@@ -26,6 +26,8 @@ export const requireNavPermission = (navId, { read = false } = {}) => async (req
         isOwner: Boolean(req.isCompanyOwner),
         designationId: req.designationId,
         designationName: req.designationName,
+        establishmentId: req.establishmentId || null,
+        employeeId: req.employeeId || null,
         allowedModules: req.allowedModules,
       },
       navId,
