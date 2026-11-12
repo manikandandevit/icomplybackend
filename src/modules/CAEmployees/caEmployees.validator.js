@@ -80,7 +80,7 @@ export const validateEmployeeBody = (body = {}) => {
   const employeeCode = required(body.employeeCode, "Employee code", errors, "employeeCode");
   const name = required(body.name, "Employee name", errors, "name");
   const email = required(body.email, "Email", errors, "email");
-  const mobile = String(body.mobile ?? "").trim() || "0000000000";
+  const mobile = String(body.mobile ?? "").trim();
   const joinDate = required(body.joinDate, "Date of joining", errors, "joinDate");
   const companyId = required(body.companyId, "Company", errors, "companyId");
   const companySource = body.companySource === "ca" ? "ca" : body.companySource === "parent" ? "parent" : "";
