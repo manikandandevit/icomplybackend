@@ -1,5 +1,7 @@
 import { caInterviewsRepository } from "./caInterviews.repository.js";
 import { caCandidatesRepository } from "../CACandidates/caCandidates.repository.js";
+import { caFcmRepository } from "../CANotifications/caFcm.repository.js";
+import { caFcmService } from "../CANotifications/caFcm.service.js";
 import {
   sendInterviewFeedbackEmail,
   sendInterviewShortlistedEmail,
@@ -182,7 +184,7 @@ export const caInterviewsService = {
     return interview;
   },
 
-  async submitFeedback(id, companyId, payload) {
+  async submitFeedback(id, companyId, payload, actorUser = null) {
     const interview = await caInterviewsRepository.submitFeedback(id, companyId, payload);
 
     // If feedback specifies an outcome status (Selected, Rejected, On Hold), update candidate stage
@@ -211,6 +213,49 @@ export const caInterviewsService = {
         outcomeStatus: payload.outcomeStatus,
         statusReason: payload.statusReason,
       }).catch((e) => console.error("Failed to trigger interview feedback email:", e));
+    }
+
+    // Notify Assigner / Admin that Interview Feedback has been submitted
+    try {
+      const candidateName = interview?.candidate || payload?.candidateName || "Candidate";
+      const interviewerName = actorUser?.name || interview?.interviewer || "Interviewer";
+      const ratingStars = payload?.rating ? ` (${payload.rating}/5 ★)` : "";
+      const notifTitle = "Interview Feedback Submitted";
+      const notifBody = `${interviewerName} has submitted interview feedback${ratingStars} for ${candidateName} - Outcome: ${payload?.outcomeStatus || "Completed"}.`;
+
+      await caFcmRepository.saveInAppNotification({
+        companyId,
+        targetUserType: "admin",
+        title: notifTitle,
+        body: notifBody,
+        data: {
+          type: "INTERVIEW_FEEDBACK_SUBMITTED",
+          interviewId: String(id),
+          candidateId: String(interview?.candidateId || payload?.candidateId || ""),
+          candidateName,
+          interviewerName,
+          role: interview?.role || payload?.role || "",
+          rating: payload?.rating || null,
+          feedback: payload?.feedback || "",
+          outcomeStatus: payload?.outcomeStatus || "Completed",
+          statusReason: payload?.statusReason || "",
+        },
+      });
+
+      const adminTokens = await caFcmRepository.getAdminTokens(companyId);
+      if (adminTokens.length > 0) {
+        await caFcmService.sendPushNotification(adminTokens, {
+          title: notifTitle,
+          body: notifBody,
+          data: {
+            type: "INTERVIEW_FEEDBACK_SUBMITTED",
+            interviewId: String(id),
+            candidateId: String(interview?.candidateId || ""),
+          },
+        });
+      }
+    } catch (notifErr) {
+      console.error("[CAInterviews] Failed to notify admins of interview feedback:", notifErr?.message || notifErr);
     }
 
     return interview;
