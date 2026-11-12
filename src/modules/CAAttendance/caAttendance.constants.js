@@ -1,5 +1,6 @@
 import { formatDateToIST } from "../../core/utils/date.js";
 import { CHECK_IN_GRACE_MINUTES, OT_THRESHOLD_MINUTES } from "./caAttendance.window.js";
+import { resolveZone, startOfDayUtc, utcOffsetMinutesFor } from "../../core/utils/timezone.js";
 export const caAttendanceTableSql = `
 CREATE TABLE IF NOT EXISTS public.ca_attendance (
   id SERIAL PRIMARY KEY,
@@ -63,13 +64,15 @@ const clockMinutes = (value) => {
   return parsed.getHours() * 60 + parsed.getMinutes();
 };
 
-const stampMinutesFromDate = (dateStr, stamp) => {
+const stampMinutesFromDate = (dateStr, stamp, zone = "Asia/Kolkata") => {
   if (!stamp) return null;
-  const [year, month, day] = formatDateToIST(dateStr || "").split("-").map(Number);
+  const dateKey = formatDateToIST(dateStr || "");
+  const [year, month, day] = dateKey.split("-").map(Number);
   if (!year || !month || !day) return clockMinutes(stamp);
-  // Force start of day to be in IST (+05:30) to avoid live server UTC issues
-  const startIso = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T00:00:00+05:30`;
-  const start = new Date(startIso).getTime();
+  // Minutes from midnight of that date in the employee's establishment time zone.
+  const startDate = startOfDayUtc(dateKey, zone);
+  const start = startDate ? startDate.getTime() : NaN;
+  if (Number.isNaN(start)) return null;
   const time = new Date(stamp).getTime();
   if (Number.isNaN(time)) return null;
   return Math.round((time - start) / 60000);
@@ -85,12 +88,15 @@ const weekdayOf = (dateKey) => {
 export const mapCAAttendance = (row) => {
   if (!row) return null;
   const date = formatDateToIST(row.date);
+  // Establishment time zone (India / Singapore / Malaysia …); times are shown and judged in it.
+  const timeZone = resolveZone(row.est_timezone);
+  const utcOffsetMinutes = utcOffsetMinutesFor(timeZone, row.check_in || row.requested_check_in || new Date());
   const shiftStartTime = String(row.shift_start_time || "").trim();
   const shiftEndTime = String(row.shift_end_time || "").trim();
   const startMin = clockMinutes(shiftStartTime);
   const rawEndMin = clockMinutes(shiftEndTime);
-  const inMin = stampMinutesFromDate(date, row.check_in || row.requested_check_in);
-  const outMin = stampMinutesFromDate(date, row.check_out || row.requested_check_out);
+  const inMin = stampMinutesFromDate(date, row.check_in || row.requested_check_in, timeZone);
+  const outMin = stampMinutesFromDate(date, row.check_out || row.requested_check_out, timeZone);
   const endMin = startMin != null && rawEndMin != null && rawEndMin <= startMin ? rawEndMin + 24 * 60 : rawEndMin;
   // Late only after the 10-min grace (9:30 shift → late from 9:41).
   const lateCheckIn = startMin != null && inMin != null && inMin > startMin + CHECK_IN_GRACE_MINUTES;
@@ -138,6 +144,8 @@ export const mapCAAttendance = (row) => {
     otMinutes,
     lateCheckIn,
     earlyCheckOut,
+    timeZone,
+    utcOffsetMinutes,
     createdByCompanyId: row.created_by_company_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

@@ -15,6 +15,7 @@ export const HR_MASTER_NAV = {
   "ot-type": "ot-type",
   "bank-account-type": "bank-account-type",
   "payment-method": "payment-method",
+  "notice-period": "notice-period",
   additional: "additional",
 };
 

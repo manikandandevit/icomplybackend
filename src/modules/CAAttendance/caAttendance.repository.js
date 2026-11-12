@@ -33,7 +33,8 @@ const selectColumns = `
   COALESCE(NULLIF(TRIM(e.details->>'shiftStartTime'), ''), sm.start_time, '09:30') AS shift_start_time,
   COALESCE(NULLIF(TRIM(e.details->>'shiftEndTime'), ''), sm.end_time, '18:30') AS shift_end_time,
   COALESCE(e.ot_applicable, (e.details->>'otApplicable')::boolean, true) AS ot_applicable,
-  NULLIF(TRIM(COALESCE(e.details->>'reportingToId', e.details->>'reporting_to_id', '')), '') AS reporting_to_id
+  NULLIF(TRIM(COALESCE(e.details->>'reportingToId', e.details->>'reporting_to_id', '')), '') AS reporting_to_id,
+  COALESCE(NULLIF(TRIM(est.timezone), ''), NULLIF(TRIM(est.country_name), ''), est.country_id::text) AS est_timezone
 `;
 
 const fromJoined = `
@@ -42,6 +43,8 @@ const fromJoined = `
     ON e.id = a.employee_id AND e.created_by_company_id = a.created_by_company_id
   LEFT JOIN public.ca_hr_masters sm
     ON sm.id = e.shift_type_id AND sm.master_type = 'shift-type'
+  LEFT JOIN public.ca_establishments est
+    ON est.id = COALESCE(e.establishment_id, a.establishment_id)
 `;
 
 const parseRowId = (id) => {
@@ -61,10 +64,13 @@ export const caAttendanceRepository = {
       `
       SELECT
         COALESCE(NULLIF(TRIM(e.details->>'shiftStartTime'), ''), NULLIF(TRIM(sm.start_time::text), '')) AS shift_start_time,
-        COALESCE(NULLIF(TRIM(e.details->>'shiftEndTime'), ''), NULLIF(TRIM(sm.end_time::text), '')) AS shift_end_time
+        COALESCE(NULLIF(TRIM(e.details->>'shiftEndTime'), ''), NULLIF(TRIM(sm.end_time::text), '')) AS shift_end_time,
+        COALESCE(NULLIF(TRIM(est.timezone), ''), NULLIF(TRIM(est.country_name), ''), est.country_id::text) AS est_timezone
       FROM public.ca_employees e
       LEFT JOIN public.ca_hr_masters sm
         ON sm.id = e.shift_type_id AND sm.master_type = 'shift-type'
+      LEFT JOIN public.ca_establishments est
+        ON est.id = e.establishment_id
       WHERE e.id = $1 AND e.created_by_company_id = $2
       LIMIT 1
       `,

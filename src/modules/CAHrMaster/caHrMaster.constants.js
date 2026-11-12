@@ -12,6 +12,7 @@ export const MASTER_TYPES = [
   "ot-type",
   "bank-account-type",
   "payment-method",
+  "notice-period",
   "additional",
 ];
 
@@ -29,6 +30,7 @@ export const MASTER_LABELS = {
   "ot-type": "OT Type",
   "bank-account-type": "Bank Account Type",
   "payment-method": "Payment Method",
+  "notice-period": "Notice Period",
   additional: "Additional",
 };
 
@@ -226,6 +228,10 @@ export const mapCAHrMaster = (row) => {
     values.multiplier = row.multiplier || "";
     values.minHours = row.min_hours || "";
     values.maxHours = row.max_hours || "";
+  }
+
+  if (row.master_type === "notice-period") {
+    values.days = row.days || "";
   }
 
   if (row.master_type === "leave-types") {

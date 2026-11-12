@@ -6,6 +6,39 @@ import {
 } from "../CACandidates/caCandidates.email.js";
 import { caFcmRepository } from "../CANotifications/caFcm.repository.js";
 import { caFcmService } from "../CANotifications/caFcm.service.js";
+import { caPermissionsService } from "../CAPermissions/caPermissions.service.js";
+
+/** Talent Acquisition rows on the permission page. */
+const TA_NAV_IDS = ["recruitment-dashboard", "job-requisitions", "job-openings", "candidates"];
+
+/**
+ * An employee is told about an interview only when their designation has
+ * Talent Acquisition access (any TA tab with view). Admin users always are.
+ */
+const interviewerHasTaAccess = async (employeeId) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT id, created_by_company_id, designation_id, designation_name, establishment_id
+       FROM public.ca_employees WHERE id = $1 LIMIT 1`,
+      [Number(employeeId)]
+    );
+    const emp = rows[0];
+    if (!emp) return false;
+    const actor = {
+      employeeId: String(emp.id),
+      designationId: emp.designation_id,
+      designationName: emp.designation_name,
+      establishmentId: emp.establishment_id,
+    };
+    for (const navId of TA_NAV_IDS) {
+      if (await caPermissionsService.can(emp.created_by_company_id, actor, navId, "view")) return true;
+    }
+    return false;
+  } catch (error) {
+    console.warn("[Interviewer Notification] TA permission check failed:", error?.message || error);
+    return false;
+  }
+};
 
 /**
  * Builds the responsive, MNC-grade HTML email template for interview notifications
@@ -779,6 +812,14 @@ export const sendInterviewerAssignmentNotification = async ({
         resolvedEmployee = rows[0];
         userType = "admin";
       }
+    }
+
+    // No Talent Acquisition permission → no in-app, push or mail for this interviewer.
+    if (resolvedEmployee && userType === "employee" && !(await interviewerHasTaAccess(resolvedEmployee.id))) {
+      console.info(
+        `[Interviewer Notification] ${resolvedEmployee.name || resolvedEmployee.id} has no Talent Acquisition permission; not notified.`
+      );
+      return false;
     }
 
     const interviewerName = resolvedEmployee?.name || interviewer || "Interviewer";

@@ -1,4 +1,5 @@
 import { AppError } from "../../core/errors/AppError.js";
+import { minutesOfDayIn, utcOffsetMinutesFor } from "../../core/utils/timezone.js";
 
 /** Check-in opens this many minutes before the shift starts. */
 export const CHECK_IN_EARLY_MINUTES = 10;
@@ -38,17 +39,9 @@ const label = (min) => {
   return `${h12}:${m} ${suffix}`;
 };
 
-/** Minutes of the day in IST (shift times are IST, same as the attendance flags). */
-export const nowMinutesIST = (now = new Date()) => {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Kolkata",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(now);
-  const h = Number(parts.find((p) => p.type === "hour")?.value || 0);
-  const m = Number(parts.find((p) => p.type === "minute")?.value || 0);
-  return (h % 24) * 60 + m;
+/** Minutes of the day in target timezone (default Asia/Kolkata). */
+export const nowMinutesIST = (now = new Date(), zone = "Asia/Kolkata") => {
+  return minutesOfDayIn(zone, now);
 };
 
 /**
@@ -57,7 +50,7 @@ export const nowMinutesIST = (now = new Date()) => {
  * the shift ends (it is flagged as lateCheckIn). Night shifts that cross
  * midnight are handled. No shift → no restriction.
  */
-export const punchWindowFor = (shift, now = new Date()) => {
+export const punchWindowFor = (shift, now = new Date(), zone = "Asia/Kolkata") => {
   const start = minutesOf(shift?.shift_start_time);
   const end = minutesOf(shift?.shift_end_time);
   const base = {
@@ -65,6 +58,8 @@ export const punchWindowFor = (shift, now = new Date()) => {
     graceMinutes: CHECK_IN_GRACE_MINUTES,
     otThresholdMinutes: OT_THRESHOLD_MINUTES,
     serverTime: now.toISOString(),
+    timeZone: zone,
+    utcOffsetMinutes: utcOffsetMinutesFor(zone, now),
   };
 
   if (start == null || end == null) {
@@ -73,7 +68,7 @@ export const punchWindowFor = (shift, now = new Date()) => {
 
   const opens = mod(start - CHECK_IN_EARLY_MINUTES);
   const span = (end <= start ? end + DAY : end) - (start - CHECK_IN_EARLY_MINUTES);
-  const nowMin = nowMinutesIST(now);
+  const nowMin = minutesOfDayIn(zone, now);
   const sinceOpen = mod(nowMin - opens);
   const isOpen = span >= DAY || sinceOpen <= span;
 

@@ -7,35 +7,15 @@ import { syncOtRequest } from "./caAttendanceOtSync.js";
 import { caFcmService } from "../CANotifications/caFcm.service.js";
 import { caPermissionsService } from "../CAPermissions/caPermissions.service.js";
 import { assertCheckInOpen, punchWindowFor } from "./caAttendance.window.js";
+import { todayIn, zonedDateTimeToUtc, zoneForEmployee, zoneForEstablishment } from "../../core/utils/timezone.js";
 
-const todayIso = () => {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-};
+const todayIso = (zone = "Asia/Kolkata") => todayIn(zone);
 
 const isPrivileged = (actor) => Boolean(actor?.isOwner || actor?.isCaUser || !actor?.employeeId);
 
-const stampFrom = (date, time) => {
-  const raw = String(time || "").trim();
-  if (!raw) return null;
-  const ampmMatch = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
-  if (ampmMatch) {
-    let hour = Number(ampmMatch[1]);
-    const minute = Number(ampmMatch[2]);
-    const ampm = (ampmMatch[3] || "").toUpperCase();
-    if (ampm === "PM" && hour < 12) hour += 12;
-    if (ampm === "AM" && hour === 12) hour = 0;
-    const parts = formatDateToIST(date).split("-").map(Number);
-    const [year, month, day] = parts;
-    if (!year || !month || !day) return null;
-    const isoString = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+05:30`;
-    return new Date(isoString).toISOString();
-  }
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+const stampFrom = (date, time, zone = "Asia/Kolkata") => {
+  const dt = zonedDateTimeToUtc(date, time, zone);
+  return dt ? dt.toISOString() : null;
 };
 
 export const attendanceActorFromReq = (req) => ({
@@ -71,7 +51,8 @@ async list(companyId, actor = {}) {
   async punchWindow(companyId, actor = {}, employeeIdParam = null) {
     const employeeId = !isPrivileged(actor) && actor.employeeId ? actor.employeeId : employeeIdParam || actor.employeeId;
     const shift = employeeId ? await caAttendanceRepository.shiftForEmployee(companyId, employeeId) : null;
-    return punchWindowFor(shift);
+    const zone = employeeId ? await zoneForEmployee(employeeId, companyId) : "Asia/Kolkata";
+    return punchWindowFor(shift, new Date(), zone);
   },
 
   async punch(companyId, action, payload = {}, actor = {}) {
@@ -89,7 +70,8 @@ async list(companyId, actor = {}) {
       throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");
     }
 
-    const date = (payload.date && /^\d{4}-\d{2}-\d{2}$/.test(payload.date)) ? payload.date : todayIso();
+    const zone = await zoneForEmployee(employee.id, companyId);
+    const date = (payload.date && /^\d{4}-\d{2}-\d{2}$/.test(payload.date)) ? payload.date : todayIso(zone);
     const existing = await caAttendanceRepository.findByEmployeeDate(companyId, employee.id, date);
     const now = new Date().toISOString();
 
@@ -99,10 +81,10 @@ async list(companyId, actor = {}) {
       }
       // Employee self check-in for today: only from shift start - 10 min until shift end.
       // Admin punches and other dates are not restricted here.
-      const isToday = !payload.date || payload.date === todayIso() || payload.date === formatDateToIST(new Date());
+      const isToday = !payload.date || payload.date === todayIso(zone) || payload.date === todayIn(zone);
       if (!isPrivileged(actor) && isToday) {
         const shift = await caAttendanceRepository.shiftForEmployee(companyId, employee.id);
-        assertCheckInOpen(punchWindowFor(shift));
+        assertCheckInOpen(punchWindowFor(shift, new Date(), zone));
       }
       if (!existing) {
         const created = await caAttendanceRepository.insert({
@@ -163,9 +145,11 @@ async list(companyId, actor = {}) {
       existing = await caAttendanceRepository.findByEmployeeDate(companyId, payload.employeeId, payload.date);
     }
 
-    const date = formatDateToIST(existing?.date || payload.date || todayIso());
-    const checkIn = stampFrom(date, payload.checkIn);
-    const checkOut = stampFrom(date, payload.checkOut);
+    const empId = existing?.employeeId || payload.employeeId;
+    const zone = empId ? await zoneForEmployee(empId, companyId) : "Asia/Kolkata";
+    const date = existing?.date instanceof Date ? existing.date.toISOString().slice(0, 10) : (existing?.date || payload.date || todayIso(zone));
+    const checkIn = stampFrom(date, payload.checkIn, zone);
+    const checkOut = stampFrom(date, payload.checkOut, zone);
     if (!checkIn) {
       throw new AppError("Check-in time is required", 422, "CHECK_IN_REQUIRED");
     }
@@ -235,11 +219,12 @@ async list(companyId, actor = {}) {
       throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");
     }
 
-    const date = formatDateToIST(payload.date || "");
+    const zone = await zoneForEmployee(employee.id, companyId);
+    const date = payload.date ? String(payload.date).slice(0, 10) : "";
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       throw new AppError("Select a date", 422, "DATE_REQUIRED");
     }
-    if (date > todayIso()) {
+    if (date > todayIso(zone)) {
       throw new AppError("Cannot regularize a future date", 422, "FUTURE_DATE");
     }
 
@@ -248,8 +233,8 @@ async list(companyId, actor = {}) {
       throw new AppError("Reason is required", 422, "REASON_REQUIRED");
     }
 
-    const requestedCheckIn = stampFrom(date, payload.checkIn);
-    const requestedCheckOut = stampFrom(date, payload.checkOut);
+    const requestedCheckIn = stampFrom(date, payload.checkIn, zone);
+    const requestedCheckOut = stampFrom(date, payload.checkOut, zone);
     if (!requestedCheckIn) {
       throw new AppError("Requested check-in time is required", 422, "CHECK_IN_REQUIRED");
     }

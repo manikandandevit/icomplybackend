@@ -6,7 +6,11 @@ export const isValidMasterType = (type) => MASTER_TYPES.includes(String(type || 
 
 export const validateMasterBody = (masterType, body = {}) => {
   const errors = {};
-  const name = normalizeText(body.name ?? body.values?.name);
+  // Notice period has no name of its own: one entry per establishment.
+  const name =
+    masterType === "notice-period"
+      ? "Notice period"
+      : normalizeText(body.name ?? body.values?.name);
 
   if (!name) {
     errors.name = "Name is required";
@@ -60,6 +64,7 @@ export const validateMasterBody = (masterType, body = {}) => {
     "bank-account-type",
     "holiday-type",
     "leave-types",
+    "notice-period",
   ];
   if (ESTABLISHMENT_SCOPED_TYPES.includes(masterType)) {
     const establishmentId = String(body.establishmentId ?? body.values?.establishmentId ?? "").trim();
@@ -152,6 +157,16 @@ export const validateMasterBody = (masterType, body = {}) => {
 
     const experience = String(body.experience ?? body.values?.experience ?? "").trim();
     value.experience = experience || null;
+  }
+
+  if (masterType === "notice-period") {
+    const days = String(body.days ?? body.values?.days ?? "").trim();
+    if (!days) {
+      errors.days = "Notice period (days) is required";
+    } else if (!/^\d+$/.test(days) || Number(days) > 365) {
+      errors.days = "Notice period must be 0 to 365 days";
+    }
+    value.days = days;
   }
 
   if (masterType === "shift-type") {

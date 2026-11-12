@@ -4,13 +4,7 @@ import { caAttendanceRepository } from "./caAttendance.repository.js";
 import { caOtRequestsRepository } from "../CAOvertime/caOtRequests.repository.js";
 import { caFcmService } from "../CANotifications/caFcm.service.js";
 import { OT_THRESHOLD_MINUTES } from "./caAttendance.window.js";
-
-/** Weekday of a "YYYY-MM-DD" calendar date (0 = Sunday), same on any server timezone. */
-const weekdayOf = (dateKey) => {
-  const [y, m, d] = String(dateKey || "").slice(0, 10).split("-").map(Number);
-  if (!y || !m || !d) return null;
-  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-};
+import { zonedDateTimeToUtc, weekdayIn, zoneForCountry } from "../../core/utils/timezone.js";
 
 const calculateOtHours = (row, employee) => {
   const isOtApplicable = employee?.otApplicable !== undefined ? Boolean(employee.otApplicable) : Boolean(employee?.details?.otApplicable ?? true);
@@ -26,11 +20,11 @@ const calculateOtHours = (row, employee) => {
   const out = new Date(effectiveOut);
   if (Number.isNaN(out.getTime())) return 0;
 
-  const dateObj = new Date(row.date);
-  if (Number.isNaN(dateObj.getTime())) return 0;
-  const dateParts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(dateObj);
-  const dateKey = `${dateParts.find(p => p.type === 'year').value}-${dateParts.find(p => p.type === 'month').value}-${dateParts.find(p => p.type === 'day').value}`;
-  const isSunday = weekdayOf(dateKey) === 0;
+  const zone = row.timeZone || zoneForCountry(employee.establishmentCountryId || employee.details?.countryId);
+  const dateKey = String(row.date || "").slice(0, 10);
+  if (!dateKey) return 0;
+
+  const isSunday = weekdayIn(zone, dateKey) === 0;
   if (isSunday && effectiveIn) {
     const inDate = new Date(effectiveIn);
     const diffMs = out.getTime() - inDate.getTime();
@@ -48,14 +42,14 @@ const calculateOtHours = (row, employee) => {
     }
   }
 
-  // Construct exact ISO string in IST
-  const shiftEndIso = `${dateKey}T${String(ehH).padStart(2, '0')}:${String(ehM).padStart(2, '0')}:00+05:30`;
-  const shiftEnd = new Date(shiftEndIso);
+  // Calculate shift end in UTC using employee's zone
+  let shiftEndUtc = zonedDateTimeToUtc(dateKey, shiftEndTime, zone);
+  if (!shiftEndUtc) return 0;
   if (addDay) {
-    shiftEnd.setDate(shiftEnd.getDate() + 1);
+    shiftEndUtc = new Date(shiftEndUtc.getTime() + 24 * 60 * 60 * 1000);
   }
 
-  const diffMs = out.getTime() - shiftEnd.getTime();
+  const diffMs = out.getTime() - shiftEndUtc.getTime();
   // Up to 10 min after shift end is not OT; past it, OT counts from shift end.
   if (diffMs <= OT_THRESHOLD_MINUTES * 60000) return 0;
   return Math.round((diffMs / 3600000) * 10) / 10;
