@@ -55,15 +55,20 @@ export const caInterviewsController = {
         return res.status(400).json({ status: "fail", message: "Feedback is a required field." });
       }
       const effectiveStatus = outcomeStatus && String(outcomeStatus).trim() ? String(outcomeStatus).trim() : "Completed";
-      const interview = await caInterviewsService.submitFeedback(id, companyId, {
-        rating: rating || null,
-        feedback: String(feedback).trim(),
-        outcomeStatus: effectiveStatus,
-        statusReason,
-        roundsCompleted,
-        completedRound,
-        candidateId,
-      });
+      const interview = await caInterviewsService.submitFeedback(
+        id,
+        companyId,
+        {
+          rating: rating || null,
+          feedback: String(feedback).trim(),
+          outcomeStatus: effectiveStatus,
+          statusReason,
+          roundsCompleted,
+          completedRound,
+          candidateId,
+        },
+        req.user
+      );
       return success(res, { data: { interview } });
     } catch (err) {
       next(err);
