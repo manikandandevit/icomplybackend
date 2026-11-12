@@ -3,6 +3,7 @@ import { success } from "../../core/utils/response.js";
 import { caPayrollRunsService } from "./caPayrollRuns.service.js";
 import { caPayrollRunsRepository } from "./caPayrollRuns.repository.js";
 import { db } from "../../core/db/pool.js";
+import { caFcmService } from "../CANotifications/caFcm.service.js";
 
 export const caPayrollRunsController = {
   async getPreChecks(req, res, next) {
@@ -75,6 +76,11 @@ export const caPayrollRunsController = {
           )
         )
       );
+
+      // Tell each employee their payslip is ready (in-app + push); never blocks the save.
+      caFcmService
+        .notifyEmployeesOfPayslips({ companyId: req.companyId, run, payslips: savedPayslips })
+        .catch(() => {});
 
       return success(res, { data: { run, payslips: savedPayslips }, message: "Payroll saved successfully" }, 201);
     } catch (err) {
@@ -227,6 +233,56 @@ export const caPayrollRunsController = {
       await caPayrollRunsRepository.updateChallanUrl(req.companyId, runId, uploaded.url, complianceType || "EPF");
 
       return success(res, { data: uploaded, message: "Challan uploaded successfully" });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /** Employee (mobile): own payslips for a financial year. ?fy=2026 → April 2026 - March 2027. */
+  async getMyPayslips(req, res, next) {
+    try {
+      if (!req.employeeId) throw new AppError("Employee access only", 403, "FORBIDDEN");
+      const data = await caPayrollRunsService.getMyPayslips(req.companyId, req.employeeId, req.query.fy);
+      return success(res, { data, message: "Payslips fetched successfully" });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /** Employee (mobile): PDF of one own payslip. ?download=1 → attachment. */
+  async getMyPayslipPdf(req, res, next) {
+    try {
+      if (!req.employeeId) throw new AppError("Employee access only", 403, "FORBIDDEN");
+      const { pdfBuffer, filename } = await caPayrollRunsService.getMyPayslipPdf(
+        req.companyId,
+        req.employeeId,
+        req.params.id
+      );
+      const pdf = Buffer.from(pdfBuffer);
+      const disposition = req.query.download ? "attachment" : "inline";
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `${disposition}; filename="${filename}"`);
+      res.setHeader("Content-Length", pdf.length);
+      return res.end(pdf);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /** Employee (mobile): the payslip as a PNG image (in-app viewer). */
+  async getMyPayslipImage(req, res, next) {
+    try {
+      if (!req.employeeId) throw new AppError("Employee access only", 403, "FORBIDDEN");
+      const { pdfBuffer } = await caPayrollRunsService.getMyPayslipPdf(
+        req.companyId,
+        req.employeeId,
+        req.params.id,
+        "png"
+      );
+      const image = Buffer.from(pdfBuffer);
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Content-Length", image.length);
+      return res.end(image);
     } catch (err) {
       next(err);
     }

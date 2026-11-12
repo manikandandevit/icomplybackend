@@ -54,6 +54,11 @@ const ensureTable = () => {
   return ready;
 };
 
+/** Read notifications kept per user (older read ones are deleted). */
+export const READ_KEEP = 10;
+/** Safety cap on unread returned in one call. */
+const MAX_UNREAD = 500;
+
 const parseRowId = (id) => {
   const n = Number.parseInt(String(id ?? ""), 10);
   return Number.isInteger(n) && n > 0 ? n : null;
@@ -183,10 +188,54 @@ export const caFcmRepository = {
       params.push(String(userId));
     }
 
-    query += ` ORDER BY id DESC LIMIT 30`;
-
-    const { rows } = await db.query(query, params);
+    // All unread + only the latest 10 read (newest first).
+    const { rows } = await db.query(
+      `
+      SELECT * FROM (
+        (${query} AND is_read = FALSE ORDER BY id DESC LIMIT ${MAX_UNREAD})
+        UNION ALL
+        (${query} AND is_read = TRUE ORDER BY id DESC LIMIT ${READ_KEEP})
+      ) AS n
+      ORDER BY id DESC
+      `,
+      params
+    );
     return rows;
+  },
+
+  /**
+   * Keeps only the latest 10 read notifications of this user; older read
+   * ones are deleted (11th read → the oldest read goes).
+   * Employees: only their own rows (not company-wide broadcasts).
+   */
+  async pruneReadNotifications(companyId, userType, userId = null, keep = READ_KEEP) {
+    await ensureTable();
+    const cid = parseRowId(companyId);
+    if (!cid) return 0;
+
+    const targetType = userType === "employee" ? "employee" : "admin";
+    let scope = `company_id = $1 AND target_user_type = $2 AND is_read = TRUE`;
+    const params = [cid, targetType];
+
+    if (targetType === "employee") {
+      if (!userId) return 0;
+      scope += ` AND target_user_id = $3`;
+      params.push(String(userId));
+    }
+
+    const { rowCount } = await db.query(
+      `
+      DELETE FROM public.ca_in_app_notifications
+      WHERE id IN (
+        SELECT id FROM public.ca_in_app_notifications
+        WHERE ${scope}
+        ORDER BY id DESC
+        OFFSET ${Number(keep) || READ_KEEP}
+      )
+      `,
+      params
+    );
+    return rowCount;
   },
 
   async markInAppNotificationRead(id, companyId) {

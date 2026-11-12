@@ -3,6 +3,8 @@ import { AppError } from "../../core/errors/AppError.js";
 import { fail, success } from "../../core/utils/response.js";
 import { caEmployeesService } from "./caEmployees.service.js";
 import { validateEmployeeBody } from "./caEmployees.validator.js";
+import { caEmployeesRepository } from "./caEmployees.repository.js";
+import { preparePhoto } from "./caEmployees.photoStorage.js";
 
 const sendAppError = (res, error) => {
   if (error instanceof AppError) {
@@ -28,6 +30,40 @@ export const employeeActorFromReq = (req) => ({
 });
 
 export const caEmployeesController = {
+  /** POST /:id/photo (multipart "photo"): upload + save the profile photo. */
+  uploadPhoto: asyncHandler(async (req, res) => {
+    try {
+      if (!req.file) throw new AppError("Choose a photo to upload", 400, "PHOTO_REQUIRED");
+      const existing = await caEmployeesRepository.findById(req.params.id, req.companyId);
+      if (!existing) throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");
+      const photo = preparePhoto(req.file);
+      const employee = await caEmployeesRepository.updatePhoto(req.params.id, req.companyId, photo);
+      return success(res, {
+        message: "Profile photo updated",
+        data: { photoUrl: employee?.photoUrl || null, employee },
+      });
+    } catch (error) {
+      return sendAppError(res, error);
+    }
+  }),
+
+  /** GET /:id/photo: the photo image from the DB (same company; token header or ?token). */
+  photo: async (req, res, next) => {
+    try {
+      const photo = await caEmployeesRepository.findPhoto(req.params.id, req.companyId);
+      if (!photo?.data) {
+        return fail(res, { status: 404, message: "No photo", code: "PHOTO_NOT_FOUND" });
+      }
+      res.setHeader("Content-Type", photo.mime);
+      res.setHeader("Content-Length", photo.data.length);
+      res.setHeader("Cache-Control", "private, max-age=86400");
+      return res.end(photo.data);
+    } catch (error) {
+      if (error instanceof AppError) return sendAppError(res, error);
+      return next(error);
+    }
+  },
+
   counts: asyncHandler(async (req, res) => {
     const counts = await caEmployeesService.counts(req.companyId);
     return success(res, {

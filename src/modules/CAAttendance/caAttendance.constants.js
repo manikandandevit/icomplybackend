@@ -75,6 +75,13 @@ const stampMinutesFromDate = (dateStr, stamp) => {
   return Math.round((time - start) / 60000);
 };
 
+/** Weekday of a "YYYY-MM-DD" calendar date (0 = Sunday), same on any server timezone. */
+const weekdayOf = (dateKey) => {
+  const [y, m, d] = String(dateKey || "").slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+};
+
 export const mapCAAttendance = (row) => {
   if (!row) return null;
   const date = formatDateToIST(row.date);
@@ -92,7 +99,7 @@ export const mapCAAttendance = (row) => {
   let otMinutes = 0;
   const isOtApplicable = row.ot_applicable !== undefined && row.ot_applicable !== null ? Boolean(row.ot_applicable) : true;
   if (isOtApplicable && outMin != null) {
-    const isSunday = new Date(`${date}T00:00:00+05:30`).getDay() === 0;
+    const isSunday = weekdayOf(date) === 0;
     if (isSunday && inMin != null) {
       otMinutes = Math.max(0, outMin - inMin);
     } else if (endMin != null && outMin > endMin + OT_THRESHOLD_MINUTES) {

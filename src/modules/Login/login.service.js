@@ -1,3 +1,4 @@
+import { employeePhotoUrl } from "../CAEmployees/caEmployees.photoStorage.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { config } from "../../config/index.js";
@@ -73,7 +74,7 @@ const toPublicEmployee = (row) => ({
   establishmentName: row.establishment_name || null,
   countryId: row.country_id != null ? String(row.country_id) : null,
   countryName: row.country_name || null,
-  imageUrl: null,
+  imageUrl: employeePhotoUrl(row.id, row.photo_version),
 });
 
 const issueToken = (user, extra = {}) =>
