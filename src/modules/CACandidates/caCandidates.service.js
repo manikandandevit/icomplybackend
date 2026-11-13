@@ -43,18 +43,47 @@ export const caCandidatesService = {
 
   async create(companyId, payload) {
     if (payload?.role) {
-      const { rows: approvedReqs } = await db.query(
-        `SELECT id, position FROM public.ca_job_requisitions 
-         WHERE created_by_company_id = $1 
-           AND LOWER(TRIM(approval_status)) = 'approved'`,
+      const { rows: reqs } = await db.query(
+        `SELECT id, position, approval_status, status FROM public.ca_job_requisitions 
+         WHERE (
+           created_by_company_id = $1 
+           OR created_by_company_id IN (SELECT id FROM public.ca_companies WHERE created_by_company_id = $1)
+           OR created_by_company_id IN (SELECT created_by_company_id FROM public.ca_companies WHERE id = $1 AND created_by_company_id IS NOT NULL)
+         )`,
         [companyId]
       );
 
-      const hasMatchingApproval = approvedReqs.some(
+      const matchingReq = reqs.find(
         (r) => String(r.position || "").trim().toLowerCase() === String(payload.role || "").trim().toLowerCase()
       );
 
-      if (!hasMatchingApproval) {
+      let hasOpening = false;
+      if (!matchingReq) {
+        try {
+          const { rows: openings } = await db.query(
+            `SELECT id, role_name FROM public.hirepilot_openings
+             WHERE (
+               created_by_company_id = $1 
+               OR company_id = $1
+               OR created_by_company_id IN (SELECT id FROM public.ca_companies WHERE created_by_company_id = $1)
+             )`,
+            [companyId]
+          );
+          hasOpening = openings.some(
+            (o) => String(o.role_name || "").trim().toLowerCase() === String(payload.role || "").trim().toLowerCase()
+          );
+        } catch (_) {}
+      }
+
+      if (matchingReq && String(matchingReq.approval_status || "").toLowerCase() !== "approved") {
+        // Auto-approve the requisition since an admin is creating a candidate for it
+        try {
+          await db.query(
+            `UPDATE public.ca_job_requisitions SET approval_status = 'Approved', status = 'Open', updated_at = NOW() WHERE id = $1`,
+            [matchingReq.id]
+          );
+        } catch (_) {}
+      } else if (!matchingReq && !hasOpening && reqs.length > 0) {
         throw new AppError(
           `Cannot add candidate: Position "${payload.role}" does not have an approved job requisition. Candidate details can only be uploaded for approved positions.`,
           400,
