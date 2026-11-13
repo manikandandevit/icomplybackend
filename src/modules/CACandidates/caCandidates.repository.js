@@ -33,6 +33,13 @@ const ensureTable = () => {
   return ready;
 };
 
+const companyScopeCondition = (col, paramIdx) => `(
+  ${col} = $${paramIdx}
+  OR ${col} IN (SELECT id FROM public.ca_companies WHERE created_by_company_id = $${paramIdx})
+  OR ${col} IN (SELECT created_by_company_id FROM public.ca_companies WHERE id = $${paramIdx} AND created_by_company_id IS NOT NULL)
+  OR ${col} IS NULL
+)`;
+
 export const caCandidatesRepository = {
   async findById(id, companyId) {
     await ensureTable();
@@ -54,7 +61,7 @@ export const caCandidatesRepository = {
     const params = [id];
     if (companyId) {
       params.push(companyId);
-      query += ` AND (c.created_by_company_id = $2 OR c.created_by_company_id IS NULL)`;
+      query += ` AND ${companyScopeCondition("c.created_by_company_id", 2)}`;
     }
     const { rows } = await db.query(query, params);
     if (rows[0]) {
@@ -130,7 +137,7 @@ export const caCandidatesRepository = {
     const params = [];
     if (companyId) {
       params.push(companyId);
-      query += ` AND (c.created_by_company_id = $${params.length} OR c.created_by_company_id IS NULL)`;
+      query += ` AND ${companyScopeCondition("c.created_by_company_id", params.length)}`;
     }
     if (filter.role && filter.role.trim()) {
       params.push(`%${filter.role.trim()}%`);
@@ -193,7 +200,10 @@ export const caCandidatesRepository = {
       const hpParams = [];
       if (companyId) {
         hpParams.push(companyId);
-        hpQuery += ` AND (a.company_id = $${hpParams.length} OR o.created_by_company_id = $${hpParams.length} OR a.company_id IS NULL)`;
+        hpQuery += ` AND (
+          ${companyScopeCondition("a.company_id", hpParams.length)}
+          OR ${companyScopeCondition("o.created_by_company_id", hpParams.length)}
+        )`;
       }
       if (filter.role && filter.role.trim()) {
         hpParams.push(`%${filter.role.trim()}%`);
@@ -291,6 +301,12 @@ export const caCandidatesRepository = {
       }
     }
 
+    const cleanStage = payload.stage || 'Applied';
+    const initials = payload.initials || (payload.name ? payload.name.split(' ').map(w => w[0]).join('').slice(0, 4).toUpperCase() : '');
+    const details = payload.details || `${payload.experience || '0 yrs'} · ${payload.location || 'Remote'}`;
+    const match = payload.match !== undefined ? payload.match : 75;
+    const applied = payload.applied || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
     const { rows } = await db.query(
       `INSERT INTO public.ca_candidates (
         name, initials, details, role, match, stage, source, applied, assessment_count, email, phone, experience, location, skills,
@@ -299,8 +315,8 @@ export const caCandidatesRepository = {
         created_by_company_id
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22) RETURNING *`,
       [
-        payload.name, payload.initials, payload.details, payload.role, payload.match, payload.stage,
-        payload.source, payload.applied, payload.assessmentCount || 0,
+        payload.name, initials, details, payload.role, match, cleanStage,
+        payload.source || 'Direct', applied, payload.assessmentCount || 0,
         cleanEmail, cleanPhone, payload.experience || null, payload.location || null,
         payload.skills ? JSON.stringify(payload.skills) : '[]',
         establishmentId || null, establishmentName || null,
@@ -427,7 +443,7 @@ export const caCandidatesRepository = {
       payload.resumeName !== undefined ? payload.resumeName : null,
     ];
     if (companyId) {
-      query += ` AND (created_by_company_id = $2 OR created_by_company_id IS NULL)`;
+      query += ` AND ${companyScopeCondition("created_by_company_id", 2)}`;
     }
     query += ` RETURNING *`;
 
@@ -474,16 +490,17 @@ export const caCandidatesRepository = {
   async updateStage(id, companyId, stage, assessmentCount) {
     await ensureTable();
 
+    const stageScope = companyId ? `AND ${companyScopeCondition("created_by_company_id", 2)}` : "";
     let candidate = null;
     if (assessmentCount !== undefined) {
       const { rows } = await db.query(
-        `UPDATE public.ca_candidates SET stage = $3, assessment_count = $4, updated_at = NOW() WHERE id = $1 AND created_by_company_id = $2 RETURNING *`,
+        `UPDATE public.ca_candidates SET stage = $3, assessment_count = $4, updated_at = NOW() WHERE id = $1 ${stageScope} RETURNING *`,
         [id, companyId, stage, assessmentCount]
       );
       candidate = rows[0] ? mapCACandidate(rows[0]) : null;
     } else {
       const { rows } = await db.query(
-        `UPDATE public.ca_candidates SET stage = $3, updated_at = NOW() WHERE id = $1 AND created_by_company_id = $2 RETURNING *`,
+        `UPDATE public.ca_candidates SET stage = $3, updated_at = NOW() WHERE id = $1 ${stageScope} RETURNING *`,
         [id, companyId, stage]
       );
       candidate = rows[0] ? mapCACandidate(rows[0]) : null;
@@ -600,7 +617,7 @@ export const caCandidatesRepository = {
       createdAt: new Date().toISOString()
     };
     const { rows } = await db.query(
-      `UPDATE public.ca_candidates SET notes = notes || $3::jsonb, updated_at = NOW() WHERE id = $1 AND created_by_company_id = $2 RETURNING *`,
+      `UPDATE public.ca_candidates SET notes = notes || $3::jsonb, updated_at = NOW() WHERE id = $1 AND ${companyScopeCondition("created_by_company_id", 2)} RETURNING *`,
       [id, companyId, JSON.stringify([note])]
     );
     return rows[0] ? mapCACandidate(rows[0]) : null;
@@ -608,10 +625,10 @@ export const caCandidatesRepository = {
 
   async delete(id, companyId) {
     await ensureTable();
-    await db.query(`DELETE FROM public.ca_offers WHERE candidate_id = $1 AND created_by_company_id = $2`, [id, companyId]);
-    await db.query(`DELETE FROM public.ca_interviews WHERE candidate_id = $1 AND created_by_company_id = $2`, [id, companyId]);
+    await db.query(`DELETE FROM public.ca_offers WHERE candidate_id = $1 AND ${companyScopeCondition("created_by_company_id", 2)}`, [id, companyId]);
+    await db.query(`DELETE FROM public.ca_interviews WHERE candidate_id = $1 AND ${companyScopeCondition("created_by_company_id", 2)}`, [id, companyId]);
     const { rows } = await db.query(
-      `DELETE FROM public.ca_candidates WHERE id = $1 AND created_by_company_id = $2 RETURNING id`,
+      `DELETE FROM public.ca_candidates WHERE id = $1 AND ${companyScopeCondition("created_by_company_id", 2)} RETURNING id`,
       [id, companyId]
     );
     return rows.length > 0;
