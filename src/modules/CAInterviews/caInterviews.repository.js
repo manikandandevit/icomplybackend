@@ -266,8 +266,14 @@ export const caInterviewsRepository = {
           }
         } else if (finalStatus === 'Rejected' && updated.candidateId) {
           await db.query(
-            `UPDATE public.ca_candidates SET stage = 'Rejected' WHERE id = $1 AND created_by_company_id = $2`,
+            `UPDATE public.ca_candidates SET stage = 'Rejected' WHERE id = $1 AND (created_by_company_id = $2 OR $2 IS NULL)`,
             [updated.candidateId, companyId]
+          );
+        } else if (updated.candidateId && finalStatus) {
+          const candidateStage = finalStatus === 'On Hold' ? 'On Hold' : finalStatus;
+          await db.query(
+            `UPDATE public.ca_candidates SET stage = $1, updated_at = NOW() WHERE id = $2 AND (created_by_company_id = $3 OR $3 IS NULL)`,
+            [candidateStage, updated.candidateId, companyId]
           );
         }
         if (updated.candidateId) {

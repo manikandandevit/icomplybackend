@@ -815,9 +815,20 @@ export const caCandidatesRepository = {
           : `${rawType} interview`;
         const roundTitle = `Round ${roundIdx}: ${typeLabel}`;
 
-        const effectiveStatus = isCandidateRejected && (interview.status === "Scheduled" || !interview.status)
-          ? "Cancelled"
-          : (interview.feedback ? "Completed" : (interview.status || "Scheduled"));
+        let effectiveStatus = interview.status;
+        if (isCandidateRejected && (effectiveStatus === "Scheduled" || !effectiveStatus)) {
+          effectiveStatus = "Cancelled";
+        } else if (effectiveStatus === "Completed" || effectiveStatus === "Passed" || effectiveStatus === "Cleared" || (!effectiveStatus && interview.feedback)) {
+          effectiveStatus = roundIdx === 1
+            ? "First Round Shortlisted"
+            : roundIdx === 2
+              ? "Second Round Shortlisted"
+              : roundIdx === 3
+                ? "Final Round Shortlisted"
+                : "HR Round";
+        } else if (!effectiveStatus) {
+          effectiveStatus = "Scheduled";
+        }
 
         interviewRounds.push({
           id: interview.id,
@@ -832,6 +843,7 @@ export const caCandidatesRepository = {
           meetingLink: interview.meetingLink || row.meeting_link || "",
           venue: interview.venue || row.venue || "",
           status: effectiveStatus,
+          outcomeStatus: interview.status || effectiveStatus,
           inviteSent: interview.inviteSent !== undefined ? !!interview.inviteSent : true,
           inviteSentAt: interview.inviteSentAt || row.invite_sent_at || row.created_at || new Date().toISOString(),
           feedback: isCandidateRejected ? "" : (interview.feedback || ""),
@@ -1162,6 +1174,8 @@ export const caCandidatesRepository = {
       mappedStage = "Rejected";
     } else if (outcomeStatus === "On Hold") {
       mappedStage = "On Hold";
+    } else if (outcomeStatus) {
+      mappedStage = outcomeStatus;
     }
 
     if (numId > 0) {
