@@ -72,7 +72,7 @@ export const caCandidatesService = {
           hasOpening = openings.some(
             (o) => String(o.role_name || "").trim().toLowerCase() === String(payload.role || "").trim().toLowerCase()
           );
-        } catch (_) {}
+        } catch (_) { }
       }
 
       const isRehire = Boolean(
@@ -87,7 +87,7 @@ export const caCandidatesService = {
             `UPDATE public.ca_job_requisitions SET approval_status = 'Approved', status = 'Open', updated_at = NOW() WHERE id = $1`,
             [matchingReq.id]
           );
-        } catch (_) {}
+        } catch (_) { }
       } else if (!matchingReq && isRehire) {
         // Auto-create an approved requisition for this rehire position if one doesn't exist
         try {
@@ -97,7 +97,7 @@ export const caCandidatesService = {
             ) VALUES ($1, 'Approved', 'Open', $2, NOW(), NOW())`,
             [payload.role, companyId]
           );
-        } catch (_) {}
+        } catch (_) { }
       } else if (!matchingReq && !hasOpening && reqs.length > 0 && !isRehire) {
         throw new AppError(
           `Cannot add candidate: Position "${payload.role}" does not have an approved job requisition. Candidate details can only be uploaded for approved positions.`,
@@ -124,7 +124,7 @@ export const caCandidatesService = {
       prev = await caCandidatesRepository.findById(id, companyId);
       wasAlreadyRejected = (prev?.stage === "Rejected") || Boolean(prev?.rejectionEmailSentAt);
       wasAlreadySelected = (prev?.stage === "Selected") || Boolean(prev?.selectionEmailSentAt);
-    } catch {}
+    } catch { }
 
     const updated = await caCandidatesRepository.update(id, companyId, payload);
     if (!updated) {
@@ -133,10 +133,10 @@ export const caCandidatesService = {
 
     // Reset rejection/selection timestamps if candidate moves out of those states
     if (prev?.stage === "Rejected" && payload?.stage && payload.stage !== "Rejected") {
-      await db.query(`UPDATE public.ca_candidates SET rejection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => {});
+      await db.query(`UPDATE public.ca_candidates SET rejection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => { });
     }
     if (prev?.stage === "Selected" && payload?.stage && payload.stage !== "Selected") {
-      await db.query(`UPDATE public.ca_candidates SET selection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => {});
+      await db.query(`UPDATE public.ca_candidates SET selection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => { });
     }
 
     if (payload?.stage === "Shortlisted") {
@@ -170,7 +170,7 @@ export const caCandidatesService = {
             roundName: payload.stage,
           }).catch((e) => console.error("Failed to trigger interview email on update:", e));
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     return updated;
@@ -185,7 +185,7 @@ export const caCandidatesService = {
       prevStage = prev?.stage;
       wasAlreadyRejected = (prevStage === "Rejected") || Boolean(prev?.rejectionEmailSentAt);
       wasAlreadySelected = (prevStage === "Selected") || Boolean(prev?.selectionEmailSentAt);
-    } catch {}
+    } catch { }
 
     const updated = await caCandidatesRepository.updateStage(id, companyId, stage, assessmentCount);
     if (!updated) {
@@ -194,12 +194,12 @@ export const caCandidatesService = {
 
     // If candidate was previously rejected and is now re-opened into an active stage, reset rejection timestamp
     if (prevStage === "Rejected" && stage !== "Rejected") {
-      await db.query(`UPDATE public.ca_candidates SET rejection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => {});
+      await db.query(`UPDATE public.ca_candidates SET rejection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => { });
     }
 
     // If candidate was previously selected and is now moved to another stage, reset selection timestamp
     if (prevStage === "Selected" && stage !== "Selected") {
-      await db.query(`UPDATE public.ca_candidates SET selection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => {});
+      await db.query(`UPDATE public.ca_candidates SET selection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => { });
     }
 
     // When candidate is shortlisted for the interview process
@@ -335,7 +335,7 @@ export const caCandidatesService = {
             if (rows[0]?.joining_date) {
               finalDoj = rows[0].joining_date;
             }
-          } catch (e) {}
+          } catch (e) { }
         }
         if (!finalDoj && payload.date) {
           finalDoj = payload.date;
