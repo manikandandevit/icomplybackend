@@ -249,6 +249,17 @@ export const caPayrollRunsController = {
     }
   },
 
+  /** Employee (mobile): one own payslip as JSON (native in-app view). */
+  async getMyPayslipDetail(req, res, next) {
+    try {
+      if (!req.employeeId) throw new AppError("Employee access only", 403, "FORBIDDEN");
+      const data = await caPayrollRunsService.getMyPayslipDetail(req.companyId, req.employeeId, req.params.id);
+      return success(res, { data, message: "Payslip fetched successfully" });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   /** Employee (mobile): PDF of one own payslip. ?download=1 → attachment. */
   async getMyPayslipPdf(req, res, next) {
     try {

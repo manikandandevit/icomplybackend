@@ -313,47 +313,251 @@ const payslipLogoUrl = () => {
 };
 
 /**
- * Builds the payslip PDF (same template as the emailed one).
- * p: payslip (mapPayslip), emp: employee record, estName, monthYear, logoUrlForHtml.
+ * Payslip currency from the establishment's country:
+ * Singapore → S$, Malaysia → RM, otherwise ₹ (India).
  */
-export const buildPayslipPdf = async ({ p, emp, estName, monthYear, logoUrlForHtml = "", format = "pdf" }) => {
-  // Extract earnings list
+export const currencyForCountry = (country) => {
+  const text = String(country ?? "").trim().toLowerCase();
+  if (text.includes("singapore") || text === "sg") return { code: "SGD", symbol: "S$", html: "S$", locale: "en-SG", word: "Singapore Dollars" };
+  if (text.includes("malaysia") || text === "my") return { code: "MYR", symbol: "RM", html: "RM", locale: "en-MY", word: "Ringgit" };
+  return { code: "INR", symbol: "\u20B9", html: "&#8377;", locale: "en-IN", word: "Rupees" };
+};
+
+/** Currency for an employee, via their establishment's country. */
+const currencyForEmployee = async (emp) => {
+  try {
+    const est = emp?.establishmentId ? await caEstablishmentsRepository.findById(emp.establishmentId) : null;
+    return currencyForCountry(est?.countryName);
+  } catch {
+    return currencyForCountry("");
+  }
+};
+
+/** Earnings / deductions lines of a payslip (used by the PDF, image and mobile view). */
+const payslipLines = (p) => {
+  const bd = p?.breakdown || {};
   const earningsList = [];
-  if (p.breakdown && p.breakdown.earnings && typeof p.breakdown.earnings === "object") {
-    Object.values(p.breakdown.earnings).forEach((info) => {
-      const amt = info.earnedAmount ?? info.amount ?? 0;
-      if (amt > 0) earningsList.push({ name: info.name || "Earning", amount: amt });
+  if (bd.earnings && typeof bd.earnings === "object") {
+    Object.values(bd.earnings).forEach((info) => {
+      const amt = Number(info?.earnedAmount ?? info?.amount ?? 0) || 0;
+      if (amt > 0) earningsList.push({ name: info?.name || "Earning", amount: amt });
     });
-  } else if (p.breakdown && p.breakdown.components) {
-    Object.entries(p.breakdown.components).forEach(([name, amount]) => {
-      if (amount > 0) earningsList.push({ name, amount });
+  } else if (bd.components) {
+    Object.entries(bd.components).forEach(([name, amount]) => {
+      if (Number(amount) > 0) earningsList.push({ name, amount: Number(amount) });
     });
   }
-  if (p.breakdown && Number(p.breakdown.otPayAmount) > 0) {
-    earningsList.push({
-      name: `Overtime (${p.breakdown.otHours || "OT"})`,
-      amount: Number(p.breakdown.otPayAmount),
-    });
+  if (Number(bd.otPayAmount) > 0) {
+    earningsList.push({ name: `Overtime (${bd.otHours || "OT"})`, amount: Number(bd.otPayAmount) });
   }
 
-  // Extract deductions list
   const deductionsList = [];
-  if (p.breakdown && p.breakdown.deductions && typeof p.breakdown.deductions === "object") {
-    Object.values(p.breakdown.deductions).forEach((info) => {
-      const amt = info.amount ?? 0;
-      if (amt > 0) deductionsList.push({ name: info.name || "Deduction", amount: amt });
+  if (bd.deductions && typeof bd.deductions === "object") {
+    Object.values(bd.deductions).forEach((info) => {
+      const amt = Number(info?.amount ?? 0) || 0;
+      if (amt > 0) deductionsList.push({ name: info?.name || "Deduction", amount: amt });
     });
-  } else if (p.breakdown && p.breakdown.statutory) {
-    Object.entries(p.breakdown.statutory).forEach(([name, amount]) => {
-      if (amount > 0) deductionsList.push({ name, amount });
-    });
-  }
-  if (p.breakdown && Number(p.breakdown.lopDeductionAmount) > 0) {
-    deductionsList.push({
-      name: "Loss of Pay (LOP)",
-      amount: Number(p.breakdown.lopDeductionAmount),
+  } else if (bd.statutory) {
+    Object.entries(bd.statutory).forEach(([name, amount]) => {
+      if (Number(amount) > 0) deductionsList.push({ name, amount: Number(amount) });
     });
   }
+  if (Number(bd.lopDeductionAmount) > 0) {
+    deductionsList.push({ name: "Loss of Pay (LOP)", amount: Number(bd.lopDeductionAmount) });
+  }
+  return { earningsList, deductionsList };
+};
+
+/** PNG / JPEG data URI → Buffer (pdfkit draws only these), else null. */
+const dataUriToPdfImage = (uri) => {
+  const match = /^data:image\/(png|jpe?g);base64,(.+)$/i.exec(String(uri || ""));
+  return match ? Buffer.from(match[2], "base64") : null;
+};
+
+/**
+ * Payslip PDF with pdfkit — no Chrome needed (works on Render).
+ * Same layout as the HTML payslip: navy header, details, tiles, earnings/deductions, net bar.
+ */
+const buildPayslipPdfKit = async ({ p, emp, estName, monthYear, logoUrlForHtml = "", currency }) => {
+  try {
+    await outfitFontCss(); // downloads the Outfit TTFs once (cached in assets/fonts)
+  } catch {
+    /* fall back to Helvetica */
+  }
+
+  const { earningsList, deductionsList } = payslipLines(p);
+  const bd = p.breakdown || {};
+  const gross = Math.round(Number(p.grossPay) || 0);
+  const totalDeductions = Math.round(Number(p.deductions) || 0);
+  const net = Math.round(Number(p.netPay) || 0);
+
+  const doc = new PDFDocument({ size: "A4", margin: 0, info: { Title: `Payslip ${monthYear}` } });
+  const chunks = [];
+  doc.on("data", (chunk) => chunks.push(chunk));
+  const done = new Promise((resolve, reject) => {
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+  });
+
+  const fontFile = (w) => path.join(FONT_DIR, `Outfit-${w}.ttf`);
+  const hasOutfit = [400, 600, 700].every((w) => fs.existsSync(fontFile(w)));
+  const F = hasOutfit
+    ? { regular: "Outfit-400", medium: "Outfit-600", bold: "Outfit-700" }
+    : { regular: "Helvetica", medium: "Helvetica-Bold", bold: "Helvetica-Bold" };
+  if (hasOutfit) [400, 600, 700].forEach((w) => doc.registerFont(`Outfit-${w}`, fontFile(w)));
+
+  // ₹ only if the font has the glyph; otherwise "Rs."
+  let symbol = currency.symbol;
+  if (currency.code === "INR") {
+    let ok = false;
+    try {
+      doc.font(F.regular);
+      ok = Boolean(doc._font?.font?.hasGlyphForCodePoint?.(0x20b9));
+    } catch {
+      ok = false;
+    }
+    if (!ok) symbol = "Rs.";
+  }
+  const money = (value) => `${symbol} ${Math.round(Number(value) || 0).toLocaleString(currency.locale)}`;
+
+  const W = doc.page.width;
+  const M = 36;
+  const CW = W - M * 2;
+  const NAVY = "#1E3463";
+  const DARK = "#0c2340";
+  const TEXT = "#1e293b";
+  const MUTED = "#64748b";
+  const LINE = "#e2e8f0";
+
+  const text = (value, x, y, opts = {}) => {
+    const { font = F.regular, size = 10, color = TEXT, opacity = 1, ...rest } = opts;
+    doc.font(font).fontSize(size).fillColor(color, opacity).text(String(value ?? ""), x, y, { lineBreak: false, ...rest });
+    doc.fillOpacity(1);
+  };
+  const panel = (x, y, w, h) => {
+    doc.save().lineWidth(0.8).roundedRect(x, y, w, h, 4).fillAndStroke("#ffffff", LINE).restore();
+  };
+
+  // Page background
+  doc.rect(0, 0, W, doc.page.height).fill("#f5f7fa");
+
+  // Header
+  doc.rect(0, 0, W, 96).fill(NAVY);
+  let titleX = M;
+  const logo = dataUriToPdfImage(logoUrlForHtml);
+  if (logo) {
+    try {
+      doc.save().roundedRect(M, 22, 52, 52, 4).fill("#ffffff").restore();
+      doc.image(logo, M + 4, 26, { fit: [44, 44], align: "center", valign: "center" });
+      titleX = M + 66;
+    } catch {
+      titleX = M;
+    }
+  }
+  text(estName || "Your Company", titleX, 30, { font: F.bold, size: 16, color: "#ffffff", width: CW - (titleX - M) - 140, ellipsis: true, height: 20 });
+  text(`Payslip for ${monthYear}`, titleX, 54, { size: 10.5, color: "#ffffff", opacity: 0.75 });
+  text("PAYSLIP", M, 32, { font: F.bold, size: 17, color: "#ffffff", width: CW, align: "right" });
+  text(monthYear, M, 56, { size: 10, color: "#ffffff", opacity: 0.75, width: CW, align: "right" });
+
+  let y = 114;
+
+  // Employee details
+  const details = [
+    ["Employee name", p.employeeName || emp.name || "-"],
+    ["Employee code", p.employeeCode || emp.employeeCode || "-"],
+    ["Designation", emp.designationName || "-"],
+    ["Department", emp.departmentName || "-"],
+    ["Monthly CTC", money(p.ctc)],
+    ["Working days", bd.workingDays ?? 30],
+    ["Days present", bd.daysPresent ?? 0],
+    ["Payable days", bd.payableDays ?? bd.daysPresent ?? 0],
+  ];
+  const detailsH = 30 + 2 * 38 + 6;
+  panel(M, y, CW, detailsH);
+  text("Employee details", M + 14, y + 12, { font: F.bold, size: 11, color: NAVY });
+  text(`Pay period: ${monthYear}`, M + 14, y + 13, { size: 9, color: MUTED, width: CW - 28, align: "right" });
+  doc.save().moveTo(M + 14, y + 30).lineTo(M + CW - 14, y + 30).lineWidth(0.6).strokeColor(LINE).stroke().restore();
+  const colW = (CW - 28) / 4;
+  details.forEach(([label, value], i) => {
+    const cx = M + 14 + (i % 4) * colW;
+    const cy = y + 40 + Math.floor(i / 4) * 38;
+    text(label, cx, cy, { size: 8, color: MUTED });
+    text(value, cx, cy + 12, { font: F.medium, size: 10, color: TEXT, width: colW - 8, ellipsis: true, height: 14 });
+  });
+  y += detailsH + 12;
+
+  // Tiles
+  const tileW = (CW - 20) / 3;
+  [
+    ["Gross earnings", gross, false],
+    ["Total deductions", totalDeductions, false],
+    ["Net pay", net, true],
+  ].forEach(([label, value, isNet], i) => {
+    const tx = M + i * (tileW + 10);
+    if (isNet) doc.save().roundedRect(tx, y, tileW, 58, 4).fill(NAVY).restore();
+    else panel(tx, y, tileW, 58);
+    text(label, tx + 14, y + 12, { size: 8.5, color: isNet ? "#ffffff" : MUTED, opacity: isNet ? 0.75 : 1 });
+    text(money(value), tx + 14, y + 28, { font: F.bold, size: 15, color: isNet ? "#ffffff" : NAVY, width: tileW - 28, ellipsis: true, height: 20 });
+  });
+  y += 58 + 12;
+
+  // Earnings / deductions
+  const rowH = 22;
+  const rowsCount = Math.max(earningsList.length, deductionsList.length, 1);
+  const splitW = (CW - 12) / 2;
+  const splitH = 32 + rowsCount * rowH + 34;
+  if (y + splitH > doc.page.height - 130) {
+    doc.addPage({ size: "A4", margin: 0 });
+    doc.rect(0, 0, W, doc.page.height).fill("#f5f7fa");
+    y = M;
+  }
+  const column = (x, title, list, total, totalLabel, sign) => {
+    panel(x, y, splitW, splitH);
+    text(title, x + 14, y + 12, { font: F.bold, size: 11, color: NAVY });
+    text("Amount", x + 14, y + 13, { size: 9, color: MUTED, width: splitW - 28, align: "right" });
+    doc.save().moveTo(x + 14, y + 30).lineTo(x + splitW - 14, y + 30).lineWidth(0.6).strokeColor(LINE).stroke().restore();
+    const items = list.length ? list : [{ name: "None", amount: 0 }];
+    items.forEach((item, i) => {
+      const ry = y + 38 + i * rowH;
+      text(item.name, x + 14, ry, { size: 9.5, color: TEXT, width: splitW - 120, ellipsis: true, height: 13 });
+      text(`${item.amount > 0 ? sign : ""}${money(item.amount)}`, x + 14, ry, { font: F.medium, size: 9.5, color: TEXT, width: splitW - 28, align: "right" });
+    });
+    const ty = y + splitH - 30;
+    doc.save().rect(x + 0.5, ty - 4, splitW - 1, 33.5).fill("#f1f4f9").restore();
+    text(totalLabel, x + 14, ty + 6, { font: F.bold, size: 10, color: NAVY });
+    text(`${total > 0 ? sign : ""}${money(total)}`, x + 14, ty + 6, { font: F.bold, size: 10, color: NAVY, width: splitW - 28, align: "right" });
+  };
+  column(M, "Earnings", earningsList, gross, "Gross earnings", "");
+  column(M + splitW + 12, "Deductions", deductionsList, totalDeductions, "Total deductions", "- ");
+  y += splitH + 12;
+
+  // Net bar
+  doc.save().roundedRect(M, y, CW, 60, 4).fill(DARK).restore();
+  text("Net salary payable", M + 16, y + 13, { size: 9, color: "#ffffff", opacity: 0.7 });
+  text(`${currency.word} ${numberToWords(net) || "Zero Only"}`, M + 16, y + 29, { font: F.medium, size: 9.5, color: "#ffffff", width: CW - 220, ellipsis: true, height: 26 });
+  text(money(net), M, y + 20, { font: F.bold, size: 18, color: "#ffffff", width: CW - 16, align: "right" });
+  y += 60 + 16;
+
+  // Footer
+  const generatedOn = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  text("This is a system-generated payslip and does not require a signature.", M, y, { size: 8, color: MUTED });
+  text(`Generated on ${generatedOn}`, M, y, { size: 8, color: MUTED, width: CW, align: "right" });
+
+  doc.end();
+  return done;
+};
+
+/**
+ * Builds the payslip PDF''' (same template as the emailed one).
+ * p: payslip (mapPayslip), emp: employee record, estName, monthYear, logoUrlForHtml.
+ */
+export const buildPayslipPdf = async ({ p, emp, estName, monthYear, logoUrlForHtml = "", format = "pdf", currency = currencyForCountry("") }) => {
+  // PDF: pdfkit (no Chrome). PNG image still uses Puppeteer.
+  if (format !== "png") {
+    return buildPayslipPdfKit({ p, emp, estName, monthYear, logoUrlForHtml, currency });
+  }
+
+  const { earningsList, deductionsList } = payslipLines(p);
 
   // ---- Corporate payslip (navy, Outfit, soft raised panels) ----
   const esc = (value) =>
@@ -362,7 +566,7 @@ export const buildPayslipPdf = async ({ p, emp, estName, monthYear, logoUrlForHt
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
-  const inr = (value) => `&#8377;&nbsp;${Math.round(Number(value) || 0).toLocaleString("en-IN")}`;
+  const inr = (value) => `${currency.html}&nbsp;${Math.round(Number(value) || 0).toLocaleString(currency.locale)}`;
   const bd = p.breakdown || {};
   const gross = Math.round(Number(p.grossPay) || 0);
   const totalDeductions = Math.round(Number(p.deductions) || 0);
@@ -582,7 +786,7 @@ export const buildPayslipPdf = async ({ p, emp, estName, monthYear, logoUrlForHt
           <div class="netbar">
             <div>
               <div class="netbar-label">Net salary payable</div>
-              <div class="netbar-words">Rupees ${esc(numberToWords(net) || "Zero Only")}</div>
+              <div class="netbar-words">${esc(currency.word)} ${esc(numberToWords(net) || "Zero Only")}</div>
             </div>
             <div class="netbar-amt">${inr(net)}</div>
           </div>
@@ -976,6 +1180,7 @@ export const caPayrollRunsService = {
         }
 
         const estName = run.establishmentName || "Your Company";
+        const currency = await currencyForEmployee(emp);
         const monthYear = `${run.month} ${run.year}`;
         const subject = `Payslip for ${monthYear}`;
 
@@ -986,7 +1191,7 @@ export const caPayrollRunsService = {
           <body style="font-family: Arial, sans-serif; color: #1e293b; padding: 24px; line-height: 1.6; margin: 0;">
             <p style="font-size: 14px; margin-bottom: 12px;">Dear <strong>${p.employeeName}</strong>,</p>
             <p style="font-size: 14px; margin-bottom: 12px;">Please find attached your payslip for <strong>${monthYear}</strong>.</p>
-            <p style="font-size: 14px; margin-bottom: 20px;">Net Pay: <strong style="color: #047857;">&#8377; ${Math.round(p.netPay).toLocaleString("en-IN")}</strong></p>
+            <p style="font-size: 14px; margin-bottom: 20px;">Net Pay: <strong style="color: #047857;">${currency.html} ${Math.round(p.netPay).toLocaleString(currency.locale)}</strong></p>
             <p style="font-size: 13px; color: #64748b; margin-top: 24px;">Regards,<br/><strong>${estName}</strong></p>
           </body>
           </html>
@@ -994,7 +1199,7 @@ export const caPayrollRunsService = {
 
         const named = { ...p, breakdown: await withBreakdownNames(companyId, p.breakdown) };
         const logoDataUri = (await payslipLogoDataUri(companyId, emp)) || logoUrlForHtml;
-        const pdfBuffer = await buildPayslipPdf({ p: named, emp, estName, monthYear, logoUrlForHtml: logoDataUri });
+        const pdfBuffer = await buildPayslipPdf({ p: named, emp, estName, monthYear, logoUrlForHtml: logoDataUri, currency });
 
         await transporter.sendMail({
           from: `"${config.smtp.fromName}" <${config.smtp.email}>`,
@@ -1033,12 +1238,54 @@ export const caPayrollRunsService = {
     const inYear = rows.filter((r) => r.fyStart === year);
     const sum = (key) => inYear.reduce((total, r) => total + (Number(r[key]) || 0), 0);
     const strip = ({ sortKey, ...rest }) => rest;
+    const emp = (await caEmployeesRepository.findById(employeeId, companyId)) || {};
+    const { code, symbol } = await currencyForEmployee(emp);
 
     return {
+      currency: { code, symbol },
       financialYear: { start: year, end: year + 1, label: `${year} - ${year + 1}` },
       latest: rows[0] ? strip(rows[0]) : null,
       totals: { grossPay: sum("grossPay"), deductions: sum("deductions"), netPay: sum("netPay"), count: inYear.length },
       payslips: inYear.map(strip),
+    };
+  },
+
+  /** Employee (mobile): one payslip as JSON, for the native in-app payslip view. */
+  async getMyPayslipDetail(companyId, employeeId, payslipId) {
+    const row = await caPayrollRunsRepository.getEmployeePayslipById(companyId, employeeId, payslipId);
+    if (!row) throw new AppError("Payslip not found", 404, "PAYSLIP_NOT_FOUND");
+
+    const emp = (await caEmployeesRepository.findById(employeeId, companyId)) || {};
+    const p = { ...row, breakdown: await withBreakdownNames(companyId, row.breakdown) };
+    const { earningsList, deductionsList } = payslipLines(p);
+    const bd = p.breakdown || {};
+    const currency = await currencyForEmployee(emp);
+    const item = toEmployeePayslip(row);
+    const net = Math.round(Number(row.netPay) || 0);
+    const round = (list) => list.map(({ name, amount }) => ({ name, amount: Math.round(Number(amount) || 0) }));
+
+    return {
+      id: row.id,
+      monthLabel: item?.monthLabel || `${row.runMonth} ${row.runYear}`,
+      establishmentName: row.establishmentName || "",
+      currency: { code: currency.code, symbol: currency.symbol },
+      employee: {
+        name: row.employeeName || emp.name || "",
+        code: row.employeeCode || emp.employeeCode || "",
+        designation: emp.designationName || "",
+        department: emp.departmentName || "",
+      },
+      ctc: Math.round(Number(row.ctc) || 0),
+      workingDays: Number(bd.workingDays ?? 30) || 0,
+      daysPresent: Number(bd.daysPresent ?? 0) || 0,
+      payableDays: Number(bd.payableDays ?? bd.daysPresent ?? 0) || 0,
+      earnings: round(earningsList),
+      deductions: round(deductionsList),
+      grossPay: Math.round(Number(row.grossPay) || 0),
+      totalDeductions: Math.round(Number(row.deductions) || 0),
+      netPay: net,
+      netPayWords: `${currency.word} ${numberToWords(net) || "Zero Only"}`,
+      paidOn: row.runCreatedAt || row.createdAt || null,
     };
   },
 
@@ -1056,6 +1303,7 @@ export const caPayrollRunsService = {
       monthYear,
       logoUrlForHtml: await payslipLogoDataUri(companyId, emp),
       format,
+      currency: await currencyForEmployee(emp),
     });
     const filename = `Payslip_${String(row.employeeName || "Employee").replace(/\s+/g, "_")}_${monthYear.replace(/\s+/g, "_")}.pdf`;
     return { pdfBuffer, filename };

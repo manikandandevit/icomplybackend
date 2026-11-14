@@ -16,6 +16,7 @@ router.get("/history-by-year", caPayrollRunsController.getRunsByYear);
 
 // Employee (mobile): own payslips + PDF
 router.get("/my-payslips", caPayrollRunsController.getMyPayslips);
+router.get("/my-payslips/:id/detail", caPayrollRunsController.getMyPayslipDetail);
 router.get("/my-payslips/:id/pdf", caPayrollRunsController.getMyPayslipPdf);
 router.get("/my-payslips/:id/image", caPayrollRunsController.getMyPayslipImage);
 
