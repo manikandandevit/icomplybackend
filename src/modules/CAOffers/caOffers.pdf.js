@@ -1,4 +1,7 @@
-import puppeteer from "puppeteer";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import PDFDocument from "pdfkit";
 import { brandingService } from "../Branding/branding.service.js";
 
 let cachedLogoBase64 = null;
@@ -647,6 +650,37 @@ export async function generateOfferLetterHtml(offerOrOptions, companyArg = {}) {
   `;
 }
 
+/** Same field fallbacks as the HTML letter. */
+function resolveOfferFields(offer, company) {
+  const addressParts = [company.street, company.city, company.state, company.pin].filter(Boolean);
+  return {
+    candidateName: offer.candidate || offer.candidateName || offer.name || "Candidate",
+    companyName: company.trade_name || company.legal_name || company.name || offer.companyName || "Standard Global",
+    designation: offer.role || offer.position || "HR Business Partner",
+    departmentName: offer.department || offer.departmentName || "Human Resources",
+    reportingManager: offer.reportingManager || offer.hiringManager || offer.managerName || offer.interviewer || "Rajesh Kumar",
+    dateOfJoining: offer.joiningDate || offer.commenceDate || "28 Oct 2026",
+    workLocation: offer.location || company.city || "Chennai",
+    breakup: parseCtcBreakup(offer.ctc),
+    hrName: company.contact_name || offer.hrName || "HR Department",
+    offerDate: offer.sentOn || new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+    companyAddress: addressParts.length > 0 ? addressParts.join(", ") : "Company Address",
+  };
+}
+
+const FONT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../assets/fonts");
+
+/** PNG / JPEG data URI → Buffer (pdfkit draws only these), else null. */
+function dataUriToImage(uri) {
+  const match = /^data:image\/(png|jpe?g);base64,(.+)$/i.exec(String(uri || ""));
+  return match ? Buffer.from(match[2], "base64") : null;
+}
+
+/**
+ * Offer letter PDF with pdfkit — no Chrome / Puppeteer needed (works on Render).
+ * Same content and look as the HTML letter: logo + gold rule header, address footer,
+ * numbered sections, signature / acceptance, Annexure A (CTC table) and B (documents).
+ */
 export async function generateOfferPdfBuffer(offerOrOptions, companyArg = {}) {
   let offer = offerOrOptions || {};
   let company = companyArg || {};
@@ -654,24 +688,243 @@ export async function generateOfferPdfBuffer(offerOrOptions, companyArg = {}) {
     offer = offerOrOptions.offer;
     company = offerOrOptions.company || companyArg || {};
   }
-  const html = await generateOfferLetterHtml(offer, company);
-  let browser;
-  try {
-    browser = await puppeteer.launch({
-      headless: "new",
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-    });
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15000 });
-    const buffer = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
-    });
-    return buffer;
-  } finally {
-    if (browser) {
-      await browser.close().catch(() => {});
-    }
+  const f = resolveOfferFields(offer, company);
+  const logo = dataUriToImage(await getLogoBase64());
+
+  const doc = new PDFDocument({
+    size: "A4",
+    margins: { top: 92, bottom: 70, left: 57, right: 57 },
+    bufferPages: true,
+    info: { Title: `Offer Cum Appointment Letter - ${f.candidateName}` },
+  });
+  const chunks = [];
+  doc.on("data", (chunk) => chunks.push(chunk));
+  const done = new Promise((resolve, reject) => {
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+  });
+
+  // Fonts: Outfit if cached (assets/fonts), else Helvetica.
+  const fontFile = (w) => path.join(FONT_DIR, `Outfit-${w}.ttf`);
+  const hasOutfit = [400, 700].every((w) => fs.existsSync(fontFile(w)));
+  const R = hasOutfit ? "Outfit-400" : "Helvetica";
+  const B = hasOutfit ? "Outfit-700" : "Helvetica-Bold";
+  if (hasOutfit) {
+    doc.registerFont("Outfit-400", fontFile(400));
+    doc.registerFont("Outfit-700", fontFile(700));
   }
+  let rupee = "Rs.";
+  try {
+    doc.font(R);
+    if (doc._font?.font?.hasGlyphForCodePoint?.(0x20b9)) rupee = "₹";
+  } catch {
+    rupee = "Rs.";
+  }
+  const money = (value) => `${rupee} ${Math.round(Number(value) || 0).toLocaleString("en-IN")}`;
+
+  const NAVY = "#0c2340";
+  const TEXT = "#1e293b";
+  const MUTED = "#475569";
+  const pageW = doc.page.width;
+  const left = doc.page.margins.left;
+  const contentW = pageW - left - doc.page.margins.right;
+  const SIZE = 9.5;
+  const GAP = 3.6;
+
+  // Header (logo + gold rule) and footer (address badge) on every page.
+  const decoratePage = () => {
+    const { margins } = doc.page;
+    const savedBottom = margins.bottom;
+    margins.bottom = 0; // allow drawing in the margin without adding a page
+    const top = 37;
+    let drewLogo = false;
+    if (logo) {
+      try {
+        doc.image(logo, left, top, { fit: [140, 30], valign: "center" });
+        drewLogo = true;
+      } catch {
+        drewLogo = false;
+      }
+    }
+    if (!drewLogo) {
+      doc.font(B).fontSize(16).fillColor("#2563eb").text("i", left, top + 6, { continued: true, lineBreak: false });
+      doc.fillColor(NAVY).text("Comply", { lineBreak: false });
+    }
+    doc.rect(left, top + 38, contentW, 2).fill("#eab308");
+
+    const label = f.companyAddress;
+    doc.font(R).fontSize(8);
+    const labelW = Math.min(doc.widthOfString(label) + 16, contentW);
+    const by = doc.page.height - 28 - 14;
+    doc.roundedRect((pageW - labelW) / 2, by, labelW, 14, 3).fill("#fef08a");
+    doc.fillColor("#713f12").text(label, (pageW - labelW) / 2 + 8, by + 3.5, { width: labelW - 16, align: "center", lineBreak: false, ellipsis: true, height: 10 });
+
+    margins.bottom = savedBottom;
+    doc.x = left;
+    doc.y = margins.top;
+    doc.fillColor(TEXT);
+  };
+  doc.on("pageAdded", decoratePage);
+  decoratePage();
+
+  /** Paragraph with **bold** parts. */
+  const para = (textWithMarks, opts = {}) => {
+    const parts = String(textWithMarks).split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
+    doc.fillColor(TEXT).fontSize(SIZE);
+    parts.forEach((part, i) => {
+      const bold = part.startsWith("**") && part.endsWith("**");
+      const last = i === parts.length - 1;
+      doc.font(bold ? B : R).text(bold ? part.slice(2, -2) : part, {
+        width: contentW,
+        align: "justify",
+        lineGap: GAP,
+        continued: !last,
+        ...opts,
+      });
+    });
+    doc.moveDown(0.45);
+  };
+  const ensureSpace = (height) => {
+    if (doc.y + height > doc.page.height - doc.page.margins.bottom) doc.addPage();
+  };
+  const section = (title) => {
+    ensureSpace(48);
+    doc.moveDown(0.35);
+    doc.font(B).fontSize(10.5).fillColor(NAVY).text(title, left, doc.y, { width: contentW });
+    doc.moveDown(0.2);
+  };
+  const center = (value, size, top = 0, bottom = 0.6) => {
+    doc.moveDown(top);
+    doc.font(B).fontSize(size).fillColor(NAVY).text(value, left, doc.y, { width: contentW, align: "center" });
+    doc.moveDown(bottom);
+  };
+
+  const b = (value) => `**${String(value ?? "").replace(/\*/g, "")}**`;
+  const annual = money(f.breakup.annualCtc);
+  const words = numberToWordsIndian(f.breakup.annualCtc);
+
+  center("Offer Cum Appointment Letter", 14, 0.3, 0.8);
+  doc.font(B).fontSize(SIZE).fillColor(NAVY).text(`Dear ${f.candidateName},`, left, doc.y, { width: contentW });
+  doc.moveDown(0.5);
+  para(`We are pleased to offer you employment with ${b(f.companyName)} for the position of ${b(f.designation)}, subject to the terms and conditions set out in this Offer-cum-Appointment Letter.`);
+
+  const sections = [
+    ["1. Appointment", [`You are appointed as ${b(f.designation)}, in the department of ${b(f.departmentName)}, reporting to ${b(f.reportingManager)}. Your employment will commence on ${b(f.dateOfJoining)}. Your initial place of work will be ${b(f.workLocation)}. The Company may reasonably change your reporting structure, responsibilities, work location or assignment based on business requirements, subject to applicable law.`]],
+    ["2. Nature of Employment", ["Your employment is on a full-time basis. You are expected to devote your professional time, attention and abilities to the business of the Company during working hours and perform your responsibilities diligently and professionally. You shall not undertake outside employment, consultancy, freelance work or other professional engagement that conflicts with your responsibilities without prior written approval."]],
+    ["3. Compensation", [`Your annual Cost to Company (CTC) will be ${b(annual)} per annum. (in words ${b(words)} per annum). The detailed compensation structure is provided in Annexure A. Your salary will be paid monthly through the Company’s regular payroll process, subject to applicable taxes and other statutory or authorised deductions, as applicable.`]],
+    ["4. Statutory Benefits and Deductions", [
+      "You will be entitled to statutory benefits and leave applicable to your employment in accordance with the applicable laws and regulations. Any statutory deductions, taxes or contributions applicable to you will be made from your salary as required by law.",
+      "Where any statutory benefit or contribution becomes applicable to the Company or to your employment based on the applicable legal requirements, the Company will comply with such requirements accordingly.",
+    ]],
+    ["5. Probation", [
+      `You will initially be on probation for a period of ${b("3 months")} from your date of joining. During the probation period, your performance, conduct, attendance, skills and overall suitability for the role will be assessed.`,
+      "Upon satisfactory completion of the 3-month probation period, you will be confirmed as a permanent employee of the Company. If there are any changes to your employment status, including extension of probation or other applicable changes, you will be formally notified in writing by the Company.",
+    ]],
+    ["6. Working Hours", [
+      `Your normal working hours will be ${b("Monday to Friday, 09:30 AM to 05:30 PM")}. In addition, the ${b("1st and 3rd Saturdays")} of each month will be working days during the same working hours. Sundays and other declared holidays will be observed as weekly offs/holidays, as applicable.`,
+      "Business or client requirements may occasionally require additional working time, subject to applicable law and Company policy.",
+    ]],
+    ["7. Leave and Holidays", ["You will be entitled to leave, holidays and weekly offs in accordance with applicable law, the Company’s Leave Policy and applicable establishment rules. Leave must normally be applied for and approved through the designated process."]],
+    ["8. Duties and Responsibilities", ["You shall perform assigned duties professionally and diligently, meet reasonable performance expectations, comply with lawful instructions, maintain professional conduct, protect Company property and information, comply with security and technology requirements and follow applicable Company policies."]],
+    ["9. Confidentiality", ["During and after employment, you shall protect confidential Information belonging to the Company, customers, employees, vendors and business partners. Confidential Information includes source code, software architecture, algorithms, databases, customer information, pricing, business plans, financial information, technical documentation, credentials, intellectual property, employee information, contracts, proposals, trade secrets and other non-public information. You shall use such information only for authorised purposes and report suspected unauthorised access, disclosure or loss."]],
+    ["10. Intellectual Property Rights", ["To the extent permitted by applicable law, intellectual property created, developed, designed, conceived or contributed to by you during employment, in connection with your duties, using Company resources or confidential information, or specifically for Company/client projects, shall belong to the Company. This includes software/source code, applications, APIs, databases, documentation, UI/UX designs, inventions, processes, technical solutions, reports, presentations, AI prompts/workflows, automation scripts and other work products. You agree to execute reasonable documents required to establish or protect such rights."]],
+    ["11. Company Systems and Information Security", [
+      "Employees may use their own personal devices, including laptops and mobile devices, for authorised Company work, subject to the Company’s applicable information security requirements.",
+      "You are responsible for maintaining the security of your device and protecting Company information, systems, applications, credentials and data accessed through it. You must keep your device reasonably secured, use appropriate passwords and authentication measures, avoid unauthorised software or data transfers, and follow the Company’s information security and acceptable-use requirements.",
+      "Company information must not be copied, shared, stored or transferred through unauthorised applications, personal accounts, external storage or other insecure channels. Any suspected loss, unauthorised access, data breach or security incident involving Company information must be reported to the Company promptly.",
+    ]],
+    ["12. Personal Data and Privacy", ["The Company may collect and process your personal information for legitimate employment purposes including recruitment, payroll, statutory compliance, attendance, benefits, performance management, employee administration, security and legal/regulatory requirements. Such information will be handled in accordance with applicable privacy and data-protection requirements and Company policies."]],
+    ["13. Conflict of Interest", ["You must disclose actual or potential conflicts of interest that could reasonably affect your duties. You shall not use your position, Company information, resources or business relationships for unauthorised personal benefit."]],
+    ["14. Company Property", ["All Company property provided to you remains the Company’s property, including laptops, mobile devices, ID cards, documents, files, storage devices, software, credentials, equipment and intellectual property. You must return all Company property upon request and upon cessation of employment."]],
+    ["15. Company Policies", ["You agree to comply with applicable Company policies, including Code of Conduct, Information Security, Data Protection, POSH, Leave and Attendance, Remote/Hybrid Working, Acceptable Use of IT, Conflict of Interest, Intellectual Property, Expense Management and Disciplinary Procedures. Policies may be amended from time to time in accordance with applicable law."]],
+    ["16. Prevention of Sexual Harassment", ["The Company is committed to maintaining a workplace free from sexual harassment and discrimination. Employees must comply with the Company’s POSH policy and applicable law. Complaints will be handled through the designated mechanism and Internal Committee, where applicable."]],
+    ["17. Background Verification", ["This appointment is subject to satisfactory verification of information and documents provided by you. The Company may verify qualifications, employment history, professional credentials, references, identity/address information and other relevant information as legally permissible. Material falsification or deliberate concealment may result in appropriate action in accordance with applicable law and policy."]],
+    ["18. Notice Period", [`After confirmation, either you or the Company may terminate employment by providing ${b("30 days’ written notice")}, or such other notice as may be applicable under law, contract or Company policy. The Company may waive or reduce the notice period or relieve you earlier, with any applicable payment in lieu governed by Company policy and applicable law.`]],
+    ["19. Termination for Cause", ["The Company may take disciplinary action, including termination, for serious misconduct or other lawful grounds, subject to applicable law and disciplinary procedures. Examples may include fraud, theft, serious confidentiality breaches, deliberate falsification, serious misuse of Company systems, wilful security violations or other material breaches of employment obligations."]],
+    ["20. Resignation and Exit Formalities", ["Upon resignation or termination, you shall complete applicable handover, return Company property, return or delete confidential information as instructed, transfer project information, settle authorised dues and cooperate with reasonable exit procedures. Final settlement and statutory documents will be processed in accordance with applicable law and Company procedures."]],
+    ["21. Non-Solicitation", ["To the extent permitted by applicable law, during employment you shall not misuse confidential information or Company resources to solicit Company employees, customers or business partners for an unauthorised competing purpose. Any post-employment restriction shall apply only to the extent legally enforceable."]],
+    ["22. Professional Conduct", ["You are expected to maintain professional behaviour and treat colleagues, customers, vendors and business partners respectfully. Discrimination, harassment, bullying, threats, violence, retaliation and other serious misconduct will not be tolerated."]],
+    ["23. Place of Work and Transfer", ["Based on business requirements, you may be required to work from another Company location, client location or approved remote location, subject to reasonable notice and applicable law. Material changes to fundamental employment conditions will be communicated separately."]],
+    ["24. Performance Review", ["Your performance may be reviewed periodically based on quality, productivity, professional capability, teamwork, attendance, customer satisfaction, achievement of objectives and policy compliance. Performance reviews do not automatically guarantee salary increases, bonuses or promotions."]],
+    ["25. Changes to Terms", ["The Company may update policies, procedures and administrative practices from time to time. Any material change to fundamental employment terms will be communicated in writing and will be subject to applicable law."]],
+    ["26. Governing Law and Jurisdiction", ["This employment relationship shall be governed by the laws applicable in India. Subject to applicable statutory dispute-resolution mechanisms, courts/authorities having appropriate jurisdiction over the Company’s establishment and the relevant employment relationship shall have jurisdiction."]],
+    ["27. Entire Understanding", ["This letter, its annexure and applicable Company policies constitute the understanding between you and the Company concerning your employment and supersede prior discussions relating to the same subject matter, except where expressly stated otherwise in writing. If any provision is invalid or unenforceable, the remaining provisions shall continue to the extent permitted by law."]],
+    ["28. Acceptance", [`Please sign and return a copy of this letter as confirmation that you have read, understood and accepted the terms and conditions of employment. We look forward to your contribution and wish you a successful career with ${b(f.companyName)}.`]],
+  ];
+  for (const [title, paragraphs] of sections) {
+    section(title);
+    paragraphs.forEach((p) => para(p));
+  }
+
+  // Signature + employee acceptance (kept together on one page)
+  ensureSpace(230);
+  doc.moveDown(0.8);
+  para(`**For ${f.companyName.replace(/\*/g, "")}.**`);
+  doc.moveDown(0.8);
+  para(`Name: ${b(f.hrName)}`, { align: "left" });
+  para(`Designation: ${b("Authorized Signatory")}`, { align: "left" });
+  para(`Date: ${b(f.offerDate)}`, { align: "left" });
+  doc.moveDown(1);
+  doc.font(B).fontSize(10.5).fillColor(NAVY).text("EMPLOYEE ACCEPTANCE", left, doc.y, { width: contentW });
+  doc.moveDown(0.4);
+  para(`I, ${b(f.candidateName)}, confirm that I have read, understood and accepted the terms and conditions contained in this Offer-cum-Appointment Letter and its annexure(A&B).`);
+  doc.moveDown(1.6);
+  para("Employee Signature: __________________________", { align: "left" });
+  para(`Name: ${b(f.candidateName)}`, { align: "left" });
+  para("Date: __________________________", { align: "left" });
+
+  // Annexure A — compensation table
+  doc.addPage();
+  center("ANNEXURE A — COMPENSATION STRUCTURE", 11.5, 0.2, 0.8);
+  const cols = [contentW * 0.4, contentW * 0.3, contentW * 0.3];
+  const rowH = 24;
+  const tableRow = (cells, { header = false, total = false } = {}) => {
+    const y = doc.y;
+    let x = left;
+    cells.forEach((cell, i) => {
+      if (header) doc.rect(x, y, cols[i], rowH).fillAndStroke(NAVY, NAVY);
+      else if (total) doc.rect(x, y, cols[i], rowH).fillAndStroke("#f8fafc", "#cbd5e1");
+      else doc.rect(x, y, cols[i], rowH).lineWidth(0.8).stroke("#cbd5e1");
+      doc
+        .font(header || total || i === 0 ? B : R)
+        .fontSize(SIZE)
+        .fillColor(header ? "#ffffff" : TEXT)
+        .text(cell, x + 12, y + 7.5, { width: cols[i] - 24, align: i === 0 ? "left" : "center", lineBreak: false });
+      x += cols[i];
+    });
+    if (total) doc.save().moveTo(left, y).lineTo(left + contentW, y).lineWidth(2).stroke(NAVY).restore();
+    doc.x = left;
+    doc.y = y + rowH;
+  };
+  const cur = rupee === "Rs." ? "Rs." : "₹";
+  const k = f.breakup;
+  tableRow(["Component", `Monthly (${cur})`, `Annual (${cur})`], { header: true });
+  tableRow(["Basic Salary", money(k.monthlyBasic), money(k.annualBasic)]);
+  tableRow(["HRA", money(k.monthlyHra), money(k.annualHra)]);
+  tableRow(["Special Allowance", money(k.monthlySpecial), money(k.annualSpecial)]);
+  tableRow(["Total CTC", money(k.monthlyCtc), money(k.annualCtc)], { total: true });
+  doc.moveDown(0.5);
+  doc.font(B).fontSize(8.5).fillColor(MUTED).text("**Applicable statutory and authorised deductions will be made as per prevailing laws.", left, doc.y, { width: contentW });
+
+  // Annexure B — documents
+  doc.moveDown(2);
+  center("ANNEXURE B — DOCUMENTS TO BE SUBMITTED", 10.5, 0, 0.8);
+  [
+    "Identity proof",
+    "Address proof",
+    "PAN",
+    "Aadhaar",
+    "Educational certificates(Highest Degree)",
+    "Previous employment documents (if any)",
+    "Bank account details (Front page of passbook)",
+    "Passport-size photograph",
+    "UAN/PF details, where applicable",
+  ].forEach((item) => {
+    const y = doc.y;
+    doc.circle(left + 14, y + 5, 1.6).fill(TEXT);
+    doc.font(R).fontSize(SIZE).fillColor(TEXT).text(item, left + 24, y, { width: contentW - 24, lineGap: 5 });
+  });
+
+  doc.end();
+  return done;
 }
