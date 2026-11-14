@@ -301,6 +301,26 @@ export const caCandidatesRepository = {
       }
     }
 
+    if (!establishmentId && payload.countryName) {
+      try {
+        const estRes = await db.query(
+          `SELECT id, name, company_id FROM public.ca_establishments 
+           WHERE LOWER(TRIM(country_name)) = LOWER(TRIM($1)) 
+             AND (company_id = $2 OR created_by_company_id = $2)
+           ORDER BY id ASC
+           LIMIT 1`,
+          [payload.countryName, companyId || 0]
+        );
+        if (estRes.rows[0]) {
+          establishmentId = String(estRes.rows[0].id);
+          establishmentName = estRes.rows[0].name;
+          if (!targetCompanyId && estRes.rows[0].company_id) {
+            targetCompanyId = estRes.rows[0].company_id;
+          }
+        }
+      } catch (_) {}
+    }
+
     const cleanStage = payload.stage || 'Applied';
     const initials = payload.initials || (payload.name ? payload.name.split(' ').map(w => w[0]).join('').slice(0, 4).toUpperCase() : '');
     const details = payload.details || `${payload.experience || '0 yrs'} · ${payload.location || 'Remote'}`;
@@ -1224,7 +1244,7 @@ export const caCandidatesRepository = {
           `INSERT INTO public.ca_offers (
             created_by_company_id, candidate_id, candidate_name, role, status, ctc, joining_bonus, joining_date, sent_on
           )
-          SELECT $1, $2, $3, $4, 'Pending Acceptance', '₹96,000/mo', '₹1,20,000', TO_CHAR(NOW() + INTERVAL '15 days', 'DD Mon YYYY'), $5
+          SELECT $1, $2, $3, $4, 'Pending Acceptance', NULL, NULL, TO_CHAR(NOW() + INTERVAL '15 days', 'DD Mon YYYY'), $5
           WHERE NOT EXISTS (
             SELECT 1 FROM public.ca_offers WHERE candidate_id = $2 AND created_by_company_id = $1
           )`,

@@ -257,7 +257,7 @@ export const caInterviewsRepository = {
               `INSERT INTO public.ca_offers (
                 created_by_company_id, candidate_id, candidate_name, role, status, ctc, joining_bonus, joining_date, sent_on
               )
-              SELECT $1, $2, $3, $4, 'Pending Acceptance', '₹96,000/mo', '₹1,20,000', TO_CHAR(NOW() + INTERVAL '15 days', 'DD Mon YYYY'), $5
+              SELECT $1, $2, $3, $4, 'Pending Acceptance', NULL, NULL, TO_CHAR(NOW() + INTERVAL '15 days', 'DD Mon YYYY'), $5
               WHERE NOT EXISTS (
                 SELECT 1 FROM public.ca_offers WHERE candidate_id = $2 AND created_by_company_id = $1
               )`,
@@ -358,7 +358,7 @@ export const caInterviewsRepository = {
             `INSERT INTO public.ca_offers (
               created_by_company_id, candidate_id, candidate_name, role, status, ctc, joining_bonus, joining_date, sent_on
             )
-            SELECT $1, $2, $3, $4, 'Pending Acceptance', '₹96,000/mo', '₹1,20,000', TO_CHAR(NOW() + INTERVAL '15 days', 'DD Mon YYYY'), $5
+            SELECT $1, $2, $3, $4, 'Pending Acceptance', NULL, NULL, TO_CHAR(NOW() + INTERVAL '15 days', 'DD Mon YYYY'), $5
             WHERE NOT EXISTS (
               SELECT 1 FROM public.ca_offers WHERE candidate_id = $2 AND created_by_company_id = $1
             )`,

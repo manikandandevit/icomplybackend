@@ -75,6 +75,11 @@ export const caCandidatesService = {
         } catch (_) {}
       }
 
+      const isRehire = Boolean(
+        payload?.isRehire ||
+        String(payload?.source || "").toLowerCase().includes("rehire")
+      );
+
       if (matchingReq && String(matchingReq.approval_status || "").toLowerCase() !== "approved") {
         // Auto-approve the requisition since an admin is creating a candidate for it
         try {
@@ -83,7 +88,17 @@ export const caCandidatesService = {
             [matchingReq.id]
           );
         } catch (_) {}
-      } else if (!matchingReq && !hasOpening && reqs.length > 0) {
+      } else if (!matchingReq && isRehire) {
+        // Auto-create an approved requisition for this rehire position if one doesn't exist
+        try {
+          await db.query(
+            `INSERT INTO public.ca_job_requisitions (
+              position, approval_status, status, created_by_company_id, created_at, updated_at
+            ) VALUES ($1, 'Approved', 'Open', $2, NOW(), NOW())`,
+            [payload.role, companyId]
+          );
+        } catch (_) {}
+      } else if (!matchingReq && !hasOpening && reqs.length > 0 && !isRehire) {
         throw new AppError(
           `Cannot add candidate: Position "${payload.role}" does not have an approved job requisition. Candidate details can only be uploaded for approved positions.`,
           400,

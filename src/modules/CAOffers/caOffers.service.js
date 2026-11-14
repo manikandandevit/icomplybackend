@@ -409,12 +409,12 @@ export const caOffersService = {
     const resolvedCtc =
       queryOffer?.ctc ||
       offer?.ctc ||
-      "₹96,000/mo";
+      "";
 
     const resolvedBonus =
       queryOffer?.joiningBonus ||
       offer?.joiningBonus ||
-      "₹1,20,000";
+      "";
 
     const resolvedSentOn =
       offer?.sentOn ||

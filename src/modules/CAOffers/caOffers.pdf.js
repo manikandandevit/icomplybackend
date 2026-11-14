@@ -59,7 +59,7 @@ export function numberToWordsIndian(num) {
 }
 
 export function parseCtcBreakup(ctcInput) {
-  const raw = String(ctcInput || "₹96,000/mo")
+  const raw = String(ctcInput || "0")
     .replace(/[₹,]/g, "")
     .trim();
 
@@ -68,7 +68,7 @@ export function parseCtcBreakup(ctcInput) {
     isMonthly = false;
   }
 
-  const numeric = parseFloat(raw.replace(/[^0-9.]/g, "")) || 96000;
+  const numeric = parseFloat(raw.replace(/[^0-9.]/g, "")) || 0;
 
   let monthlyCtc, annualCtc;
   if (isMonthly && numeric <= 300000) {
