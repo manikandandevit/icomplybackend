@@ -3,10 +3,7 @@ node_modules/
 .DS_Store
 config.bat
 firebase-service-account.json
-.env.*
-.tmp/
-*.zip
-init
+.env*
 .tmp/
 *.zip
 init
