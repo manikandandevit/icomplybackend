@@ -7,9 +7,14 @@ const app = createApp();
 
 const server = app.listen(config.port, "0.0.0.0", () => {
   console.log(`iComply API running on http://localhost:${config.port}`);
-  void caLeaveYearBalancesService.rollForwardAll().catch((error) => {
-    console.error("Leave year balance roll-forward failed", error);
-  });
+  // Run the yearly leave-balance roll-forward a little after startup, so it
+  // doesn't compete with the first user requests for DB connections.
+  const rollForwardTimer = setTimeout(() => {
+    void caLeaveYearBalancesService.rollForwardAll().catch((error) => {
+      console.error("Leave year balance roll-forward failed", error);
+    });
+  }, 60 * 1000);
+  rollForwardTimer.unref();
 });
 
 const cleanup = () => {

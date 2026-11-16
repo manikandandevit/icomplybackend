@@ -6,5 +6,7 @@ pg.types.setTypeParser(1082, (value) => value);
 export const db = new pg.Pool({
   connectionString: config.database.url,
   ssl: { rejectUnauthorized: false },
-  max: 10,
+  max: 20,
+  keepAlive: true,
+  idleTimeoutMillis: 60000,
 });

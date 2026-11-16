@@ -33,7 +33,7 @@ export const attendanceActorFromReq = (req) => ({
 export const caAttendanceService = {
 
 
-async list(companyId, actor = {}) {
+async list(companyId, actor = {}, { date = null, from = null, to = null } = {}) {
     let scope = "self";
     if (isPrivileged(actor)) {
       scope = "all";
@@ -44,6 +44,9 @@ async list(companyId, actor = {}) {
       scope,
       employeeId: actor.employeeId,
       departmentId: actor.departmentId,
+      date,
+      from,
+      to,
     });
   },
 

@@ -5,6 +5,14 @@ import { fail } from "../../core/utils/response.js";
 import { caUsersRepository } from "../CAUsers/caUsers.repository.js";
 import { loginRepository } from "./login.repository.js";
 import { validateLoginBody } from "./login.validator.js";
+import { createTtlCache } from "../../core/utils/ttlCache.js";
+
+// The account status check runs on every API call; cache it briefly so a page
+// that fires several requests doesn't hit the database for each one.
+// A deactivated account is blocked within this window.
+const ACCOUNT_CACHE_TTL_MS = 15 * 1000;
+const employeeAuthCache = createTtlCache(ACCOUNT_CACHE_TTL_MS);
+const caUserAuthCache = createTtlCache(ACCOUNT_CACHE_TTL_MS);
 
 export const validateLoginRequest = (req, res, next) => {
   const { isValid, errors, value } = validateLoginBody(req.body);
@@ -77,7 +85,7 @@ export const requireCompanyAdmin = async (req, _res, next) => {
 
     if (isEmployee) {
       const employeeId = req.user?.employeeId || sub.replace(/^employee:/, "");
-      const employee = await loginRepository.findEmployeeById(employeeId);
+      const employee = await employeeAuthCache.get(String(employeeId), () => loginRepository.findEmployeeById(employeeId));
 
       if (!employee || employee.status !== "Active") {
         return next(new AppError("Contact admin your account is inactive", 403, "USER_INACTIVE"));
@@ -100,7 +108,7 @@ export const requireCompanyAdmin = async (req, _res, next) => {
     }
 
     const caUserId = req.user?.caUserId || sub.replace(/^causer:/, "");
-    const caUser = await caUsersRepository.findAuthById(caUserId, companyId);
+    const caUser = await caUserAuthCache.get(`${companyId}:${caUserId}`, () => caUsersRepository.findAuthById(caUserId, companyId));
 
     if (!caUser || caUser.status !== "Active") {
       return next(new AppError("Contact admin your account is inactive", 403, "USER_INACTIVE"));

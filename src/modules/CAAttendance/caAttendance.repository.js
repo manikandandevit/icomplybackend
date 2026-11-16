@@ -87,9 +87,16 @@ export const caAttendanceRepository = {
     let employeeId = null;
     let departmentId = null;
     let scope = "all";
+    let date = null;
+    let from = null;
+    let to = null;
 
     if (filterOrEmployeeId && typeof filterOrEmployeeId === "object") {
       scope = filterOrEmployeeId.scope || "all";
+      const isoOrNull = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : null);
+      date = isoOrNull(filterOrEmployeeId.date);
+      from = isoOrNull(filterOrEmployeeId.from);
+      to = isoOrNull(filterOrEmployeeId.to);
       employeeId = filterOrEmployeeId.employeeId;
       departmentId = filterOrEmployeeId.departmentId;
     } else if (filterOrEmployeeId != null) {
@@ -113,6 +120,19 @@ export const caAttendanceRepository = {
     } else if (scope === "department" && deptId) {
       sql += " AND e.department_id = $2";
       params.push(deptId);
+    }
+
+    if (date) {
+      params.push(date);
+      sql += ` AND a.date = $${params.length}::date`;
+    }
+    if (from) {
+      params.push(from);
+      sql += ` AND a.date >= $${params.length}::date`;
+    }
+    if (to) {
+      params.push(to);
+      sql += ` AND a.date <= $${params.length}::date`;
     }
 
     sql += " ORDER BY a.date DESC, a.id DESC";

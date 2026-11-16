@@ -5,7 +5,13 @@ import { attendanceActorFromReq, caAttendanceService } from "./caAttendance.serv
 export const caAttendanceController = {
 
 list: asyncHandler(async (req, res) => {
-    const records = await caAttendanceService.list(req.companyId, attendanceActorFromReq(req));
+    // Optional ?date=YYYY-MM-DD (one day) or ?from=&to= (range) so screens that need
+    // a few days (navbar, dashboard) don't download the whole attendance history.
+    const records = await caAttendanceService.list(req.companyId, attendanceActorFromReq(req), {
+      date: req.query?.date || null,
+      from: req.query?.from || null,
+      to: req.query?.to || null,
+    });
     return success(res, { message: "Attendance loaded", data: { records } });
   }),
 

@@ -39,6 +39,7 @@ import { caOffboardingRouter } from "./modules/CAOffboarding/index.js";
 import { caSeparationRouter } from "./modules/CASeparation/index.js";
 import { hirePilotRouter } from "./modules/HirePilot/index.js";
 import { caNotificationsRouter } from "./modules/CANotifications/index.js";
+import { caDashboardRouter } from "./modules/CADashboard/index.js";
 
 export const createApp = () => {
   const app = express();
@@ -89,6 +90,7 @@ export const createApp = () => {
   app.use("/api/ca-interviews", caInterviewsRouter);
   app.use("/api/ca-offers", caOffersRouter);
   app.use("/api/ca-notifications", caNotificationsRouter);
+  app.use("/api/ca-dashboard", caDashboardRouter);
   app.use("/api/ca-onboarding", caOnboardingRouter);
   app.use("/api/ca-ecr-slabs", caEcrSlabsRouter);
   app.use("/api/ca-offboarding", caOffboardingRouter);

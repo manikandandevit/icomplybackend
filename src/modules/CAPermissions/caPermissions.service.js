@@ -1,6 +1,11 @@
 import { AppError } from "../../core/errors/AppError.js";
 import { MODULE_NAV_MAP } from "./caPermissions.constants.js";
 import { caPermissionsRepository } from "./caPermissions.repository.js";
+import { createTtlCache } from "../../core/utils/ttlCache.js";
+
+// Permission checks run on many requests; cache each designation's map briefly.
+// Cleared whenever permissions are saved.
+const permissionsCache = createTtlCache(15 * 1000);
 
 const asMap = (rows) => {
   const map = {};
@@ -35,7 +40,13 @@ const pickForEstablishment = (rows, establishmentId) => {
   return est && est !== "0" && est !== "all" ? [] : rows;
 };
 
-const permissionsFor = async (companyId, { designationId, designationName, establishmentId, employeeId }) => {
+const permissionsFor = (companyId, scope = {}) => {
+  const { designationId, designationName, establishmentId, employeeId } = scope;
+  const key = [companyId, designationId, designationName, establishmentId, employeeId].map((v) => String(v ?? "")).join("|");
+  return permissionsCache.get(key, () => loadPermissions(companyId, scope));
+};
+
+const loadPermissions = async (companyId, { designationId, designationName, establishmentId, employeeId }) => {
   let est = establishmentId;
   if (!est && employeeId) {
     est = await caPermissionsRepository.establishmentOfEmployee(companyId, employeeId);
@@ -97,7 +108,9 @@ export const caPermissionsService = {
 
   async save(companyId, permissions, designationId = null, establishmentId = null) {
     const rows = Array.isArray(permissions) ? permissions : [];
-    return caPermissionsRepository.replaceAll(companyId, rows, designationId, establishmentId);
+    const saved = await caPermissionsRepository.replaceAll(companyId, rows, designationId, establishmentId);
+    permissionsCache.clear();
+    return saved;
   },
 
   async getScope(companyId, actor = {}, navId) {
