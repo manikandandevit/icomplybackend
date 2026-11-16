@@ -464,34 +464,19 @@ export const caOffboardingRepository = {
     const exitId = parseRowId(rawStr) || parseInt(rawStr.replace(/\D/g, ""), 10) || null;
     if (!cid || !exitId) return false;
 
-    // Calculate completion progress
-    let totalTasks = 0;
-    let completedTasks = 0;
-    (sections || []).forEach((sec) => {
-      (sec.tasks || []).forEach((t) => {
-        totalTasks++;
-        if (t.completed) completedTasks++;
-      });
-    });
-
-    const isAllCompleted = totalTasks > 0 && completedTasks === totalTasks;
-
+    // Only update task sections. Do NOT automatically move to Completed / Alumni when all tasks are checked.
+    // Moving to Alumni must ONLY occur when the user explicitly clicks "Confirm & Move to Alumni".
     const { rows, rowCount } = await db.query(
       `
       UPDATE public.ca_offboarding_exits
       SET sections = $3::jsonb,
-          status = CASE WHEN $4 = TRUE THEN 'Completed' ELSE 'In Progress' END,
+          status = CASE WHEN status = 'Completed' THEN 'Completed' WHEN status = 'Initiated' THEN 'In Progress' ELSE status END,
           updated_at = NOW()
       WHERE (id = $1 OR employee_id = $1) AND created_by_company_id = $2
       RETURNING *
       `,
-      [exitId, cid, JSON.stringify(sections), isAllCompleted]
+      [exitId, cid, JSON.stringify(sections)]
     );
-
-    // If all tasks are completed, automatically mark employee Inactive and candidate Alumni
-    if (isAllCompleted && rows[0] && rows[0].employee_id) {
-      await this.markExitAsCompletedAndInactive(rows[0], cid);
-    }
 
     return rowCount > 0;
   },

@@ -89,6 +89,8 @@ export const MODULE_NAV_MAP = {
     "offboarding-checklist",
     "offboarding-pending-tasks",
     "exit-process",
+    "separation",
+    "separation-request",
     "alumni",
   ],
   payroll: [
@@ -129,6 +131,8 @@ CREATE TABLE IF NOT EXISTS public.ca_designation_permissions (
 export const caDesignationPermissionsAlterSql = `
 ALTER TABLE public.ca_designation_permissions ADD COLUMN IF NOT EXISTS scope VARCHAR(32) NOT NULL DEFAULT 'self';
 ALTER TABLE public.ca_designation_permissions ADD COLUMN IF NOT EXISTS establishment_id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE public.ca_designation_permissions
+  DROP CONSTRAINT IF EXISTS ca_designation_permissions_created_by_company_id_designatio_key;
 ALTER TABLE public.ca_designation_permissions
   DROP CONSTRAINT IF EXISTS ca_designation_permissions_created_by_company_id_designation_id_nav_id_key;
 CREATE UNIQUE INDEX IF NOT EXISTS ca_desig_perm_est_unique

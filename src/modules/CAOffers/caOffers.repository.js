@@ -140,8 +140,8 @@ export const caOffersRepository = {
         candidate.name,
         candidate.role || 'Software Engineer',
         'Pending Acceptance',
-        '₹96,000/mo',
-        '₹1,20,000',
+        null,
+        null,
         joiningStr,
         todayStr
       ]
@@ -211,8 +211,8 @@ export const caOffersRepository = {
           candidateName,
           payload.role || null,
           payload.status || 'Pending Acceptance',
-          payload.ctc || '₹96,000/mo',
-          payload.joiningBonus || '₹1,20,000',
+          payload.ctc || null,
+          payload.joiningBonus || null,
           payload.joiningDate || null,
           payload.sentOn || todayStr,
           payload.deadline || null,
@@ -243,8 +243,8 @@ export const caOffersRepository = {
         candidateName,
         payload.role || null,
         payload.status || 'Pending Acceptance',
-        payload.ctc || '₹96,000/mo',
-        payload.joiningBonus || '₹1,20,000',
+        payload.ctc || null,
+        payload.joiningBonus || null,
         payload.joiningDate || null,
         payload.sentOn || todayStr,
         payload.deadline || null,
@@ -355,7 +355,7 @@ export const caOffersRepository = {
         const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
         const insRes = await db.query(
           `INSERT INTO public.ca_offers (created_by_company_id, candidate_id, candidate_name, role, status, ctc, joining_bonus, joining_date, sent_on, location, hiring_manager)
-           VALUES ($1, $2, $3, $4, $5, '₹96,000/mo', '₹1,20,000', TO_CHAR(NOW() + INTERVAL '15 days', 'DD Mon YYYY'), $6, COALESCE($7, 'Chennai, India'), 'Rajesh Kumar') RETURNING *`,
+           VALUES ($1, $2, $3, $4, $5, NULL, NULL, TO_CHAR(NOW() + INTERVAL '15 days', 'DD Mon YYYY'), $6, COALESCE($7, 'Chennai, India'), 'Rajesh Kumar') RETURNING *`,
           [companyId, c.id, c.name, c.role || 'Software Engineer', status, todayStr, c.location]
         );
         return mapCAOffer(insRes.rows[0]);
@@ -521,7 +521,7 @@ export const caOffersRepository = {
           const insRes = await db.query(
             `INSERT INTO public.ca_offers (
               created_by_company_id, candidate_id, candidate_name, role, status, ctc, joining_bonus, joining_date, sent_on, documents
-            ) VALUES ($1, $2, $3, $4, 'Document Collection', '₹96,000/mo', '₹1,20,000', TO_CHAR(NOW() + INTERVAL '15 days', 'DD Mon YYYY'), $5, $6::jsonb)
+            ) VALUES ($1, $2, $3, $4, 'Document Collection', NULL, NULL, TO_CHAR(NOW() + INTERVAL '15 days', 'DD Mon YYYY'), $5, $6::jsonb)
             RETURNING *`,
             [companyId, c.id, c.name, c.role || 'Software Engineer', todayStr, docJson]
           );

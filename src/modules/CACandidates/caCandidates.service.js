@@ -43,18 +43,62 @@ export const caCandidatesService = {
 
   async create(companyId, payload) {
     if (payload?.role) {
-      const { rows: approvedReqs } = await db.query(
-        `SELECT id, position FROM public.ca_job_requisitions 
-         WHERE created_by_company_id = $1 
-           AND LOWER(TRIM(approval_status)) = 'approved'`,
+      const { rows: reqs } = await db.query(
+        `SELECT id, position, approval_status, status FROM public.ca_job_requisitions 
+         WHERE (
+           created_by_company_id = $1 
+           OR created_by_company_id IN (SELECT id FROM public.ca_companies WHERE created_by_company_id = $1)
+           OR created_by_company_id IN (SELECT created_by_company_id FROM public.ca_companies WHERE id = $1 AND created_by_company_id IS NOT NULL)
+         )`,
         [companyId]
       );
 
-      const hasMatchingApproval = approvedReqs.some(
+      const matchingReq = reqs.find(
         (r) => String(r.position || "").trim().toLowerCase() === String(payload.role || "").trim().toLowerCase()
       );
 
-      if (!hasMatchingApproval) {
+      let hasOpening = false;
+      if (!matchingReq) {
+        try {
+          const { rows: openings } = await db.query(
+            `SELECT id, role_name FROM public.hirepilot_openings
+             WHERE (
+               created_by_company_id = $1 
+               OR company_id = $1
+               OR created_by_company_id IN (SELECT id FROM public.ca_companies WHERE created_by_company_id = $1)
+             )`,
+            [companyId]
+          );
+          hasOpening = openings.some(
+            (o) => String(o.role_name || "").trim().toLowerCase() === String(payload.role || "").trim().toLowerCase()
+          );
+        } catch (_) { }
+      }
+
+      const isRehire = Boolean(
+        payload?.isRehire ||
+        String(payload?.source || "").toLowerCase().includes("rehire")
+      );
+
+      if (matchingReq && String(matchingReq.approval_status || "").toLowerCase() !== "approved") {
+        // Auto-approve the requisition since an admin is creating a candidate for it
+        try {
+          await db.query(
+            `UPDATE public.ca_job_requisitions SET approval_status = 'Approved', status = 'Open', updated_at = NOW() WHERE id = $1`,
+            [matchingReq.id]
+          );
+        } catch (_) { }
+      } else if (!matchingReq && isRehire) {
+        // Auto-create an approved requisition for this rehire position if one doesn't exist
+        try {
+          await db.query(
+            `INSERT INTO public.ca_job_requisitions (
+              position, approval_status, status, created_by_company_id, created_at, updated_at
+            ) VALUES ($1, 'Approved', 'Open', $2, NOW(), NOW())`,
+            [payload.role, companyId]
+          );
+        } catch (_) { }
+      } else if (!matchingReq && !hasOpening && reqs.length > 0 && !isRehire) {
         throw new AppError(
           `Cannot add candidate: Position "${payload.role}" does not have an approved job requisition. Candidate details can only be uploaded for approved positions.`,
           400,
@@ -80,7 +124,7 @@ export const caCandidatesService = {
       prev = await caCandidatesRepository.findById(id, companyId);
       wasAlreadyRejected = (prev?.stage === "Rejected") || Boolean(prev?.rejectionEmailSentAt);
       wasAlreadySelected = (prev?.stage === "Selected") || Boolean(prev?.selectionEmailSentAt);
-    } catch {}
+    } catch { }
 
     const updated = await caCandidatesRepository.update(id, companyId, payload);
     if (!updated) {
@@ -89,10 +133,10 @@ export const caCandidatesService = {
 
     // Reset rejection/selection timestamps if candidate moves out of those states
     if (prev?.stage === "Rejected" && payload?.stage && payload.stage !== "Rejected") {
-      await db.query(`UPDATE public.ca_candidates SET rejection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => {});
+      await db.query(`UPDATE public.ca_candidates SET rejection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => { });
     }
     if (prev?.stage === "Selected" && payload?.stage && payload.stage !== "Selected") {
-      await db.query(`UPDATE public.ca_candidates SET selection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => {});
+      await db.query(`UPDATE public.ca_candidates SET selection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => { });
     }
 
     if (payload?.stage === "Shortlisted") {
@@ -126,7 +170,7 @@ export const caCandidatesService = {
             roundName: payload.stage,
           }).catch((e) => console.error("Failed to trigger interview email on update:", e));
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     return updated;
@@ -141,7 +185,7 @@ export const caCandidatesService = {
       prevStage = prev?.stage;
       wasAlreadyRejected = (prevStage === "Rejected") || Boolean(prev?.rejectionEmailSentAt);
       wasAlreadySelected = (prevStage === "Selected") || Boolean(prev?.selectionEmailSentAt);
-    } catch {}
+    } catch { }
 
     const updated = await caCandidatesRepository.updateStage(id, companyId, stage, assessmentCount);
     if (!updated) {
@@ -150,12 +194,12 @@ export const caCandidatesService = {
 
     // If candidate was previously rejected and is now re-opened into an active stage, reset rejection timestamp
     if (prevStage === "Rejected" && stage !== "Rejected") {
-      await db.query(`UPDATE public.ca_candidates SET rejection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => {});
+      await db.query(`UPDATE public.ca_candidates SET rejection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => { });
     }
 
     // If candidate was previously selected and is now moved to another stage, reset selection timestamp
     if (prevStage === "Selected" && stage !== "Selected") {
-      await db.query(`UPDATE public.ca_candidates SET selection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => {});
+      await db.query(`UPDATE public.ca_candidates SET selection_email_sent_at = NULL WHERE id = $1`, [id]).catch(() => { });
     }
 
     // When candidate is shortlisted for the interview process
@@ -291,7 +335,7 @@ export const caCandidatesService = {
             if (rows[0]?.joining_date) {
               finalDoj = rows[0].joining_date;
             }
-          } catch (e) {}
+          } catch (e) { }
         }
         if (!finalDoj && payload.date) {
           finalDoj = payload.date;

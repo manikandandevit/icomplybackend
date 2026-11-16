@@ -149,12 +149,19 @@ export const caPermissionsRepository = {
         await client.query(`DELETE FROM public.ca_designation_permissions WHERE created_by_company_id = $1`, [cid]);
       }
 
+      const seenKeys = new Set();
       for (const row of rows) {
         const rowDid = parseRowId(row.designationId) || did;
         const navId = String(row.navId || "").trim();
         if (!rowDid || !navId) {
           continue;
         }
+
+        const dedupKey = `${rowDid}:${navId}`;
+        if (seenKeys.has(dedupKey)) {
+          continue;
+        }
+        seenKeys.add(dedupKey);
 
         const scope = String(row.scope || "self").toLowerCase();
         const validScope = ["self", "department", "all"].includes(scope) ? scope : "self";

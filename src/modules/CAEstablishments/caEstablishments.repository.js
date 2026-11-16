@@ -92,6 +92,10 @@ export const caEstablishmentsRepository = {
       SELECT ${selectColumns}
       FROM public.ca_establishments
       WHERE created_by_company_id = $1
+         OR created_by_company_id IN (SELECT id FROM public.ca_companies WHERE created_by_company_id = $1)
+         OR created_by_company_id IN (SELECT created_by_company_id FROM public.ca_companies WHERE id = $1 AND created_by_company_id IS NOT NULL)
+         OR company_id = $1
+         OR company_id IN (SELECT id FROM public.ca_companies WHERE created_by_company_id = $1)
       ORDER BY id DESC
       `,
       [creatorId]

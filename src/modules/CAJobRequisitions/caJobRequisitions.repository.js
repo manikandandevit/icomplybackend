@@ -52,6 +52,8 @@ export const caJobRequisitionsRepository = {
       SELECT ${selectColumns}
       FROM public.ca_job_requisitions
       WHERE created_by_company_id = $1
+         OR created_by_company_id IN (SELECT id FROM public.ca_companies WHERE created_by_company_id = $1)
+         OR created_by_company_id IN (SELECT created_by_company_id FROM public.ca_companies WHERE id = $1 AND created_by_company_id IS NOT NULL)
       ORDER BY id DESC
       `,
       [cid],
@@ -68,7 +70,11 @@ export const caJobRequisitionsRepository = {
       `
       SELECT ${selectColumns}
       FROM public.ca_job_requisitions
-      WHERE id = $1 AND created_by_company_id = $2
+      WHERE id = $1 AND (
+        created_by_company_id = $2
+        OR created_by_company_id IN (SELECT id FROM public.ca_companies WHERE created_by_company_id = $2)
+        OR created_by_company_id IN (SELECT created_by_company_id FROM public.ca_companies WHERE id = $2 AND created_by_company_id IS NOT NULL)
+      )
       LIMIT 1
       `,
       [rowId, cid],
@@ -97,9 +103,16 @@ export const caJobRequisitionsRepository = {
     const cid = parseRowId(payload.companyId) || parseRowId(companyId);
     if (!cid) return null;
 
-    // Generate reqId automatically like REQ-001
-    const countRes = await db.query('SELECT COUNT(*) FROM public.ca_job_requisitions WHERE created_by_company_id = $1', [cid]);
-    const nextNum = parseInt(countRes.rows[0].count, 10) + 1;
+    // Generate reqId automatically (strictly sequential per tenant group)
+    const maxRes = await db.query(
+      `SELECT COALESCE(MAX(NULLIF(regexp_replace(req_id, '^REQ-', ''), '')::integer), 0) AS max_num
+       FROM public.ca_job_requisitions
+       WHERE created_by_company_id = $1
+          OR created_by_company_id IN (SELECT id FROM public.ca_companies WHERE created_by_company_id = $1)
+          OR created_by_company_id IN (SELECT created_by_company_id FROM public.ca_companies WHERE id = $1 AND created_by_company_id IS NOT NULL)`,
+      [cid]
+    );
+    const nextNum = (parseInt(maxRes.rows[0]?.max_num, 10) || 0) + 1;
     const reqId = `REQ-${String(nextNum).padStart(3, '0')}`;
 
     let establishmentName = payload.establishmentName || "";
@@ -182,7 +195,13 @@ export const caJobRequisitionsRepository = {
           company_name = COALESCE($24, company_name),
           created_by_company_id = COALESCE($25, created_by_company_id),
           updated_at = NOW()
-      WHERE id = $1 AND (created_by_company_id = $2 OR created_by_company_id = $25 OR $2 IS NULL)
+      WHERE id = $1 AND (
+        created_by_company_id = $2 
+        OR created_by_company_id = $25 
+        OR created_by_company_id IN (SELECT id FROM public.ca_companies WHERE created_by_company_id = $2)
+        OR created_by_company_id IN (SELECT created_by_company_id FROM public.ca_companies WHERE id = $2 AND created_by_company_id IS NOT NULL)
+        OR $2 IS NULL
+      )
       RETURNING id, created_by_company_id, position, establishment_id, establishment_name
       `,
       [
@@ -230,7 +249,7 @@ export const caJobRequisitionsRepository = {
       }
     }
 
-    return this.findById(rows[0].id, rows[0].created_by_company_id || targetCid);
+    return this.findById(rows[0].id, rows[0].created_by_company_id || targetCid) || this.findByIdDirect(rows[0].id);
   },
 
   async updateStatus(id, companyId, status, approvalStatus) {
@@ -242,7 +261,12 @@ export const caJobRequisitionsRepository = {
       `
       UPDATE public.ca_job_requisitions
       SET status = $3, approval_status = $4, updated_at = NOW()
-      WHERE id = $1 AND (created_by_company_id = $2 OR $2 IS NULL)
+      WHERE id = $1 AND (
+        created_by_company_id = $2
+        OR created_by_company_id IN (SELECT id FROM public.ca_companies WHERE created_by_company_id = $2)
+        OR created_by_company_id IN (SELECT created_by_company_id FROM public.ca_companies WHERE id = $2 AND created_by_company_id IS NOT NULL)
+        OR $2 IS NULL
+      )
       RETURNING id, created_by_company_id
       `,
       [rowId, cid, status, approvalStatus]
