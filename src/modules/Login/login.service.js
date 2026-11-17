@@ -7,6 +7,7 @@ import { sendMail } from "../../core/mail/mailer.js";
 import { FREE_TRIAL_DAYS, isCompanyExpired } from "../Companies/companies.constants.js";
 import { loginRepository } from "./login.repository.js";
 import { caUsersRepository } from "../CAUsers/caUsers.repository.js";
+import { superAdminImageUrl } from "./login.storage.js";
 
 const COMPANY_ROLE = "CompanyAdmin";
 const EMPLOYEE_ROLE = "EmployeeAdmin";
@@ -21,7 +22,7 @@ const toPublicSuperAdmin = (row) => ({
   name: row.User_Name,
   email: row.Email,
   role: row.Role,
-  imageUrl: row.Image_Url ?? null,
+  imageUrl: superAdminImageUrl(row.id, row.Image_Url),
 });
 
 const toPublicCompanyAdmin = (row) => ({

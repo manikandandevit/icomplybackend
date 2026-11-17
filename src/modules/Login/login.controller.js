@@ -3,6 +3,14 @@ import { AppError } from "../../core/errors/AppError.js";
 import { createToast } from "../../core/toast/index.js";
 import { fail, success } from "../../core/utils/response.js";
 import { loginService } from "./login.service.js";
+import { loginRepository } from "./login.repository.js";
+import { getSuperAdminLogo, superAdminImageUrl, uploadSuperAdminLogo } from "./login.storage.js";
+
+/** Super admin tokens carry the numeric super_Admin id as `sub` and no `type`. */
+const superAdminIdFromUser = (user) => {
+  const sub = String(user?.sub ?? "");
+  return !user?.type && /^\d+$/.test(sub) ? sub : null;
+};
 
 export const loginController = {
   login: asyncHandler(async (req, res) => {
@@ -23,6 +31,52 @@ export const loginController = {
       message: "Profile loaded",
       data: { user },
     });
+  }),
+
+  uploadSuperAdminLogo: asyncHandler(async (req, res) => {
+    const superAdminId = superAdminIdFromUser(req.user);
+    const superAdmin = superAdminId ? await loginRepository.findSuperAdminById(superAdminId) : null;
+    if (!superAdmin) {
+      return fail(res, { status: 403, message: "Super admin access is required", code: "FORBIDDEN" });
+    }
+    if (!req.file) {
+      return fail(res, { status: 400, message: "Choose a PNG, JPG, SVG or WebP image below 2 MB", code: "LOGO_REQUIRED" });
+    }
+
+    try {
+      const uploaded = await uploadSuperAdminLogo(req.file, superAdmin.id);
+      const updated = await loginRepository.updateSuperAdminImage(superAdmin.id, uploaded.url);
+      const message = "Logo updated successfully";
+      return success(res, {
+        message,
+        data: { imageUrl: superAdminImageUrl(superAdmin.id, updated?.Image_Url ?? uploaded.url) },
+        toast: createToast({ type: "success", message }),
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return fail(res, { status: error.statusCode, message: error.message, code: error.code });
+      }
+      throw error;
+    }
+  }),
+
+  superAdminLogo: asyncHandler(async (req, res) => {
+    const superAdmin = /^\d+$/.test(String(req.params.id)) ? await loginRepository.findSuperAdminById(req.params.id) : null;
+    if (!superAdmin) {
+      return res.status(404).end();
+    }
+    try {
+      const file = await getSuperAdminLogo(superAdmin.Image_Url);
+      res.setHeader("Content-Type", file.contentType);
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      file.body.pipe(res);
+    } catch (error) {
+      if (error instanceof AppError || error?.name === "NoSuchKey" || error?.$metadata?.httpStatusCode === 404) {
+        return res.status(404).end();
+      }
+      throw error;
+    }
   }),
 
   resetPassword: asyncHandler(async (req, res) => {

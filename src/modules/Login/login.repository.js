@@ -43,6 +43,20 @@ export const loginRepository = {
     return rows[0] ?? null;
   },
 
+  async updateSuperAdminImage(id, imageUrl) {
+    const { rows } = await db.query(
+      `
+      UPDATE public."super_Admin"
+      SET "Image_Url" = $1
+      WHERE id = $2
+      RETURNING id, "User_Name", "Email", "Image_Url", "Role"
+      `,
+      [imageUrl, id],
+    );
+
+    return rows[0] ?? null;
+  },
+
   async findCompanyByEmail(email) {
     const { rows } = await db.query(
       `
