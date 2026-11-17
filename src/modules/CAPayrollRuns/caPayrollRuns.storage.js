@@ -4,26 +4,17 @@ import { config } from "../../config/index.js";
 import { s3Client } from "../../core/storage/s3.client.js";
 import { AppError } from "../../core/errors/AppError.js";
 
+import { s3PublicUrl } from "../Companies/companies.storage.js";
+
 const MIME_TO_EXT = {
   "application/pdf": "pdf",
 };
 
-export const s3PublicUrl = (key) => {
-  const endpoint = String(config.s3.endpoint || "")
-    .replace(/\/+$/, "")
-    .replace(/\/s3$/i, "");
-  const bucket = config.s3.bucket;
-
-  if (!endpoint || !bucket || !key) {
-    return null;
-  }
-
-  return `${endpoint}/object/public/${bucket}/${key}`;
-};
+export { s3PublicUrl };
 
 export const challanStorage = {
   async upload(file) {
-    if (!config.s3.bucket || !config.s3.accessKeyId) {
+    if (!config.s3.bucket) {
       throw new AppError("Storage is not configured", 500, "STORAGE_NOT_CONFIGURED");
     }
 

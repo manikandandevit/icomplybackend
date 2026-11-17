@@ -77,6 +77,9 @@ ALTER TABLE public.ca_employees
 
 ALTER TABLE public.ca_employees
   ADD COLUMN IF NOT EXISTS photo_version TEXT;
+
+ALTER TABLE public.ca_employees
+  ADD COLUMN IF NOT EXISTS photo_url TEXT;
 `;
 
 const dateFrom = (value) => {
@@ -161,7 +164,7 @@ export const mapCAEmployee = (row) => {
   return {
     id: String(row.id),
     // Profile photo (stored in the DB, served by GET /ca-employees/:id/photo); null if none.
-    photoUrl: employeePhotoUrl(row.id, row.photo_version),
+    photoUrl: employeePhotoUrl(row.id, row.photo_version, row.photo_url),
     employeeCode: row.employee_code || "",
     name: row.name || "",
     email: row.email || "",

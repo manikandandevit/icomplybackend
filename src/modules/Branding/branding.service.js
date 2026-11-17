@@ -24,7 +24,7 @@ const getLocalFallback = (key) => {
 
 const getObject = async (key) => {
   try {
-    if (config.s3.bucket && config.s3.accessKeyId) {
+    if (config.s3.bucket) {
       const response = await s3Client.send(
         new GetObjectCommand({
           Bucket: config.s3.bucket,

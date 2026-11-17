@@ -29,7 +29,7 @@ const MIME_TO_EXT = {
   "text/plain": "txt",
 };
 
-export const isStorageConfigured = () => Boolean(config.s3.bucket && config.s3.accessKeyId);
+export const isStorageConfigured = () => Boolean(config.s3.bucket);
 
 export const isBase64Document = (doc) =>
   Boolean(doc && typeof doc === "object" && typeof doc.url === "string" && doc.url.startsWith("data:"));

@@ -4,7 +4,7 @@ import { fail, success } from "../../core/utils/response.js";
 import { caEmployeesService } from "./caEmployees.service.js";
 import { validateEmployeeBody } from "./caEmployees.validator.js";
 import { caEmployeesRepository } from "./caEmployees.repository.js";
-import { preparePhoto } from "./caEmployees.photoStorage.js";
+import { preparePhoto, uploadEmployeePhotoToS3 } from "./caEmployees.photoStorage.js";
 
 const sendAppError = (res, error) => {
   if (error instanceof AppError) {
@@ -30,14 +30,24 @@ export const employeeActorFromReq = (req) => ({
 });
 
 export const caEmployeesController = {
-  /** POST /:id/photo (multipart "photo"): upload + save the profile photo. */
+  /** POST /:id/photo (multipart "photo"): upload to S3 + save URL in DB. */
   uploadPhoto: asyncHandler(async (req, res) => {
     try {
       if (!req.file) throw new AppError("Choose a photo to upload", 400, "PHOTO_REQUIRED");
       const existing = await caEmployeesRepository.findById(req.params.id, req.companyId);
       if (!existing) throw new AppError("Employee not found", 404, "EMPLOYEE_NOT_FOUND");
       const photo = preparePhoto(req.file);
-      const employee = await caEmployeesRepository.updatePhoto(req.params.id, req.companyId, photo);
+      let s3Result = null;
+      try {
+        s3Result = await uploadEmployeePhotoToS3(req.file, req.params.id);
+      } catch (err) {
+        console.warn("[employeePhoto] S3 upload error, keeping DB fallback:", err.message);
+      }
+      const employee = await caEmployeesRepository.updatePhoto(req.params.id, req.companyId, {
+        ...photo,
+        url: s3Result?.url || null,
+        version: s3Result?.version || photo.version,
+      });
       return success(res, {
         message: "Profile photo updated",
         data: { photoUrl: employee?.photoUrl || null, employee },
@@ -47,10 +57,13 @@ export const caEmployeesController = {
     }
   }),
 
-  /** GET /:id/photo: the photo image from the DB (same company; token header or ?token). */
+  /** GET /:id/photo: redirect to S3 URL or serve photo from DB. */
   photo: async (req, res, next) => {
     try {
       const photo = await caEmployeesRepository.findPhoto(req.params.id, req.companyId);
+      if (photo?.url) {
+        return res.redirect(302, photo.url);
+      }
       if (!photo?.data) {
         return fail(res, { status: 404, message: "No photo", code: "PHOTO_NOT_FOUND" });
       }

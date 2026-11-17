@@ -9,7 +9,7 @@ export const caCandidatesStorage = {
     const originalName = file.originalname || "resume.pdf";
     const cleanName = originalName.replace(/[^a-zA-Z0-9._-]/g, "_");
 
-    if (!config.s3.bucket || !config.s3.accessKeyId) {
+    if (!config.s3.bucket) {
       const dataUrl = `data:${file.mimetype || "application/pdf"};base64,${file.buffer.toString("base64")}`;
       return {
         key: null,
@@ -51,7 +51,7 @@ export const caCandidatesStorage = {
   },
 
   async get(key) {
-    if (!config.s3.bucket || !config.s3.accessKeyId) {
+    if (!config.s3.bucket) {
       return null;
     }
 

@@ -9,6 +9,7 @@ import {
   sendCandidateRejectionEmail,
 } from "./caCandidates.email.js";
 import { db } from "../../core/db/pool.js";
+import { offloadCandidateDocuments } from "../../core/storage/candidateDocuments.js";
 import {
   sendCandidateSelectionEmail,
   sendHiringManagerDocumentCollectionRequest,
@@ -484,7 +485,8 @@ export const caCandidatesService = {
   },
 
   async updateDocuments(id, companyId, documents) {
-    return caCandidatesRepository.updateDocuments(id, companyId, documents);
+    const uploaded = await offloadCandidateDocuments(documents, id);
+    return caCandidatesRepository.updateDocuments(id, companyId, uploaded);
   },
 
   async updateChecklist(id, companyId, checklist) {

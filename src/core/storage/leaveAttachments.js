@@ -20,7 +20,7 @@ export const isPdfMime = (mime) => String(mime || "").toLowerCase() === "applica
 
 export const leaveAttachmentsStorage = {
   async upload(file) {
-    if (!config.s3.bucket || !config.s3.accessKeyId) {
+    if (!config.s3.bucket) {
       throw new AppError("Attachment storage is not configured", 500, "STORAGE_NOT_CONFIGURED");
     }
     const ext = MIME_TO_EXT[file.mimetype];

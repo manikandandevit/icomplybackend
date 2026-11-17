@@ -16,21 +16,25 @@ export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 export const LOGO_KEY_PATTERN = /^(companies|ca-companies)\/[0-9a-f-]{36}\.(png|jpg|jpeg|webp|svg)$/i;
 
 export const s3PublicUrl = (key) => {
-  const endpoint = String(config.s3.endpoint || "")
-    .replace(/\/+$/, "")
-    .replace(/\/s3$/i, "");
   const bucket = config.s3.bucket;
-
-  if (!endpoint || !bucket || !key) {
+  if (!bucket || !key) {
     return null;
   }
 
-  return `${endpoint}/object/public/${bucket}/${key}`;
+  if (config.s3.endpoint) {
+    const endpoint = String(config.s3.endpoint)
+      .replace(/\/+$/, "")
+      .replace(/\/s3$/i, "");
+    return `${endpoint}/object/public/${bucket}/${key}`;
+  }
+
+  const region = config.s3.region || "ap-south-1";
+  return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
 };
 
 export const companiesStorage = {
   async upload(file, { prefix = "companies" } = {}) {
-    if (!config.s3.bucket || !config.s3.accessKeyId) {
+    if (!config.s3.bucket) {
       throw new AppError("Logo storage is not configured", 500, "STORAGE_NOT_CONFIGURED");
     }
 

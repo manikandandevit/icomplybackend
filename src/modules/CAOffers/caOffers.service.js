@@ -8,6 +8,7 @@ import { generateOfferPdfBuffer } from "./caOffers.pdf.js";
 import { sendMail } from "../../core/mail/mailer.js";
 import { AppError } from "../../core/errors/AppError.js";
 import { db } from "../../core/db/pool.js";
+import { offloadCandidateDocuments } from "../../core/storage/candidateDocuments.js";
 import {
   sendApproverOfferReviewRequest,
   sendHiringManagerReleaseOfferRequest,
@@ -791,7 +792,8 @@ export const caOffersService = {
   },
 
   async updateDocuments(id, companyId, documents) {
-    return caOffersRepository.updateDocuments(id, companyId, documents);
+    const uploaded = await offloadCandidateDocuments(documents, id);
+    return caOffersRepository.updateDocuments(id, companyId, uploaded);
   },
 
   async publicApprove(token) {

@@ -19,7 +19,7 @@ async function uploadAcceptedResumeToS3(resumeData, resumeName) {
     const ext = ["pdf", "doc", "docx", "png", "jpg"].includes(rawExt) ? rawExt : "pdf";
     const key = `hirepilot-resumes/${randomUUID()}.${ext}`;
 
-    if (config.s3 && config.s3.bucket && config.s3.accessKeyId) {
+    if (config.s3 && config.s3.bucket) {
       await s3Client.send(
         new PutObjectCommand({
           Bucket: config.s3.bucket,
