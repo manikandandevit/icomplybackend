@@ -1,3 +1,4 @@
+import utils.session
 import psycopg
 from psycopg.types.json import Jsonb
 import json
