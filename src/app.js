@@ -41,6 +41,7 @@ import { hirePilotRouter } from "./modules/HirePilot/index.js";
 import { caNotificationsRouter } from "./modules/CANotifications/index.js";
 import { caDashboardRouter } from "./modules/CADashboard/index.js";
 import { caFilingDocumentsRouter } from "./modules/CAFilingDocuments/index.js";
+import { whatsappRouter } from "./modules/WhatsApp/index.js";
 
 export const createApp = () => {
   const app = express();
@@ -57,7 +58,15 @@ export const createApp = () => {
       credentials: true,
     })
   );
-  app.use(express.json({ limit: "50mb" }));
+  app.use(
+    express.json({
+      limit: "50mb",
+      // Keep the raw body so the WhatsApp webhook can verify Meta's signature.
+      verify: (req, _res, buf) => {
+        if (req.originalUrl?.startsWith("/api/whatsapp")) req.rawBody = buf;
+      },
+    })
+  );
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   app.use(requestLogger);
 
@@ -93,6 +102,7 @@ export const createApp = () => {
   app.use("/api/ca-notifications", caNotificationsRouter);
   app.use("/api/ca-dashboard", caDashboardRouter);
   app.use("/api/ca-filing-documents", caFilingDocumentsRouter);
+  app.use("/api/whatsapp", whatsappRouter);
   app.use("/api/ca-onboarding", caOnboardingRouter);
   app.use("/api/ca-ecr-slabs", caEcrSlabsRouter);
   app.use("/api/ca-offboarding", caOffboardingRouter);
